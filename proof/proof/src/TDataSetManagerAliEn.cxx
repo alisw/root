@@ -1062,7 +1062,7 @@ TFileCollection *TDataSetManagerAliEn::GetDataSet(const char *uri, const char *)
           fi->ResetUrl();
         }
 
-      }
+      } // end loop over fi
 
       // Add endpoint?
       if (dataMode == kDataLocal) {
@@ -1134,7 +1134,9 @@ TFileCollection *TDataSetManagerAliEn::GetDataSet(const char *uri, const char *)
       }
       else {
 
-        // Fill locality with a redirector
+        // Fill locality: get the endpoint URL based on the redirector's. Guess
+        // protocol and redirector from the first file in the collection: we
+        // assume that they will be the same for every file
 
         fi = dynamic_cast<TFileInfo *>(newFc->GetList()->At(0));
         if (fi) {
@@ -1153,6 +1155,7 @@ TFileCollection *TDataSetManagerAliEn::GetDataSet(const char *uri, const char *)
             return NULL;
           }
           else {
+
             Int_t rv = fstg->LocateCollection(newFc, kTRUE);
             if (rv < 0) {
               Error("GetDataSet", "Endpoint lookup returned an error");
@@ -1165,6 +1168,41 @@ TFileCollection *TDataSetManagerAliEn::GetDataSet(const char *uri, const char *)
             else if (gDebug >= 1) {
               Info("GetDataSet", "Lookup successful for %d file(s)", rv);
             }
+
+            // Loop over staged files to get their real size via stat (the
+            // correct stat mechanism will be selected according to the
+            // protocol)
+
+            TIter itStat( newFc->GetList() );
+            TFileInfo *fiStat;
+            FileStat_t statBuf;
+            UInt_t nStatErr = 0;
+            const char *curUrl;
+
+            while (( fiStat = dynamic_cast<TFileInfo *>(itStat.Next()) )) {
+              if ( fiStat->TestBit(TFileInfo::kStaged) ) {
+
+                curUrl = fiStat->GetCurrentUrl()->GetUrl();
+
+                if ( gSystem->GetPathInfo( curUrl, statBuf ) == 0 ) {
+                  // Stat successful: save actual file size
+                  fiStat->SetSize( statBuf.fSize );
+                }
+                else {
+                  // Cannot stat a staged file: issue a warning (debug only)
+                  if (gDebug >= 1)
+                    Warning("GetDataSet", "Cannot get staged file size for %s", curUrl);
+                  fiStat->SetSize(0);
+                  nStatErr++;
+                }
+
+              }
+            }
+
+            if (nStatErr) {
+              Warning("GetDataSet", "Could not stat %u file(s)!", nStatErr);
+            }
+
           }
         } // end if fi
       }
