@@ -4812,7 +4812,7 @@ void TMinuit::mnline(Double_t *start, Double_t fstart, Double_t *step, Double_t 
 //*-*-              SLAMIN = smallest possible value of ABS(SLAM)
    slamin = 0;
    for (i = 1; i <= fNpar; ++i) {
-      if (step[i-1] != 0) {
+     if (TMath::Abs(step[i-1]) > fEpsmac) {
          ratio = TMath::Abs(start[i-1] / step[i-1]);
          if (slamin == 0)    slamin = ratio;
          if (ratio < slamin) slamin = ratio;
