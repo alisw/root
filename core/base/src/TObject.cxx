@@ -203,7 +203,15 @@ const char *TObject::ClassName() const
 TObject *TObject::Clone(const char *) const
 {
    if (gDirectory) {
-     return gDirectory->CloneObject(this);
+     // If the object to be cloned has references, cloning will make these
+     // references wrongly point to the clone instead of the original. The
+     // kIsReferenced has to be temporarily disabled. The non-const casting
+     // does not break semantically the const-ness of the method.
+     Bool_t ref = TestBit(kIsReferenced);
+     ((TObject*)this)->ResetBit(kIsReferenced);
+     TObject *clone = gDirectory->CloneObject(this);
+     ((TObject*)this)->SetBit(kIsReferenced, ref);
+     return clone;
    } else {
      Fatal("Clone","No gDirectory set");
      return 0;
