@@ -2,6 +2,7 @@
 
 # This script is almost identical to /usr/bin/gstack.
 # It is used by TUnixSystem::StackTrace() on Linux and MacOS X.
+LD_LIBRARY_PATH=
 
 tempname=`basename $0 .sh`
 messfile=""
