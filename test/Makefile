@@ -32,6 +32,7 @@ endif
 -include ../MyConfig.mk
 
 #------------------------------------------------------------------------------
+LDFLAGS = -O2 $(shell $(RC) --ldflags) -L/opt/aliroot/install/alien/lib -lssl -lcrypto
 
 EVENTO        = Event.$(ObjSuf) EventDict.$(ObjSuf)
 EVENTS        = Event.$(SrcSuf) EventDict.$(SrcSuf)
