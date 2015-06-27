@@ -100,6 +100,7 @@ PROOFXLIBEXTRA += $(XROOTDDIRL) -lXrdClient
 endif
 
 endif
+PROOFXLIBEXTRA += -ldl
 
 ##### local rules #####
 .PHONY:         all-$(MODNAME) clean-$(MODNAME) distclean-$(MODNAME)
