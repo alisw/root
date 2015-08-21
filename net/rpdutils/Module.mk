@@ -12,6 +12,8 @@ RPDUTILDIR   := $(MODDIR)
 RPDUTILDIRS  := $(RPDUTILDIR)/src
 RPDUTILDIRI  := $(RPDUTILDIR)/inc
 
+SRVAUTHLIBEXTRA := -lNet -pthread
+
 ##### $(RPDUTILO) #####
 RPDUTILH     := $(filter-out $(MODDIRI)/rpdpriv.h, $(filter-out $(MODDIRI)/rpdconn.h, $(wildcard $(MODDIRI)/*.h)))
 RPDUTILS     := $(filter-out $(MODDIRS)/rpdpriv.cxx, $(filter-out $(MODDIRS)/rpdconn.cxx, $(wildcard $(MODDIRS)/*.cxx)))
