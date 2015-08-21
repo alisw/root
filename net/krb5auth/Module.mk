@@ -12,6 +12,8 @@ KRB5AUTHDIR  := $(MODDIR)
 KRB5AUTHDIRS := $(KRB5AUTHDIR)/src
 KRB5AUTHDIRI := $(KRB5AUTHDIR)/inc
 
+KRB5AUTHLIBEXTRA := -pthread -lNet -lRootAuth
+
 ##### libKrb5Auth #####
 KRB5AUTHL    := $(MODDIRI)/LinkDef.h
 KRB5AUTHDS   := $(call stripsrc,$(MODDIRS)/G__Krb5Auth.cxx)
