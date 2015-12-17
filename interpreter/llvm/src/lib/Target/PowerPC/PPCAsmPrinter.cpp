@@ -1001,8 +1001,27 @@ void PPCLinuxAsmPrinter::EmitFunctionEntryLabel() {
   }
 
   // ELFv2 ABI - Normal entry label.
-  if (Subtarget.isELFv2ABI())
+  if (Subtarget.isELFv2ABI()) {
+    // In the Large code model, we allow arbitrary displacements between
+    // the text section and its associated TOC section.  We place the
+    // full 8-byte offset to the TOC in memory immediatedly preceding
+    // the function global entry point.
+    if (TM.getCodeModel() == CodeModel::Large
+        && !MF->getRegInfo().use_empty(PPC::X2)) {
+      MCSymbol *GlobalEntryLabel = OutContext.CreateTempSymbol();
+      const MCSymbolRefExpr *GlobalEntryLabelExp =
+        MCSymbolRefExpr::Create(GlobalEntryLabel, OutContext);
+
+      MCSymbol *TOCSymbol = OutContext.GetOrCreateSymbol(StringRef(".TOC."));
+      const MCExpr *TOCDeltaExpr =
+        MCBinaryExpr::CreateSub(MCSymbolRefExpr::Create(TOCSymbol, OutContext),
+                                GlobalEntryLabelExp, OutContext);
+
+      OutStreamer.EmitValue(TOCDeltaExpr, 8);
+      OutStreamer.EmitLabel(GlobalEntryLabel);
+    }
     return AsmPrinter::EmitFunctionEntryLabel();
+  }
 
   // Emit an official procedure descriptor.
   MCSectionSubPair Current = OutStreamer.getCurrentSection();
@@ -1101,6 +1120,15 @@ void PPCLinuxAsmPrinter::EmitFunctionBodyStart() {
   //         .localentry func, .-func
   //         # local entry point, followed by function body
   //
+  // For the Large code model, we create
+  //
+  //         .quad .TOC.-func      # done by EmitFunctionEntryLabel
+  // func:
+  //         # global entry point
+  //         ld    r2,-8(r12)
+  //         add   r2,r2,r12
+  //         .localentry func, .-func
+  //
   // This ensures we have r2 set up correctly while executing the function
   // body, no matter which entry point is called.
   if (Subtarget.isELFv2ABI()
@@ -1112,24 +1140,35 @@ void PPCLinuxAsmPrinter::EmitFunctionBodyStart() {
     const MCSymbolRefExpr *GlobalEntryLabelExp =
       MCSymbolRefExpr::Create(GlobalEntryLabel, OutContext);
 
-    MCSymbol *TOCSymbol = OutContext.GetOrCreateSymbol(StringRef(".TOC."));
-    const MCExpr *TOCDeltaExpr =
-      MCBinaryExpr::CreateSub(MCSymbolRefExpr::Create(TOCSymbol, OutContext),
-                              GlobalEntryLabelExp, OutContext);
+    if (TM.getCodeModel() != CodeModel::Large) {
+      MCSymbol *TOCSymbol = OutContext.GetOrCreateSymbol(StringRef(".TOC."));
+      const MCExpr *TOCDeltaExpr =
+        MCBinaryExpr::CreateSub(MCSymbolRefExpr::Create(TOCSymbol, OutContext),
+                                GlobalEntryLabelExp, OutContext);
 
-    const MCExpr *TOCDeltaHi =
-      PPCMCExpr::CreateHa(TOCDeltaExpr, false, OutContext);
-    EmitToStreamer(OutStreamer, MCInstBuilder(PPC::ADDIS)
-                                .addReg(PPC::X2)
-                                .addReg(PPC::X12)
-                                .addExpr(TOCDeltaHi));
+      const MCExpr *TOCDeltaHi =
+        PPCMCExpr::CreateHa(TOCDeltaExpr, false, OutContext);
+      EmitToStreamer(OutStreamer, MCInstBuilder(PPC::ADDIS)
+                                  .addReg(PPC::X2)
+                                  .addReg(PPC::X12)
+                                  .addExpr(TOCDeltaHi));
 
-    const MCExpr *TOCDeltaLo =
-      PPCMCExpr::CreateLo(TOCDeltaExpr, false, OutContext);
-    EmitToStreamer(OutStreamer, MCInstBuilder(PPC::ADDI)
-                                .addReg(PPC::X2)
-                                .addReg(PPC::X2)
-                                .addExpr(TOCDeltaLo));
+      const MCExpr *TOCDeltaLo =
+        PPCMCExpr::CreateLo(TOCDeltaExpr, false, OutContext);
+      EmitToStreamer(OutStreamer, MCInstBuilder(PPC::ADDI)
+                                  .addReg(PPC::X2)
+                                  .addReg(PPC::X2)
+                                  .addExpr(TOCDeltaLo));
+    } else {
+      EmitToStreamer(OutStreamer, MCInstBuilder(PPC::LD)
+                                   .addReg(PPC::X2)
+                                   .addImm(-8)
+                                   .addReg(PPC::X12));
+      EmitToStreamer(OutStreamer, MCInstBuilder(PPC::ADD8)
+                                   .addReg(PPC::X2)
+                                   .addReg(PPC::X2)
+                                   .addReg(PPC::X12));
+    }
 
     MCSymbol *LocalEntryLabel = OutContext.CreateTempSymbol();
     OutStreamer.EmitLabel(LocalEntryLabel);
