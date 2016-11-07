@@ -64,7 +64,7 @@ public:
    TLorentzVector(const TLorentzVector & lorentzvector);
    // Copy constructor.
 
-   virtual ~TLorentzVector();
+   virtual ~TLorentzVector(){};
    // Destructor
 
    // inline operator TVector3 () const;
@@ -339,9 +339,9 @@ inline void TLorentzVector::SetPxPyPzE(Double_t px, Double_t py, Double_t pz, Do
 }
 
 inline void TLorentzVector::SetXYZM(Double_t  x, Double_t  y, Double_t  z, Double_t m) {
-   if ( m  >= 0 ) 
+   if ( m  >= 0 )
       SetXYZT( x, y, z, TMath::Sqrt(x*x+y*y+z*z+m*m) );
-   else 
+   else
       SetXYZT( x, y, z, TMath::Sqrt( TMath::Max((x*x+y*y+z*z-m*m), 0. ) ) );
 }
 
@@ -365,8 +365,8 @@ inline void TLorentzVector::GetXYZT(Float_t *carray) const{
    carray[3] = fE;
 }
 
-Double_t & TLorentzVector::operator [] (int i)       { return (*this)(i); }
-Double_t   TLorentzVector::operator [] (int i) const { return (*this)(i); }
+inline Double_t & TLorentzVector::operator [] (int i)       { return (*this)(i); }
+inline Double_t   TLorentzVector::operator [] (int i) const { return (*this)(i); }
 
 inline TLorentzVector &TLorentzVector::operator = (const TLorentzVector & q) {
    fP = q.Vect();
@@ -596,5 +596,60 @@ inline TLorentzVector operator * (Double_t a, const TLorentzVector & p) {
    return TLorentzVector(a*p.X(), a*p.Y(), a*p.Z(), a*p.T());
 }
 
+inline TLorentzVector::TLorentzVector()
+               : fP(), fE(0.0) {}
+
+inline TLorentzVector::TLorentzVector(Double_t x, Double_t y, Double_t z, Double_t t)
+               : fP(x,y,z), fE(t) {}
+
+inline TLorentzVector::TLorentzVector(const Double_t * x0)
+               : fP(x0), fE(x0[3]) {}
+
+inline TLorentzVector::TLorentzVector(const Float_t * x0)
+               : fP(x0), fE(x0[3]) {}
+
+inline TLorentzVector::TLorentzVector(const TVector3 & p, Double_t e)
+               : fP(p), fE(e) {}
+
+inline TLorentzVector::TLorentzVector(const TLorentzVector & p) : TObject(p)
+               , fP(p.Vect()), fE(p.T()) {}
+
+
+
+inline Double_t TLorentzVector::operator () (int i) const
+{
+   //dereferencing operator const
+   switch(i) {
+      case kX:
+	 return fP.X();
+      case kY:
+         return fP.Y();
+      case kZ:
+         return fP.Z();
+      case kT:
+         return fE;
+      default:
+         Error("operator()()", "bad index (%d) returning 0",i);
+   }
+   return 0.;
+}
+
+inline Double_t & TLorentzVector::operator () (int i)
+{
+   //dereferencing operator
+   switch(i) {
+      case kX:
+         return fP.fX;
+      case kY:
+         return fP.fY;
+      case kZ:
+         return fP.fZ;
+      case kT:
+         return fE;
+      default:
+         Error("operator()()", "bad index (%d) returning &fE",i);
+   }
+   return fE;
+}
 
 #endif
