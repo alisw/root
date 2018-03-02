@@ -78,7 +78,6 @@ ClassImp(TAlienFile);
 ///    TAlienFile::Open("alien://...");
 ///
 /// Don't use "new TAlienFile" directly unless you know, what you are doing
-///
 
 TAlienFile::TAlienFile(const char *purl, Option_t *option,
                        const char *ftitle, Int_t compress,
@@ -450,7 +449,6 @@ TAlienFile *TAlienFile::Open(const char *url, Option_t *option,
                lUrloption += anchor;
                lUrloption += "&mkpath=1";
                lUrl.SetFile(lUrlfile);
-               // lUrl.SetAnchor(anchor);
                lUrl.SetOptions(lUrloption);
             } else {
                TString loption;
