@@ -33,7 +33,7 @@
 
 #ifndef ROOT_TXNetFile
 #include "TXNetFile.h"
-
+#endif
 
 class TUrl;
 
