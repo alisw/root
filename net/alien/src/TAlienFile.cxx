@@ -46,65 +46,66 @@
 #include "TError.h"
 #include <cstdlib>
 
-ClassImp(TAlienFile)
+ClassImp(TAlienFile);
 
-#define MAX_FILE_IMAGES 16
+#define MAX_FILE_IMAGES_READ 10
+#define MAX_FILE_IMAGES_WRITE 3
 
-//______________________________________________________________________________
+////////////////////////////////////////////////////////////////////////////////
+/// Create an Alien File Object. An AliEn File is the same as a TFile
+/// except that its real tranfer URL is resolved via an Alien service. The url
+/// argument must be of the form: alien:/[machine]/path/file.root
+/// Using the option access, another access protocol (PFN) can be
+/// specified for an LFN e.g.:
+///     "alien:///alice/test.root"
+/// If you want to write a file on specific storage element use the syntax
+///     "alien:///alice/test.root?&se=Alice::CERN::Storage"
+/// The default SE is specified by the environment variable alien_CLOSE_SE
+///
+/// If you read a file, the closest file image to alien_CLOSE_SE is taken.
+/// If the file cannot opened from the closest image, the next image is tried,
+/// until there is no image location left to be tried.
+///
+/// If the file specified in the URL does not exist, is not accessable
+/// or can not be created the kZombie bit will be set in the TAlienFile
+/// object. Use IsZombie() to see if the file is accessable.
+/// For a description of the option and other arguments see the TFile ctor.
+/// The preferred interface to this constructor is via TFile::Open().
+///
+/// Warning: TAlienFile objects should only be created through the factory functions:
+///    TFile::Open("alien://...");
+/// or
+///    TAlienFile::Open("alien://...");
+///
+/// Don't use "new TAlienFile" directly unless you know, what you are doing
+///
+
 TAlienFile::TAlienFile(const char *purl, Option_t *option,
                        const char *ftitle, Int_t compress,
                        Bool_t parallelopen, const char *lurl,
-                       const char *authz) :
+                       const char *authz, const char *se) :
    TXNetFile(purl, option, ftitle, compress, 0, parallelopen, lurl)
 {
-   // Create an Alien File Object. An AliEn File is the same as a TFile
-   // except that its real tranfer URL is resolved via an Alien service. The url
-   // argument must be of the form: alien:/[machine]/path/file.root
-   // Using the option access, another access protocol (PFN) can be
-   // specified for an LFN e.g.:
-   //     "alien:///alice/test.root"
-   // If you want to write a file on specific storage element use the syntax
-   //     "alien:///alice/test.root?&se=Alice::CERN::Storage"
-   // The default SE is specified by the environment variable alien_CLOSE_SE
-   //
-   // If you read a file, the closest file image to alien_CLOSE_SE is taken.
-   // If the file cannot opened from the closest image, the next image is tried,
-   // until there is no image location left to be tried.
-   //
-   // If the file specified in the URL does not exist, is not accessable
-   // or can not be created the kZombie bit will be set in the TAlienFile
-   // object. Use IsZombie() to see if the file is accessable.
-   // For a description of the option and other arguments see the TFile ctor.
-   // The preferred interface to this constructor is via TFile::Open().
-   //
-   // Warning: TAlienFile objects should only be created through the factory functions:
-   //    TFile::Open("alien://...");
-   // or
-   //    TAlienFile::Open("alien://...");
-   //
-   // Don't use "new TAlienFile" directly unless you know, what you are doing
-   //
-
    TUrl logicalurl(lurl);
    fLfn = logicalurl.GetFile();
    fAuthz = authz;
    fGUID = "";
    fUrl = "";
    fPfn = "";
-   fSE = "";
+   fSE = se;
    fImage = 0;
    fNreplicas = 0;
    fOpenedAt = time(0);
 }
 
-//______________________________________________________________________________
+////////////////////////////////////////////////////////////////////////////////
+/// Static method used to create a TAlienFile object. For options see
+/// TAlienFile ctor.
+
 TAlienFile *TAlienFile::Open(const char *url, Option_t *option,
                              const char *ftitle, Int_t compress,
                              Bool_t parallelopen)
 {
-   // Static method used to create a TAlienFile object. For options see
-   // TAlienFile ctor.
-
    if (!gGrid) {
       ::Error("TAlienFileAccess", "No GRID connection available!");
       return 0;
@@ -260,41 +261,48 @@ TAlienFile *TAlienFile::Open(const char *url, Option_t *option,
 
    command += file;
 
-   if (fAWritable) {
-      // append the storage element environment variable
-      command += " ";
-      command += storageelement;
-   }
-
    TString fALfn = file;
 
    int imagenr = 0;
+   TString exSes = "";
 
-   do {
+   // number of global loops. for read goes one by one, while write returns N(QoS)
+   int maxtries = MAX_FILE_IMAGES_READ;
+   if (fAWritable)
+      maxtries = MAX_FILE_IMAGES_WRITE;
+
+   while (imagenr < maxtries) {
       imagenr++;
       repcommand = command;
-      if (!fAWritable) {
-         // in the read case, try all image locations
-         if (storageelement != "") {
-            repcommand += " ";
-            repcommand += storageelement;
-         } else {
-            repcommand += " ";
-            repcommand += "unknown";
-         }
-         repcommand += " 0 ";
-         repcommand += imagenr;
+
+      if (storageelement != "") {
+         repcommand += " ";
+         repcommand += storageelement;
+      } else {
+         repcommand += " ";
+         repcommand += "unknown";
       }
-      
+      repcommand += " 0 ";
+      repcommand += std::to_string(imagenr) + exSes;
+
       if (gSystem->Getenv("ALIEN_SITE")) {
          repcommand += " 0 ";
-         repcommand += gSystem->Getenv("ALIEN_SITE"); 
+         repcommand += gSystem->Getenv("ALIEN_SITE");
+      } else if (gSystem->Getenv("alien_CLOSEST_SITE")) {
+         repcommand += " 0 ";
+         repcommand += gSystem->Getenv("alien_CLOSEST_SITE");
       }
+      // call access to the APIs
       result = gGrid->Command(repcommand.Data(), kFALSE, TAlien::kOUTPUT);
+      if (!result) {
+         ::Error("TAlienFile::Open",
+            "Failed to get a response from the server");
+         return 0;
+      }
+      
       alienResult = dynamic_cast < TAlienResult * >(result);
       list = dynamic_cast < TList * >(alienResult);
       if (!list) {
-
          if (seStr)
             ::Error("TAlienFile::Open",
                     "cannot get the access envelope for %s and image %u in SE <%s>",
@@ -333,190 +341,194 @@ TAlienFile *TAlienFile::Open(const char *url, Option_t *option,
          TObject *seObject = map->GetValue("se");
          seStr = dynamic_cast < TObjString * >(seObject);
          if (seStr) seStrs = seStr->GetName();
-         
+
          TObject *nreplicasObject = map->GetValue("nSEs");
          if (nreplicasObject) {
             snreplicas = nreplicasObject->GetName();
             nreplicas = snreplicas.Atoi();
-         }   
-         
+         }
+
          TObject *guidObject = map->GetValue("guid");
          if (guidObject) sguid = guidObject->GetName();
 
          TObject *pfnObject = map->GetValue("pfn");
          if (pfnObject) pfnStr = pfnObject->GetName();
-         
+
          if (map->GetValue("eof")) {
             imageeof = kTRUE;
+            // no more envelopes available (typically no more replicas to try)
             // there is only one result line .... in case it is at all ....
          }
-         break;
-      }
 
-      if ((!urlStr) || (!authzStr)) {
-         if (fAWritable) {
-            ::Error("TAlienFile::Open",
-                    "didn't get the authorization to write %s",
-                    purl.GetUrl());
-         } else {
-            if (!imageeof) {
+         if ((!urlStr) || (!authzStr)) {
+            if (fAWritable) {
                ::Error("TAlienFile::Open",
-                       "didn't get the authorization to read %s from location %u",
-                       purl.GetUrl(), imagenr);
+                       "didn't get the authorization to write %s",
+                       purl.GetUrl());
+            } else {
+               if (!imageeof) {
+                  ::Error("TAlienFile::Open",
+                          "didn't get the authorization to read %s from location %u",
+                          purl.GetUrl(), imagenr);
+               }
+            }
+            if (!imageeof) {
+               ::Info("TAlienFile::Open",
+                  "Command::Stdout !!!");
+               gGrid->Stdout();
+               ::Info("TAlienFile::Open",
+                  "Command::Stderr !!!");
+               gGrid->Stderr();
+               ::Info("TAlienFile::Open",
+                  "End of Output   !!!");
+            }
+            fAUrl = "";
+            if (!imageeof) {
+               continue;
+            } else {
+               // if the service signals eof, it makes no sense to check more replicas
+               ::Error("TAlienFile::Open",
+                       "No more images to try - giving up");
+
+               // Reset the temp monitoring info
+               if (gMonitoringWriter)
+                  gMonitoringWriter->SendFileOpenProgress(0, 0, 0, kFALSE);
+               
+               // cleanup variables
+               delete result;
+               delete iter;
+
+               return 0;
             }
          }
-         if (!imageeof) {
-            ::Info("TAlienFile::Open",
-               "Command::Stdout !!!");
-            gGrid->Stdout();
-            ::Info("TAlienFile::Open",
-               "Command::Stderr !!!");
-            gGrid->Stderr();
-            ::Info("TAlienFile::Open",
-               "End of Output   !!!");
+         authz = authzStr->GetName();
+         stringurl = urlStr->GetName();
+
+         tokens = stringurl.Tokenize("#");
+
+         if (tokens->GetEntries() == 2) {
+            anchor = ((TObjString *) tokens->At(1))->GetName();
+            urlStr->SetString(((TObjString *) tokens->At(0))->GetName());
          }
-         delete iter;
-         delete result;
-         fAUrl = "";
-         if (!imageeof) {
-            continue;
-         } else {
-            // if the service signals eof, it makes no sense to check more replicas
-            ::Error("TAlienFile::Open",
-                    "No more images to try - giving up");
 
-            // Reset the temp monitoring info
-            if (gMonitoringWriter)
-               gMonitoringWriter->SendFileOpenProgress(0, 0, 0, kFALSE);
-
-            return 0;
-         }
-      }
-
-      delete iter;
-
-      authz = authzStr->GetName();
-      stringurl = urlStr->GetName();
-
-      tokens = stringurl.Tokenize("#");
-
-      if (tokens->GetEntries() == 2) {
-         anchor = ((TObjString *) tokens->At(1))->GetName();
-         urlStr->SetString(((TObjString *) tokens->At(0))->GetName());
-      }
-
-      if (tokens) {
          delete tokens;
-      }
 
-      newurl = urlStr->GetName();
-      stmp = purl.GetAnchor();
-      newurl += TString("?&authz=");
-      newurl += authzStr->GetName();
+         newurl = urlStr->GetName();
+         stmp = purl.GetAnchor();
+         newurl += TString("?&authz=");
+         newurl += authzStr->GetName();
 
-      if (!fAWritable) {
-         if (seStr)
-            ::Info("TAlienFile::Open", "Accessing image %u of %s in SE <%s>",
-                   imagenr, purl.GetUrl(), seStr->GetName());
-         else
-            ::Info("TAlienFile::Open", "Accessing image %u of %s", imagenr, purl.GetUrl());
-      }
-      // the treatement of ZIP files is done in the following way:
-      // LFNs in AliEn pointing to files in ZIP archives don't contain the .zip suffix in the file name
-      // to tell TArchiveFile about the ZIP nature, we add to the URL options 'zip=<member>'
-      // This options are not visible in the file name, they are passed through TXNetFile to TNetFile to TArchiveFile
+         if (!fAWritable) {
+            if (seStr)
+               ::Info("TAlienFile::Open", "Accessing image %u of %s in SE <%s>",
+                      imagenr, purl.GetUrl(), seStr->GetName());
+            else
+               ::Info("TAlienFile::Open", "Accessing image %u of %s", imagenr, purl.GetUrl());
+         }
+         // the treatement of ZIP files is done in the following way:
+         // LFNs in AliEn pointing to files in ZIP archives don't contain the .zip suffix in the file name
+         // to tell TArchiveFile about the ZIP nature, we add to the URL options 'zip=<member>'
+         // This options are not visible in the file name, they are passed through TXNetFile to TNetFile to TArchiveFile
 
-      if (stmp != "") {
-         newurl += "#";
-         newurl += purl.GetAnchor();
-         TString lUrlfile = lUrl.GetFile();
-         TString lUrloption;
-         lUrloption = "zip=";
-         lUrloption += purl.GetAnchor();
-         lUrloption += "&mkpath=1";
-         lUrl.SetFile(lUrlfile);
-         lUrl.SetOptions(lUrloption);
-      } else {
-         if (anchor.Length()) {
+         if (stmp != "") {
             newurl += "#";
-            newurl += anchor;
+            newurl += purl.GetAnchor();
             TString lUrlfile = lUrl.GetFile();
             TString lUrloption;
             lUrloption = "zip=";
-            lUrloption += anchor;
+            lUrloption += purl.GetAnchor();
             lUrloption += "&mkpath=1";
             lUrl.SetFile(lUrlfile);
-            // lUrl.SetAnchor(anchor);
             lUrl.SetOptions(lUrloption);
          } else {
-            TString loption;
-            loption = lUrl.GetOptions();
-            if (loption.Length()) {
-               loption += "&mkpath=1";
-               lUrl.SetOptions(loption.Data());
+            if (anchor.Length()) {
+               newurl += "#";
+               newurl += anchor;
+               TString lUrlfile = lUrl.GetFile();
+               TString lUrloption;
+               lUrloption = "zip=";
+               lUrloption += anchor;
+               lUrloption += "&mkpath=1";
+               lUrl.SetFile(lUrlfile);
+               // lUrl.SetAnchor(anchor);
+               lUrl.SetOptions(lUrloption);
             } else {
-               lUrl.SetOptions("mkpath=1");
+               TString loption;
+               loption = lUrl.GetOptions();
+               if (loption.Length()) {
+                  loption += "&mkpath=1";
+                  lUrl.SetOptions(loption.Data());
+               } else {
+                  lUrl.SetOptions("mkpath=1");
+               }
             }
          }
-      }
 
-      fAUrl = TUrl(newurl);
+         fAUrl = TUrl(newurl);
 
-      // append the original options
-      TString oldopt;
-      TString newopt;
+         // append the original options
+         TString oldopt;
+         TString newopt;
 
-      if (TString(fAUrl.GetUrl()) == "") {
-         // error in file opening occured
+         if (TString(fAUrl.GetUrl()) == "") {
+            // error in file opening occured
+            ::Error("TAlienFile::Open",
+                    "error in opening the file occured: empty GetUrl");
 
-          // Reset the temp monitoring info
-         if (gMonitoringWriter)
-            gMonitoringWriter->SendFileOpenProgress(0, 0, 0, kFALSE);
+             // Reset the temp monitoring info
+            if (gMonitoringWriter)
+               gMonitoringWriter->SendFileOpenProgress(0, 0, 0, kFALSE);
 
-         return 0;
-      }
+            // cleanup variables
+            delete result;
+            delete iter;
 
-      TUrl nUrl = fAUrl;
-      TUrl oUrl(url);
-
-      oldopt = oUrl.GetOptions();
-      newopt = nUrl.GetOptions();
-
-      // add the original options from the alien URL
-      if (oldopt.Length()) {
-         nUrl.SetOptions(newopt + TString("&") + oldopt);
-      } else {
-         nUrl.SetOptions(newopt);
-      }
-
-      fAUrl = nUrl;
-      delete result;
-      if (gDebug > 1)
-         ::Info("TAlienFile","Opening AUrl <%s> lUrl <%s>",fAUrl.GetUrl(),lUrl.GetUrl());
-      TStopwatch timer;
-      timer.Start();
-      TAlienFile *alienfile =
-          new TAlienFile(fAUrl.GetUrl(), fAOption, ftitle, compress,
-                         parallelopen, lUrl.GetUrl(), authz);
-      timer.Stop();                   
-      if (alienfile->IsZombie()) {
-         delete alienfile;
-         if (fAWritable) {
-            // for the moment we support only 1 try during writing - no alternative locations
-            break;
+            return 0;
          }
-         continue;
-      } else {
-         alienfile->SetSE(seStrs);
-         alienfile->SetPfn(pfnStr);
-         alienfile->SetImage(imagenr);
-         alienfile->SetNreplicas(nreplicas);
-         alienfile->SetGUID(sguid);
-         alienfile->SetUrl(urlStrs);
-         alienfile->SetElapsed(timer.RealTime());
-         return alienfile;
+
+         TUrl nUrl = fAUrl;
+         TUrl oUrl(url);
+
+         oldopt = oUrl.GetOptions();
+         newopt = nUrl.GetOptions();
+
+         // add the original options from the alien URL
+         if (oldopt.Length()) {
+            nUrl.SetOptions(newopt + TString("&") + oldopt);
+         } else {
+            nUrl.SetOptions(newopt);
+         }
+
+         fAUrl = nUrl;
+         if (gDebug > 1)
+            ::Info("TAlienFile","Opening AUrl <%s> lUrl <%s>",fAUrl.GetUrl(),lUrl.GetUrl());
+         TStopwatch timer;
+         timer.Start();
+         TAlienFile *alienfile =
+             new TAlienFile(fAUrl.GetUrl(), fAOption, ftitle, compress,
+                            parallelopen, lUrl.GetUrl(), authz, seStrs);
+         timer.Stop();
+         if (alienfile->IsZombie()) {
+            delete alienfile;
+            if (fAWritable) {
+               exSes += ";" + seStrs;
+            }
+            continue;
+         } else {
+            alienfile->SetSE(seStrs);
+            alienfile->SetPfn(pfnStr);
+            alienfile->SetImage(imagenr);
+            alienfile->SetNreplicas(nreplicas);
+            alienfile->SetGUID(sguid);
+            alienfile->SetUrl(urlStrs);
+            alienfile->SetElapsed(timer.RealTime());
+            return alienfile;
+         }
       }
-   } while (imagenr < MAX_FILE_IMAGES);
+   // cleanup variables
+   delete result;
+   delete iter;
+   }
 
    if (!fAWritable) {
       ::Error("TAlienFile::Open",
@@ -530,11 +542,11 @@ TAlienFile *TAlienFile::Open(const char *url, Option_t *option,
    return 0;
 }
 
-//______________________________________________________________________________
+////////////////////////////////////////////////////////////////////////////////
+/// TAlienFile file dtor.
+
 TAlienFile::~TAlienFile()
 {
-   // TAlienFile file dtor.
-
    if (IsOpen()) {
       Close();
    }
@@ -542,11 +554,11 @@ TAlienFile::~TAlienFile()
       Info("~TAlienFile", "dtor called for %s", GetName());
 }
 
-//______________________________________________________________________________
+////////////////////////////////////////////////////////////////////////////////
+/// Close the file.
+
 void TAlienFile::Close(Option_t * option)
 {
-   // Close the file.
-
    if (!IsOpen()) return;
 
 
@@ -600,19 +612,23 @@ void TAlienFile::Close(Option_t * option)
          // there is only one result line .... in case it is at all ....
          break;
       }
-      delete iter;
-      delete result;
    }
+   delete result;
+   delete iter;
 
    gSystem->Unsetenv("GCLIENT_EXTRA_ARG");
+   
+   command = "mirror -x " + fSE + " " + fLfn;
+   result = gGrid->Command(command, kFALSE, TAlien::kOUTPUT);
+   delete result;
 
 }
 
-//______________________________________________________________________________
+////////////////////////////////////////////////////////////////////////////////
+/// Get surl from lfn by asking AliEn catalog.
+
 TString TAlienFile::SUrl(const char *lfn)
 {
-   // Get surl from lfn by asking AliEn catalog.
-
    TString command;
    TString surl;
 
