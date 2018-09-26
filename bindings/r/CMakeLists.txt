@@ -1,29 +1,40 @@
 ############################################################################
 # CMakeLists.txt file for building ROOT R package
 ############################################################################
-#Autor: Omar Andres Zapata Mesa 31/05/2013,14/07/2014
 
-# set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/r")
+ROOT_STANDARD_LIBRARY_PACKAGE(RInterface
+  HEADERS
+    RExports.h
+    TRDataFrame.h
+    TRFunctionExport.h
+    TRFunctionImport.h
+    TRInterface.h
+    TRInternalFunction.h
+    TRObject.h
+  SOURCES
+    src/RExports.cxx
+    src/TRCompletion.cxx
+    src/TRDataFrame.cxx
+    src/TRFunctionExport.cxx
+    src/TRFunctionImport.cxx
+    src/TRInterface.cxx
+    src/TRObject.cxx
+  DICTIONARY_OPTIONS
+    -I${R_INCLUDE_DIR}
+    -I${R_Rcpp_INCLUDE_DIR}
+    -I${R_RInside_INCLUDE_DIR}
+  DEPENDENCIES
+    Core
+    Matrix
+    RIO
+    Thread
+)
 
-set(libname RInterface)
+ROOT_ADD_CXX_FLAG(_R_FLAGS -Wno-cast-function-type)
+ROOT_ADD_CXX_FLAG(_R_FLAGS -Wno-overloaded-virtual)
 
-include_directories(${R_INCLUDE_DIRS})
+separate_arguments(_R_FLAGS)
 
-set(R_HEADERS ${CMAKE_SOURCE_DIR}/bindings/r/inc/TRInterface.h
-              ${CMAKE_SOURCE_DIR}/bindings/r/inc/TRObject.h 
-              ${CMAKE_SOURCE_DIR}/bindings/r/inc/TRFunctionExport.h
-              ${CMAKE_SOURCE_DIR}/bindings/r/inc/TRFunctionImport.h
-              ${CMAKE_SOURCE_DIR}/bindings/r/inc/TRInternalFunction.h
-              ${CMAKE_SOURCE_DIR}/bindings/r/inc/TRDataFrame.h
-              ${CMAKE_SOURCE_DIR}/bindings/r/inc/RExports.h)
-
-ROOT_GENERATE_DICTIONARY(G__RInterface ${R_HEADERS} MODULE ${libname} LINKDEF LinkDef.h)
-ROOT_LINKER_LIBRARY(RInterface *.cxx G__RInterface.cxx LIBRARIES ${R_LIBRARIES} DEPENDENCIES Core Matrix Thread RIO readline)
-
-ROOT_INSTALL_HEADERS()
-
-
-
-
-
-
+target_compile_options(RInterface PUBLIC ${_R_FLAGS})
+target_include_directories(RInterface BEFORE PUBLIC ${R_INCLUDE_DIRS})
+target_link_libraries(RInterface PUBLIC ${R_LIBRARIES} readline)

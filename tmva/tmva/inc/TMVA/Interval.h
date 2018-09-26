@@ -50,9 +50,7 @@
 //                                                                          //
 //                                                                          //
 //////////////////////////////////////////////////////////////////////////////
-#ifndef ROOT_Rtypes                                                         
 #include "Rtypes.h"
-#endif
 
 class TRandom3;
 
@@ -92,7 +90,7 @@ namespace TMVA {
    private:
       MsgLogger& Log() const;          
 
-      ClassDef(Interval,0)    // Interval definition, continous and discrete
+      ClassDef(Interval,0);    // Interval definition, continous and discrete
    };
 
 } // namespace TMVA

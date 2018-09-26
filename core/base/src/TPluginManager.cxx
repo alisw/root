@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TPluginManager
+\ingroup Base
+
 This class implements a plugin library manager.
 
 It keeps track of a list of plugin handlers. A plugin handler knows which plugin
@@ -111,7 +113,7 @@ static bool &TPH__IsReadingDirs() {
    return readingDirs;
 }
 
-ClassImp(TPluginHandler)
+ClassImp(TPluginHandler);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a plugin handler. Called by TPluginManager.
@@ -278,6 +280,11 @@ Bool_t TPluginHandler::CheckForExecPlugin(Int_t nargs)
 
    if (fCanCall == 0) {
       // Not initialized yet.
+      // SetupCallEnv is likely to require/take the interpreter lock.
+      // Grab it now to avoid dead-lock.  In particular TPluginHandler::ExecPluginImpl
+      // takes the gInterpreterMutex and *then* call (indirectly) code that
+      // take the gPluginManagerMutex.
+      R__LOCKGUARD(gInterpreterMutex);
       R__LOCKGUARD2(gPluginManagerMutex);
 
       // Now check if another thread did not already do the work.
@@ -326,7 +333,7 @@ void TPluginHandler::Print(Option_t *opt) const
 }
 
 
-ClassImp(TPluginManager)
+ClassImp(TPluginManager);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Clean up the plugin manager.
@@ -448,68 +455,76 @@ void TPluginManager::LoadHandlerMacros(const char *path)
 
 void TPluginManager::LoadHandlersFromPluginDirs(const char *base)
 {
-   //The destructor of TObjArray takes the gROOTMutex lock so we want to
-   // delete the object after release the gInterpreterMutex lock
-   TObjArray *dirs = nullptr;
-   {
-      R__LOCKGUARD2(gInterpreterMutex);
-      if (!fBasesLoaded) {
-         fBasesLoaded = new THashTable();
-         fBasesLoaded->SetOwner();
-      }
-      TString sbase = base;
-      if (sbase != "") {
-         sbase.ReplaceAll("::", "@@");
-         if (fBasesLoaded->FindObject(sbase))
-            return;
-         fBasesLoaded->Add(new TObjString(sbase));
-      }
+   TString sbase = base;
+   if (sbase.Length())
+      sbase.ReplaceAll("::", "@@");
 
-      TPH__IsReadingDirs() = kTRUE;
+   R__READ_LOCKGUARD(ROOT::gCoreMutex);
 
-      TString plugindirs = gEnv->GetValue("Root.PluginPath", (char*)0);
-#ifdef WIN32
-      dirs = plugindirs.Tokenize(";");
-#else
-      dirs = plugindirs.Tokenize(":");
-#endif
-      TString d;
-      for (Int_t i = 0; i < dirs->GetEntriesFast(); i++) {
-         d = ((TObjString*)dirs->At(i))->GetString();
-         // check if directory already scanned
-         Int_t skip = 0;
-         for (Int_t j = 0; j < i; j++) {
-            TString pd = ((TObjString*)dirs->At(j))->GetString();
-            if (pd == d) {
-               skip++;
-               break;
-            }
-         }
-         if (!skip) {
-            if (sbase != "") {
-               const char *p = gSystem->ConcatFileName(d, sbase);
-               LoadHandlerMacros(p);
-               delete [] p;
-            } else {
-               void *dirp = gSystem->OpenDirectory(d);
-               if (dirp) {
-                  if (gDebug > 0)
-                     Info("LoadHandlersFromPluginDirs", "%s", d.Data());
-                  const char *f1;
-                  while ((f1 = gSystem->GetDirEntry(dirp))) {
-                     TString f = f1;
-                     const char *p = gSystem->ConcatFileName(d, f);
-                     LoadHandlerMacros(p);
-                     fBasesLoaded->Add(new TObjString(f));
-                     delete [] p;
-                  }
-               }
-               gSystem->FreeDirectory(dirp);
-            }
-         }
-      }
-      TPH__IsReadingDirs() = kFALSE;
+   if (fBasesLoaded && fBasesLoaded->FindObject(sbase))
+      return;
+
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
+
+   // While waiting for the lock, another thread may
+   // have process the requested plugin.
+   if (fBasesLoaded && fBasesLoaded->FindObject(sbase))
+      return;
+
+   if (!fBasesLoaded) {
+      fBasesLoaded = new THashTable();
+      fBasesLoaded->SetOwner();
    }
+   fBasesLoaded->Add(new TObjString(sbase));
+
+   TPH__IsReadingDirs() = kTRUE;
+
+   TString plugindirs = gEnv->GetValue("Root.PluginPath", (char*)0);
+   if (plugindirs.Length() == 0) {
+      plugindirs = "plugins";
+      gSystem->PrependPathName(TROOT::GetEtcDir(), plugindirs);
+   }
+#ifdef WIN32
+   TObjArray *dirs = plugindirs.Tokenize(";");
+#else
+   TObjArray *dirs = plugindirs.Tokenize(":");
+#endif
+   TString d;
+   for (Int_t i = 0; i < dirs->GetEntriesFast(); i++) {
+      d = ((TObjString*)dirs->At(i))->GetString();
+      // check if directory already scanned
+      Int_t skip = 0;
+      for (Int_t j = 0; j < i; j++) {
+         TString pd = ((TObjString*)dirs->At(j))->GetString();
+         if (pd == d) {
+            skip++;
+            break;
+         }
+      }
+      if (!skip) {
+         if (sbase != "") {
+            const char *p = gSystem->ConcatFileName(d, sbase);
+            LoadHandlerMacros(p);
+            delete [] p;
+         } else {
+            void *dirp = gSystem->OpenDirectory(d);
+            if (dirp) {
+               if (gDebug > 0)
+                  Info("LoadHandlersFromPluginDirs", "%s", d.Data());
+               const char *f1;
+               while ((f1 = gSystem->GetDirEntry(dirp))) {
+                  TString f = f1;
+                  const char *p = gSystem->ConcatFileName(d, f);
+                  LoadHandlerMacros(p);
+                  fBasesLoaded->Add(new TObjString(f));
+                  delete [] p;
+               }
+            }
+            gSystem->FreeDirectory(dirp);
+         }
+      }
+   }
+   TPH__IsReadingDirs() = kFALSE;
    delete dirs;
 }
 

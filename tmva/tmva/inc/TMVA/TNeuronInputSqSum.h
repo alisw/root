@@ -35,19 +35,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
-#ifndef ROOT_TMVA_TNeuronInput
 #include "TMVA/TNeuronInput.h"
-#endif
-#ifndef ROOT_TMVA_TNeuron
 #include "TMVA/TNeuron.h"
-#endif
 
 namespace TMVA {
   
@@ -72,7 +64,7 @@ namespace TMVA {
       // name of the class
       TString GetName() { return "Sum of weighted activations squared"; }
 
-      ClassDef(TNeuronInputSqSum,0) // Calculates square of  weighted sum of neuron inputs
+      ClassDef(TNeuronInputSqSum,0); // Calculates square of  weighted sum of neuron inputs
    };
 
 } // namespace TMVA

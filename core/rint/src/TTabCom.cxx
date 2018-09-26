@@ -144,7 +144,8 @@
 #include "Riostream.h"
 #include "Rstrstream.h"
 
-#define BUF_SIZE    1024        // must match value in C_Getline.c (for bounds checking)
+#define BUF_SIZE 1024 // must be smaller than/equal to fgLineBufSize in Getline.cxx and
+                      // lineBufSize in cppcompleter.py
 #define IfDebug(x)  if(gDebug==TTabCom::kDebug) x
 
 #ifdef R__WIN32
@@ -154,7 +155,7 @@ const char kDelim = ':';
 #endif
 
 
-ClassImp(TTabCom)
+ClassImp(TTabCom);
 // ----------------------------------------------------------------------------
 //
 //             global/file scope variables
@@ -426,18 +427,27 @@ void TTabCom::RehashAll()
 const TSeqCollection *TTabCom::GetListOfClasses()
 {
    if (!fpClasses) {
-      fpClasses = new TContainer;
+      fpClasses = new THashList;
       // Iterate over the table from the map file.
       THashList* entries = gInterpreter->GetMapfile()->GetTable();
       TIter next(entries);
       while (const auto key = next()) {
          // This is not needed with the new rootmap format
          const char* className = key->GetName();
-         if (strncmp(className, "Library.", 8))
+         if (!strncmp(className, "Library.", 8))
             className += 8;
 
          if (!strstr(className, ".h"))
             fpClasses->Add(new TObjString(className));
+      }
+
+      // We might have autoload entries that don't have a rootmap entry
+      // (libCore) and no interpreter info (not yet loaded).
+      TClassTable::Init(); // reset counter
+      while (const char* className = TClassTable::Next()) {
+         if (!fpClasses->FindObject(className)) {
+            fpClasses->Add(new TObjString(className));
+         }
       }
    }
 
@@ -1314,7 +1324,6 @@ Int_t TTabCom::Complete(const TRegexp & re,
             // (except for those excluded by "FileIgnore")
          {
             IfDebug(std::cerr << "printing ambiguous matches" << std::endl);
-            out << std::endl;
             std::set<std::string> alreadyPrinted;
             while ((pObj = next_match())) {
                s = pObj->GetName();
@@ -1663,8 +1672,7 @@ Int_t TTabCom::Hook(char *buf, int *pLoc, std::ostream& out)
    case kROOT_Load:
       {
          const TString fileName = s3("[^\"]*$");
-//             const TString  dynamicPath  = DeterminePath( fileName, TROOT::GetDynamicPath() ); /* should use this one */
-         const TString dynamicPath = DeterminePath(fileName,gEnv->GetValue("Root.DynamicPath",(char *) 0));
+         const TString dynamicPath = DeterminePath(fileName, gSystem->GetDynamicPath());
          const TSeqCollection *pListOfFiles = GetListOfFilesInPath(dynamicPath);
 
 //             pos = Complete( "[^\"/]*$", pListOfFiles, "\");", out);
@@ -1906,19 +1914,19 @@ Int_t TTabCom::Hook(char *buf, int *pLoc, std::ostream& out)
          while ((pMethod = (TMethod *) nextMethod())) {
             if (methodName == pMethod->GetName()) {
                foundOne = kTRUE;
-               out << std::endl << pMethod->GetReturnTypeName()
+               out << pMethod->GetReturnTypeName()
                    << " " << pMethod->GetName()
                    << pMethod->GetSignature();
                const char *comment = pMethod->GetCommentString();
                if (comment && comment[0] != '\0') {
                   out << " \t// " << comment;
                }
+               out << std::endl;
             }
          }
 
          // done
          if (foundOne) {
-            out << std::endl;
             pos = -2;
          } else {
             gSystem->Beep();
@@ -2006,19 +2014,19 @@ Int_t TTabCom::Hook(char *buf, int *pLoc, std::ostream& out)
          while ((pMethod = (TMethod *) nextMethod())) {
             if (methodName == pMethod->GetName()) {
                foundOne = kTRUE;
-               out << std::endl << pMethod->GetReturnTypeName()
+               out << pMethod->GetReturnTypeName()
                    << " " << pMethod->GetName()
                    << pMethod->GetSignature();
                const char *comment = pMethod->GetCommentString();
                if (comment && comment[0] != '\0') {
                   out << " \t// " << comment;
                }
+               out << std::endl;
             }
          }
 
          // done
          if (foundOne) {
-            out << std::endl;
             pos = -2;
          } else {
             gSystem->Beep();
@@ -2088,7 +2096,6 @@ Int_t TTabCom::Hook(char *buf, int *pLoc, std::ostream& out)
             std::cerr << std::endl << "no such function: " << dblquote(functionName)
                 << std::endl;
          } else {
-            out << std::endl;
             TIter next(&listOfMatchingGlobalFuncs);
             TFunction *pFunction;
             while ((pFunction = (TFunction *) next())) {

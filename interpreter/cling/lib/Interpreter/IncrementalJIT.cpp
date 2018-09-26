@@ -10,41 +10,26 @@
 #include "IncrementalJIT.h"
 
 #include "IncrementalExecutor.h"
+#include "cling/Utils/Platform.h"
 
+#include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/Support/DynamicLibrary.h"
 
-#ifdef __APPLE__
-// Apple adds an extra '_'
+#if defined(__APPLE__) || defined (_MSC_VER)
+// Apple and Windows add an extra '_'
 # define MANGLE_PREFIX "_"
-#else
-# define MANGLE_PREFIX ""
 #endif
 
 using namespace llvm;
 
 namespace {
-// Forward cxa_atexit for global d'tors.
-static void local_cxa_atexit(void (*func) (void*), void* arg, void* dso) {
-  cling::IncrementalExecutor* exe = (cling::IncrementalExecutor*)dso;
-  exe->AddAtExitFunc(func, arg);
-}
 
 ///\brief Memory manager providing the lop-level link to the
 /// IncrementalExecutor, handles missing or special / replaced symbols.
 class ClingMemoryManager: public SectionMemoryManager {
-  cling::IncrementalExecutor& m_exe;
-
 public:
-  ClingMemoryManager(cling::IncrementalExecutor& Exe):
-    m_exe(Exe) {}
-
-  /// This method returns the address of the specified function or variable
-  /// that could not be resolved by getSymbolAddress() or by resolving
-  /// possible weak symbols by the ExecutionEngine.
-  /// It is used to resolve symbols during module linking.
-  uint64_t getMissingSymbolAddress(const std::string &Name) override {
-    return (uint64_t) m_exe.NotifyLazyFunctionCreators(Name);
-  }
+  ClingMemoryManager(cling::IncrementalExecutor& Exe) {}
 
   ///\brief Simply wraps the base class's function setting AbortOnFailure
   /// to false and instead using the error handling mechanism to report it.
@@ -53,6 +38,18 @@ public:
     return SectionMemoryManager::getPointerToNamedFunction(Name, false);
   }
 };
+
+  class NotifyFinalizedT {
+  public:
+    NotifyFinalizedT(cling::IncrementalJIT &jit) : m_JIT(jit) {}
+    void operator()(llvm::orc::RTDyldObjectLinkingLayerBase::ObjHandleT H) {
+      m_JIT.RemoveUnfinalizedSection(H);
+    }
+
+  private:
+    cling::IncrementalJIT &m_JIT;
+  };
+
 } // unnamed namespace
 
 namespace cling {
@@ -63,6 +60,93 @@ namespace cling {
 class Azog: public RTDyldMemoryManager {
   cling::IncrementalJIT& m_jit;
 
+  struct AllocInfo {
+    uint8_t *m_Start   = nullptr;
+    uint8_t *m_End     = nullptr;
+    uint8_t *m_Current = nullptr;
+
+    void allocate(RTDyldMemoryManager *exeMM,
+                  uintptr_t Size, uint32_t Align,
+                  bool code, bool isReadOnly) {
+
+      uintptr_t RequiredSize = Size;
+      if (code)
+        m_Start = exeMM->allocateCodeSection(RequiredSize, Align,
+                                             0 /* SectionID */,
+                                             "codeReserve");
+      else if (isReadOnly)
+        m_Start = exeMM->allocateDataSection(RequiredSize, Align,
+                                             0 /* SectionID */,
+                                             "rodataReserve",isReadOnly);
+      else
+        m_Start = exeMM->allocateDataSection(RequiredSize, Align,
+                                             0 /* SectionID */,
+                                             "rwataReserve",isReadOnly);
+      m_Current = m_Start;
+      m_End = m_Start + RequiredSize;
+    }
+
+    uint8_t* getNextAddr(uintptr_t Size, unsigned Alignment) {
+      if (!Alignment)
+        Alignment = 16;
+
+      assert(!(Alignment & (Alignment - 1)) && "Alignment must be a power of two.");
+
+      uintptr_t RequiredSize = Alignment * ((Size + Alignment - 1)/Alignment + 1);
+      if ( (m_Current + RequiredSize) > m_End ) {
+        // This must be the last block.
+        if ((m_Current + Size) <= m_End) {
+          RequiredSize = Size;
+        } else {
+          cling::errs() << "Error in block allocation by Azog. "
+                        << "Not enough memory was reserved for the current module. "
+                        << Size << " (with alignment: " << RequiredSize
+                        << " ) is needed but\n"
+                        << "we only have " << (m_End - m_Current) << ".\n";
+          return nullptr;
+        }
+      }
+
+      uintptr_t Addr = (uintptr_t)m_Current;
+
+      // Align the address.
+      Addr = (Addr + Alignment - 1) & ~(uintptr_t)(Alignment - 1);
+
+      m_Current = (uint8_t*)(Addr + Size);
+
+      return (uint8_t*)Addr;
+    }
+
+    operator bool() {
+      return m_Current != nullptr;
+    }
+  };
+
+  AllocInfo m_Code;
+  AllocInfo m_ROData;
+  AllocInfo m_RWData;
+
+#ifdef CLING_WIN_SEH_EXCEPTIONS
+  uintptr_t getBaseAddr() const {
+    if (LLVM_LIKELY(m_Code.m_Start && m_ROData.m_Start && m_RWData.m_Start)) {
+      return uintptr_t(std::min(std::min(m_Code.m_Start, m_ROData.m_Start),
+                                m_RWData.m_Start));
+    }
+    if (LLVM_LIKELY(m_Code.m_Start)) {
+      return uintptr_t(m_ROData.m_Start
+                           ? std::min(m_Code.m_Start, m_ROData.m_Start)
+                           : std::min(m_Code.m_Start, m_RWData.m_Start));
+    }
+    return uintptr_t(m_ROData.m_Start && m_RWData.m_Start
+                         ? std::min(m_ROData.m_Start, m_RWData.m_Start)
+                         : std::max(m_ROData.m_Start, m_RWData.m_Start));
+  }
+
+  // FIXME: This is directly mirroring a structure in RTDyldMemoryManager that
+  // is private. Get Win64 exceptions into LLVM or add an accessor for it.
+  platform::windows::EHFrameInfos m_EHFrames;
+#endif
+
 public:
   Azog(cling::IncrementalJIT& Jit): m_jit(Jit) {}
 
@@ -71,49 +155,90 @@ public:
   uint8_t *allocateCodeSection(uintptr_t Size, unsigned Alignment,
                                unsigned SectionID,
                                StringRef SectionName) override {
-    uint8_t *Addr =
-      getExeMM()->allocateCodeSection(Size, Alignment, SectionID, SectionName);
-    m_jit.m_SectionsAllocatedSinceLastLoad.insert(Addr);
+    uint8_t *Addr = nullptr;
+    if (m_Code) {
+      Addr = m_Code.getNextAddr(Size, Alignment);
+    }
+    if (!Addr) {
+      Addr = getExeMM()->allocateCodeSection(Size, Alignment, SectionID, SectionName);
+      m_jit.m_SectionsAllocatedSinceLastLoad.insert(Addr);
+    }
+
     return Addr;
   }
 
   uint8_t *allocateDataSection(uintptr_t Size, unsigned Alignment,
                                unsigned SectionID, StringRef SectionName,
                                bool IsReadOnly) override {
-    uint8_t *Addr = getExeMM()->allocateDataSection(Size, Alignment, SectionID,
-                                                    SectionName, IsReadOnly);
-    m_jit.m_SectionsAllocatedSinceLastLoad.insert(Addr);
+
+    uint8_t *Addr = nullptr;
+    if (IsReadOnly && m_ROData) {
+      Addr = m_ROData.getNextAddr(Size,Alignment);
+    } else if (m_RWData) {
+      Addr = m_RWData.getNextAddr(Size,Alignment);
+    }
+    if (!Addr) {
+      Addr = getExeMM()->allocateDataSection(Size, Alignment, SectionID,
+                                                   SectionName, IsReadOnly);
+      m_jit.m_SectionsAllocatedSinceLastLoad.insert(Addr);
+    }
     return Addr;
   }
 
-  void reserveAllocationSpace(uintptr_t CodeSize, uintptr_t DataSizeRO,
-                              uintptr_t DataSizeRW) override {
-    return getExeMM()->reserveAllocationSpace(CodeSize, DataSizeRO, DataSizeRW);
+  void reserveAllocationSpace(uintptr_t CodeSize, uint32_t CodeAlign,
+                              uintptr_t RODataSize, uint32_t RODataAlign,
+                              uintptr_t RWDataSize, uint32_t RWDataAlign) override {
+    m_Code.allocate(getExeMM(),CodeSize, CodeAlign, true, false);
+    m_ROData.allocate(getExeMM(),RODataSize, RODataAlign, false, true);
+    m_RWData.allocate(getExeMM(),RWDataSize, RWDataAlign, false, false);
+
+    m_jit.m_SectionsAllocatedSinceLastLoad.insert(m_Code.m_Start);
+    m_jit.m_SectionsAllocatedSinceLastLoad.insert(m_ROData.m_Start);
+    m_jit.m_SectionsAllocatedSinceLastLoad.insert(m_RWData.m_Start);
   }
 
   bool needsToReserveAllocationSpace() override {
-    return getExeMM()->needsToReserveAllocationSpace();
+    return true; // getExeMM()->needsToReserveAllocationSpace();
   }
 
   void registerEHFrames(uint8_t *Addr, uint64_t LoadAddr,
                         size_t Size) override {
+#ifdef CLING_WIN_SEH_EXCEPTIONS
+    const platform::windows::RuntimePRFunction PRFunc = { Addr, Size };
+    m_EHFrames.emplace_back(PRFunc);
+#else
     return getExeMM()->registerEHFrames(Addr, LoadAddr, Size);
+#endif
   }
 
-  void deregisterEHFrames(uint8_t *Addr, uint64_t LoadAddr,
-                          size_t Size) override {
-    return getExeMM()->deregisterEHFrames(Addr, LoadAddr, Size);
+  void deregisterEHFrames() override {
+#ifdef CLING_WIN_SEH_EXCEPTIONS
+    platform::DeRegisterEHFrames(getBaseAddr(), m_EHFrames);
+    platform::windows::EHFrameInfos().swap(m_EHFrames);
+#else
+    return getExeMM()->deregisterEHFrames();
+#endif
   }
 
   uint64_t getSymbolAddress(const std::string &Name) override {
-    return m_jit.getSymbolAddressWithoutMangling(Name,
-                                                 true /*also use dlsym*/);
+    // FIXME: We should decide if we want to handle the error here or make the
+    // return type of the function llvm::Expected<uint64_t> relying on the
+    // users to decide how to handle the error.
+    if (auto Addr = m_jit.getSymbolAddressWithoutMangling(Name,
+                                                        true /*also use dlsym*/)
+        .getAddress())
+      return *Addr;
+
+    llvm_unreachable("Handle the error case");
+    return ~0U;
   }
 
   void *getPointerToNamedFunction(const std::string &Name,
                                   bool AbortOnFailure = true) override {
     return getExeMM()->getPointerToNamedFunction(Name, AbortOnFailure);
   }
+
+  using llvm::RuntimeDyld::MemoryManager::notifyObjectLoaded;
 
   void notifyObjectLoaded(ExecutionEngine *EE,
                           const object::ObjectFile &O) override {
@@ -134,25 +259,14 @@ public:
     // the fact that we're lazily emitting object files: The only way you can
     // get more than one set of objects loaded but not yet finalized is if
     // they were loaded during relocation of another set.
-    if (m_jit.m_UnfinalizedSections.size() == 1)
+    if (m_jit.m_UnfinalizedSections.size() == 1) {
+#ifdef CLING_WIN_SEH_EXCEPTIONS
+      platform::RegisterEHFrames(getBaseAddr(), m_EHFrames, true);
+#endif
       return getExeMM()->finalizeMemory(ErrMsg);
+    }
     return false;
   };
-
-  /// This method returns the address of the specified function or variable
-  /// that could not be resolved by getSymbolAddress() or by resolving
-  /// possible weak symbols by the ExecutionEngine.
-  /// It is used to resolve symbols during module linking.
-  uint64_t getMissingSymbolAddress(const std::string &Name) override {
-    std::string NameNoPrefix;
-    if (MANGLE_PREFIX[0]
-        && !Name.compare(0, strlen(MANGLE_PREFIX), MANGLE_PREFIX))
-      NameNoPrefix = Name.substr(strlen(MANGLE_PREFIX), -1);
-    else
-      NameNoPrefix = std::move(Name);
-    return (uint64_t) m_jit.getParent().NotifyLazyFunctionCreators(NameNoPrefix);
-  }
-
 
 }; // class Azog
 
@@ -160,19 +274,35 @@ IncrementalJIT::IncrementalJIT(IncrementalExecutor& exe,
                                std::unique_ptr<TargetMachine> TM):
   m_Parent(exe),
   m_TM(std::move(TM)),
-  m_ExeMM(llvm::make_unique<ClingMemoryManager>(m_Parent)),
-  m_Mang(m_TM->getDataLayout()),
-  m_NotifyObjectLoaded(*this), m_NotifyFinalized(*this),
-  m_ObjectLayer(ObjectLayerT::CreateRTDyldMMFtor(), m_NotifyObjectLoaded,
-                m_NotifyFinalized),
-  m_CompileLayer(m_ObjectLayer, SimpleCompiler(*m_TM)),
+  m_TMDataLayout(m_TM->createDataLayout()),
+  m_ExeMM(std::make_shared<ClingMemoryManager>(m_Parent)),
+  m_NotifyObjectLoaded(*this),
+  m_ObjectLayer(m_SymbolMap, [this] () { return llvm::make_unique<Azog>(*this); },
+                m_NotifyObjectLoaded, NotifyFinalizedT(*this)),
+  m_CompileLayer(m_ObjectLayer, llvm::orc::SimpleCompiler(*m_TM)),
   m_LazyEmitLayer(m_CompileLayer) {
 
+  // Force the JIT to query for symbols local to itself, i.e. if it resides in a
+  // shared library it will resolve symbols from there first. This is done to
+  // implement our proto symbol versioning protection. Namely, if some other
+  // library provides llvm symbols, we want out JIT to avoid looking at them.
+  //
+  // FIXME: In general, this approach causes numerous issues when cling is
+  // embedded and the framework needs to provide its own set of symbols which
+  // exist in llvm. Most notably if the framework links against different
+  // versions of linked against llvm libraries. For instance, if we want to provide
+  // a custom zlib in the framework the JIT will still resolve to llvm's version
+  // of libz causing hard-to-debug bugs. In order to work around such cases we
+  // need to swap the llvm system libraries, which can be tricky for two
+  // reasons: (a) llvm's cmake doesn't really support it; (b) only works if we
+  // build llvm from sources.
+  llvm::sys::DynamicLibrary::SearchOrder
+    = llvm::sys::DynamicLibrary::SO_LoadedFirst;
   // Enable JIT symbol resolution from the binary.
   llvm::sys::DynamicLibrary::LoadLibraryPermanently(0, 0);
 
   // Make debug symbols available.
-  m_GDBListener = JITEventListener::createGDBRegistrationListener();
+  m_GDBListener = 0; // JITEventListener::createGDBRegistrationListener();
 
 // #if MCJIT
 //   llvm::EngineBuilder builder(std::move(m));
@@ -198,52 +328,132 @@ IncrementalJIT::IncrementalJIT(IncrementalExecutor& exe,
 }
 
 
-uint64_t IncrementalJIT::getSymbolAddressWithoutMangling(llvm::StringRef Name,
-                                                         bool AlsoInProcess) {
-  if (Name == MANGLE_PREFIX "__cxa_atexit") {
-    // Rewire __cxa_atexit to ~Interpreter(), thus also global destruction
-    // coming from the JIT.
-    return (uint64_t)&local_cxa_atexit;
-  } else if (Name == MANGLE_PREFIX "__dso_handle") {
-    // Provide IncrementalExecutor as the third argument to __cxa_atexit.
-    return (uint64_t)&m_Parent;
-  }
-  if (AlsoInProcess) {
-    if (uint64_t Addr = m_ExeMM->getSymbolAddress(Name))
-      return Addr;
-  }
-  if (uint64_t Addr = m_LazyEmitLayer.getSymbolAddress(Name, false))
-    return Addr;
+llvm::JITSymbol
+IncrementalJIT::getInjectedSymbols(const std::string& Name) const {
+  using JITSymbol = llvm::JITSymbol;
+  auto SymMapI = m_SymbolMap.find(Name);
+  if (SymMapI != m_SymbolMap.end())
+    return JITSymbol(SymMapI->second, llvm::JITSymbolFlags::Exported);
 
-  return 0;
+  return JITSymbol(nullptr);
 }
 
-size_t IncrementalJIT::addModules(std::vector<llvm::Module*>&& modules) {
+std::pair<void*, bool>
+IncrementalJIT::lookupSymbol(llvm::StringRef Name, void *InAddr, bool Jit) {
+  // FIXME: See comments on DLSym below.
+#if !defined(LLVM_ON_WIN32)
+  void* Addr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(Name);
+#else
+  void* Addr = const_cast<void*>(platform::DLSym(Name));
+#endif
+
+  if (InAddr && (!Addr || Jit)) {
+    if (Jit) {
+      std::string Key(Name);
+#ifdef MANGLE_PREFIX
+      Key.insert(0, MANGLE_PREFIX);
+#endif
+      m_SymbolMap[Key] = llvm::JITTargetAddress(InAddr);
+    }
+    llvm::sys::DynamicLibrary::AddSymbol(Name, InAddr);
+    return std::make_pair(InAddr, true);
+  }
+  return std::make_pair(Addr, false);
+}
+    
+llvm::JITSymbol
+IncrementalJIT::getSymbolAddressWithoutMangling(const std::string& Name,
+                                                bool AlsoInProcess) {
+  if (auto Sym = getInjectedSymbols(Name))
+    return Sym;
+
+  if (AlsoInProcess) {
+    if (llvm::JITSymbol SymInfo = m_ExeMM->findSymbol(Name)) {
+      if (auto AddrOrErr = SymInfo.getAddress())
+        return llvm::JITSymbol(*AddrOrErr, llvm::JITSymbolFlags::Exported);
+      else
+        llvm_unreachable("Handle the error case");
+    }
+#ifdef LLVM_ON_WIN32
+    // FIXME: DLSym symbol lookup can overlap m_ExeMM->findSymbol wasting time
+    // looking for a symbol in libs where it is already known not to exist.
+    // Perhaps a better solution would be to have IncrementalJIT own the
+    // DynamicLibraryManger instance (or at least have a reference) that will
+    // look only through user loaded libraries.
+    // An upside to doing it this way is RTLD_GLOBAL won't need to be used
+    // allowing libs with competing symbols to co-exists.
+    if (const void* Sym = platform::DLSym(Name))
+      return llvm::JITSymbol(llvm::JITTargetAddress(Sym),
+                             llvm::JITSymbolFlags::Exported);
+#endif
+  }
+
+  if (auto Sym = m_LazyEmitLayer.findSymbol(Name, false))
+    return Sym;
+
+  return llvm::JITSymbol(nullptr);
+}
+
+void IncrementalJIT::addModule(const std::shared_ptr<llvm::Module>& module) {
   // If this module doesn't have a DataLayout attached then attach the
   // default.
-  for (auto&& mod: modules) {
-    if (!mod->getDataLayout())
-      mod->setDataLayout(m_TM->getDataLayout());
-  }
+  module->setDataLayout(m_TMDataLayout);
 
-  ModuleSetHandleT MSHandle
-    = m_LazyEmitLayer.addModuleSet(std::move(modules),
-                                   llvm::make_unique<Azog>(*this));
-  m_UnloadPoints.push_back(MSHandle);
-  return m_UnloadPoints.size() - 1;
+  // LLVM MERGE FIXME: update this to use new interfaces.
+  auto Resolver = llvm::orc::createLambdaResolver(
+    [&](const std::string &S) {
+      if (auto Sym = getInjectedSymbols(S)) {
+        if (auto AddrOrErr = Sym.getAddress())
+          return JITSymbol((uint64_t)*AddrOrErr, Sym.getFlags());
+        else
+          llvm_unreachable("Handle the error case");
+      }
+      return m_ExeMM->findSymbol(S);
+    },
+    [&](const std::string &Name) {
+      if (auto Sym = getSymbolAddressWithoutMangling(Name, true)) {
+        if (auto AddrOrErr = Sym.getAddress())
+          return JITSymbol(*AddrOrErr, Sym.getFlags());
+        else
+          llvm_unreachable("Handle the error case");
+        }
+
+      const std::string* NameNP = &Name;
+#ifdef MANGLE_PREFIX
+      std::string NameNoPrefix;
+      const size_t PrfxLen = strlen(MANGLE_PREFIX);
+      if (!Name.compare(0, PrfxLen, MANGLE_PREFIX)) {
+        NameNoPrefix = Name.substr(PrfxLen);
+        NameNP = &NameNoPrefix;
+      }
+#endif
+
+      /// This method returns the address of the specified function or variable
+      /// that could not be resolved by getSymbolAddress() or by resolving
+      /// possible weak symbols by the ExecutionEngine.
+      /// It is used to resolve symbols during module linking.
+
+      uint64_t addr = uint64_t(getParent().NotifyLazyFunctionCreators(*NameNP));
+      return JITSymbol(addr, llvm::JITSymbolFlags::Weak);
+    });
+
+  if (auto H = m_LazyEmitLayer.addModule(module, std::move(Resolver)))
+    m_UnloadPoints[module.get()] = *H;
+  else
+    llvm_unreachable("Handle the error case");
 }
 
-// void* IncrementalJIT::finalizeMemory() {
-//   for (auto &P : UnfinalizedSections)
-//     if (P.second.count(LocalAddress))
-//       ObjectLayer.mapSectionAddress(P.first, LocalAddress, TargetAddress);
-// }
-
-
-void IncrementalJIT::removeModules(size_t handle) {
-  if (handle == (size_t)-1)
-    return;
-  m_LazyEmitLayer.removeModuleSet(m_UnloadPoints[handle]);
+llvm::Error
+IncrementalJIT::removeModule(const std::shared_ptr<llvm::Module>& module) {
+  // FIXME: Track down what calls this routine on a not-yet-added module. Once
+  // this is resolved we can remove this check enabling the assert.
+  auto IUnload = m_UnloadPoints.find(module.get());
+  if (IUnload == m_UnloadPoints.end())
+    return llvm::Error::success();
+  auto Handle = IUnload->second;
+  assert(*Handle && "Trying to remove a non existent module!");
+  m_UnloadPoints.erase(IUnload);
+  return m_LazyEmitLayer.removeModule(Handle);
 }
 
 }// end namespace cling

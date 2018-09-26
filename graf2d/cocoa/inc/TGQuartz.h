@@ -14,15 +14,9 @@
 
 #include <vector>
 
-#ifndef ROOT_TGCocoa
 #include "TGCocoa.h"
-#endif
-#ifndef ROOT_TPoint
 #include "TPoint.h"
-#endif
-#ifndef ROOT_TTF
 #include "TTF.h"
-#endif
 
 /** \class TGQuartz
 \ingroup cocoa
@@ -94,8 +88,10 @@ private:
    //from what we always had with X11.
    //Now this is a switch in our configuration file (system.rootrc),
    //so it can be disabled. This flag affects _only_ pad's graphics,
-   //GUI graphics is special and different.
+   //GUI graphics is special and different. AA for fill area has a special
+   // switch because it is better to have it off by default.
    bool fUseAA;
+   bool fUseFAAA;
 
    void AlignTTFString();
    Bool_t IsTTFStringVisible(Int_t x, Int_t y, UInt_t w, UInt_t h);

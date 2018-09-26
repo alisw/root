@@ -7,10 +7,15 @@ find_package(ROOT REQUIRED)
 
 if(DEFINED ROOT_SOURCE_DIR)  # Testing using the binary tree
   set(ROOT_root_CMD root.exe)
-  set(ROOT_environ PATH=${CMAKE_BINARY_DIR}/bin:$ENV{PATH}
-                   ${ld_library_path}=${CMAKE_BINARY_DIR}/lib:$ENV{${ld_library_path}}
-                   ROOTSYS=${CMAKE_BINARY_DIR}
-                   PYTHONPATH=${CMAKE_BINARY_DIR}/lib:$ENV{PYTHONPATH})
+  if(NOT MSVC)  # Ignore environment on Windows
+    set(ROOT_environ PATH=${CMAKE_BINARY_DIR}/bin:$ENV{PATH}
+                     ${ld_library_path}=${CMAKE_BINARY_DIR}/lib:$ENV{${ld_library_path}}
+                     ROOTSYS=${CMAKE_BINARY_DIR}
+                     PYTHONPATH=${CMAKE_BINARY_DIR}/lib:$ENV{PYTHONPATH})
+  else()
+    set(ROOT_environ ROOTSYS=${CMAKE_BINARY_DIR}
+                     PYTHONPATH=${CMAKE_BINARY_DIR}/bin;$ENV{PYTHONPATH})
+  endif()
 else()                       # testing using an installation
   include(${ROOT_USE_FILE})
   if(DEFINED ROOT_CONFIG_EXECUTABLE) #---If ROOT was built with the classic configure/make---
@@ -32,11 +37,13 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/CTestCustom.cmake ${CMAKE_CURRENT_BIN
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rootlogon.C "{
   // Needed by ACLiC to use the current dicrectory for scratch area
   gSystem->SetBuildDir(\".\", kTRUE);
+  gROOT->SetWebDisplay(\"batch\");
 }")
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rootalias.C "")
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/rootlogoff.C "{}")
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/.rootrc "
 Proof.Sandbox: /tmp/proof
+Rint.History:  .root_hist
 ")
 
 #---Definition of the helper function--------------------------------
@@ -55,12 +62,19 @@ if(NOT ROOT_minuit2_FOUND)
                    fit/minuit2FitBench.C fit/minuit2GausFit.C
                    fit/minuit2GausFit.C fit/NumericalMinimization.C
                    fit/combinedFit.C fit/TestBinomial.C
-                   fit/fitNormSum.C)
+                   fit/fitNormSum.C fit/vectorizedFit.C
+                   tutorials/roostats/rs_bernsteinCorrection.C)
+endif()
+
+# FIXME: Temporary workaround for runtime_cxxmodule
+if(FIXME_TEMPORARILY_EXCLUDED_FOR_RUNTIME_CXXMODULES)
+  set(runtime_cxxmodules_veto tutorials/roostats/rs_numberCountingCombination.C)
 endif()
 
 if(NOT ROOT_roofit_FOUND)
   set(roofit_veto  fit/RoofitDemo.C
-                   roofit/*.C roostats/*.C histfactory/*.C)
+                   roofit/*.C roostats/*.C histfactory/*.C
+                   roofit/*.py)
 endif()
 
 if(NOT ROOT_unuran_FOUND)
@@ -70,7 +84,8 @@ endif()
 
 if(NOT ROOT_xml_FOUND)
   set(xml_veto  xml/*.C
-                histfactory/*.C)   # histfactory requires xml
+                histfactory/*.C    # histfactory requires xml
+                unfold/*.C)        # unfold requires xml
 endif()
 
 # variables identifying the package must have the package name  in lower case (it corresponds to the CMake option name)
@@ -81,7 +96,10 @@ endif()
 if(WIN32)
   set(histfactory_veto histfactory/*.C
                        roostats/StandardFrequentistDiscovery.C) # histfactory doesn't work on Windows
+else()
+  set(histfactory_veto histfactory/makeExample.C)
 endif()
+
 
 if(NOT ROOT_fitsio_FOUND)
   set(fitsio_veto  fitsio/*.C)
@@ -109,21 +127,41 @@ if(NOT ROOT_fftw3_FOUND)
 endif()
 
 if(NOT ROOT_opengl_FOUND)
-  set(opengl_veto tree/staff.C)
+  set(opengl_veto tree/staff.C
+                  gl/*.C)
 endif()
 
 if(NOT GRAPHVIZ_FOUND)
   set(gviz_veto graphs/graphstruct.C)
 endif()
 
+if(NOT TBB_FOUND AND NOT builtin_tbb)
+  set(tbb_veto  multicore/mtbb*.C)
+endif()
+
+if(NOT ROOT_imt_FOUND)
+  set(imt_veto multicore/imt*.C multicore/mt*.C)
+else()
+  if(MSVC)
+    #---Multiproc is not supported on Windows
+    set(imt_veto ${imt_veto} multicore/mp*.C multicore/mtbb201_parallelHistoFill.C)
+  endif()
+endif()
+
+if(ROOT_CLASSIC_BUILD)
+  set(classic_veto multicore/mp104_*.C multicore/mp105_*.C)
+endif()
+
 #---These ones requires a display to run-----------------------------
 set(gui_veto fit/fitpanel_playback.C
              cocoa/*.C
              geom/building.C geom/cheongwadae.C geom/geom*.C geom/lego.C geom/robot.C geom/south_gate.C geom/station*.C geom/tank.C
-             gl/*.C
+             gl/glViewerExercise.C gl/glViewerLOD.C gl/gviz3d.C gl/nucleus.C gl/viewer3DLocal.C gl/viewer3DMaster.C
              gui/*.C
              hist/exec1.C
              hist/exec2.C
+             hist/tprofile2polyRealistic.C
+             hist/tprofile2polyRealisticModuleError.C
              image/*.C
              graphics/psview.C graphics/gtime.C
              graphics/graph_edit_playback.C
@@ -131,8 +169,37 @@ set(gui_veto fit/fitpanel_playback.C
              tree/tvdemo.C
              eve/*.C)
 
-#---These do not need to run for TMVA
-set (tmva_veto tmva/createData.C)
+if (NOT ROOT_tmva_FOUND)
+  set(tmva_veto tmva/*.C tmva/*.py tmva/keras/*.C tmva/keras/*.py)
+else()
+  #---These do not need to run for TMVA
+  set(tmva_veto tmva/createData.C)
+endif()
+
+if (NOT ROOT_pythia6_FOUND)
+  set(pythia_veto pythia/pythiaExample.C)
+endif()
+if (NOT ROOT_pythia8_FOUND)
+  set(pythia_veto ${pythia_veto} pythia/pythia8.C)
+else()
+  if("$ENV{PYTHIA8}" STREQUAL "")
+    get_filename_component(pythia8dir "${PYTHIA8_INCLUDE_DIR}" DIRECTORY)
+    list(APPEND ROOT_environ PYTHIA8=${pythia8dir})
+  endif()
+  if("$ENV{PYTHIA8DATA}" STREQUAL "" AND PYTHIA8_DATA)
+    list(APPEND ROOT_environ PYTHIA8DATA=${PYTHIA8_DATA})
+  endif()
+endif()
+
+if(root7)
+  set(root7_veto dataframe/df013_InspectAnalysis.C
+                 v7/fitpanel.cxx
+      )
+endif()
+
+if( CMAKE_SIZEOF_VOID_P EQUAL 4 )
+  set(bits32_veto dataframe/*.C graphs/timeSeriesFrom*.C)
+endif()
 
 #---These ones are disabled !!! ------------------------------------
 set(extra_veto
@@ -142,17 +209,16 @@ set(extra_veto
   rootlogoff.C         # Helper macro
   rootmarks.C          # Instrumentation. Not a standalone tutorial
   memstat/memstatExample.C   # Instrumentation. Not a standalone tutorial
+  multicore/mp_H1_lambdas.C # not a tutorial; used by mp104_processH1.C et al.
   html/*.C
   net/*.C
   proof/*.C
-  pythia/*.C
   sql/*.C
   tree/hsimpleProxy.C # A driver uses this macro which cannot be executed directly
   tree/tree0.C
   tree/tree2a.C
   tree/tree4.C
   roostats/rs401d_FeldmanCousins.C  # Takes too much time
-  roofit/rf104_classfactory.C
   histfactory/ModifyInterpolation.C
   tree/copytree2.C
   tree/copytree3.C
@@ -167,6 +233,7 @@ set(all_veto hsimple.C
              ${extra_veto}
              ${gui_veto}
              ${minuit2_veto}
+             ${runtime_cxxmodules_veto}
              ${roofit_veto}
              ${unuran_veto}
              ${xml_veto}
@@ -177,9 +244,20 @@ set(all_veto hsimple.C
              ${opengl_veto}
              ${gviz_veto}
              ${r_veto}
-             ${histfactory_veto})
+             ${histfactory_veto}
+             ${tbb_veto}
+             ${imt_veto}
+             ${classic_veto}
+             ${pythia_veto}
+             ${root7_veto}
+             ${bits32_veto}
+             )
 
 file(GLOB_RECURSE tutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.C)
+if(root7)
+  file(GLOB_RECURSE tutorials_v7 RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} v7/*.cxx)
+  list(APPEND tutorials ${tutorials_v7})
+endif()
 file(GLOB tutorials_veto RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${all_veto})
 
 list(LENGTH tutorials total)
@@ -198,13 +276,12 @@ set(returncode_1 fit/fit2a.C fit/graph2dfit.C
                  graphs/timeonaxis.C
                  graphs/timeonaxis2.C
                  graphs/timeonaxis3.C
-                 graphs/exclusiongraph.C graphs/multigraph.C
+                 graphs/exclusiongraph.C
                  graphs/multipalette.C
                  graphs/graphstruct.C
                  hist/ContourList.C
                  hist/hstack.C
                  hist/hbars.C
-                 hist/h2proj.C
                  hist/th2polyBoxes.C
                  hist/statsEditing.C
                  hist/cumulative.C
@@ -214,14 +291,18 @@ set(returncode_1 fit/fit2a.C fit/graph2dfit.C
                  math/chi2test.C
                  r/SimpleFitting.C)
 #---Dependencies------------------------------------------------------
-set(math-testUnfold5d-depends tutorial-math-testUnfold5c)
-set(math-testUnfold5c-depends tutorial-math-testUnfold5b)
-set(math-testUnfold5b-depends tutorial-math-testUnfold5a)
+set(unfold-testUnfold5d-depends tutorial-unfold-testUnfold5c)
+set(unfold-testUnfold5c-depends tutorial-unfold-testUnfold5b)
+set(unfold-testUnfold5b-depends tutorial-unfold-testUnfold5a)
+set(unfold-testUnfold7d-depends tutorial-unfold-testUnfold7c)
+set(unfold-testUnfold7c-depends tutorial-unfold-testUnfold7b)
+set(unfold-testUnfold7b-depends tutorial-unfold-testUnfold7a)
 set(xml-xmlreadfile-depends tutorial-xml-xmlnewfile)
 set(roofit-rf503_wspaceread-depends tutorial-roofit-rf502_wspacewrite)
-set(histfactory-example-depends tutorial-histfactory-makeExample)
+set(histfactory-example-depends tutorial-roostats-CreateExampleFile)
 set(io-readCode-depends tutorial-io-importCode)
 set(fit-fit1-depends tutorial-hist-fillrandom)
+set(fit-myfit-depends tutorial-fit-fitslicesy)
 set(foam-foam_demopers-depends tutorial-foam-foam_demo)
 set(tree-staff-depends  tutorial-tree-cernbuild)
 set(tree-cernstaff-depends  tutorial-tree-cernbuild)
@@ -240,13 +321,14 @@ set(benchmarks-depends tutorial-hsimple
 set(geom-na49view-depends tutorial-geom-geometry)
 set(multicore-mt102_readNtuplesFillHistosAndFit-depends tutorial-multicore-mt101_fillNtuples)
 set(multicore-mp102_readNtuplesFillHistosAndFit-depends tutorial-multicore-mp101_fillNtuples)
+set(multicore-mp105_processEntryList-depends tutorial-multicore-mp104_processH1)
 
-#--many roostats tutorials depending on having creating the file first with histfactory
+#--many roostats tutorials depending on having creating the file first with histfactory and example_combined_GaussExample_model.root
 foreach(tname  ModelInspector OneSidedFrequentistUpperLimitWithBands StandardBayesianMCMCDemo StandardBayesianNumericalDemo
                StandardFeldmanCousinsDemo  StandardFrequentistDiscovery StandardHistFactoryPlotsWithCategories StandardHypoTestDemo
                StandardHypoTestInvDemo StandardProfileInspectorDemo StandardTestStatDistributionDemo
-               OneSidedFrequentistUpperLimitWithBands TwoSidedFrequentistUpperLimitWithBands)
-  set(roostats-${tname}-depends tutorial-roostats-StandardProfileLikelihoodDemo)
+               OneSidedFrequentistUpperLimitWithBands TwoSidedFrequentistUpperLimitWithBands StandardProfileLikelihoodDemo)
+  set(roostats-${tname}-depends tutorial-roostats-CreateExampleFile)
 endforeach()
 
 #--dependency for TMVA tutorials
@@ -254,7 +336,6 @@ set (tmva-TMVAClassificationApplication-depends tutorial-tmva-TMVAClassification
 set (tmva-TMVAClassificationCategory-depends tutorial-tmva-TMVAClassification)
 set (tmva-TMVAClassificationCategoryApplication-depends tutorial-tmva-TMVAClassificationCategory)
 set (tmva-TMVAMulticlass-depends tutorial-tmva-TMVAMultipleBackgroundExample)
-set (tmva-TMVAMulticlassApplication-depends tutorial-tmva-TMVAMulticlass)
 set (tmva-TMVAMulticlassApplication-depends tutorial-tmva-TMVAMulticlass)
 set (tmva-TMVARegressionApplication-depends tutorial-tmva-TMVARegression)
 
@@ -279,17 +360,15 @@ foreach(t ${tutorials})
   string(REPLACE "/" "-" tname ${tname})
 
    # These tests on ARM64 need much more than 20 minutes - increase the timeout
-   if (${tname} STREQUAL "tmva-TMVAClassification" OR
-       ${tname} STREQUAL "tmva-TMVARegression" OR
-       ${tname} STREQUAL "tmva-TMVAMulticlass")
-     set(thisTestTimeout 3600) # 1h
+   if(ROOT_ARCHITECTURE MATCHES arm64)
+     set(thisTestTimeout 2400) # 40m
    else()
      set(thisTestTimeout 1200) # 20m
    endif()
 
   ROOT_ADD_TEST(tutorial-${tname}
                 COMMAND ${ROOT_root_CMD} -b -l -q ${CMAKE_CURRENT_SOURCE_DIR}/${t}${${tname}-aclic}
-                PASSRC ${rc} FAILREGEX "Error in" ": error:" "segmentation violation" "FROM HESSE     STATUS=FAILED"
+                PASSRC ${rc} FAILREGEX "Error in <" ": error:" "segmentation violation" "FROM HESSE     STATUS=FAILED"
                 LABELS tutorial
                 DEPENDS tutorial-hsimple ${${tname}-depends}
                 ENVIRONMENT ${ROOT_environ}
@@ -301,7 +380,7 @@ endforeach()
 if(ROOT_python_FOUND)
   find_package(PythonInterp REQUIRED)
 
-  file(GLOB pytutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} pyroot/*.py)
+  file(GLOB pytutorials RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} */*.py)
   set(pyveto pyroot/demo.py         # requires GUI
              pyroot/fit1_py.py      # not a tutorial
              pyroot/gui_ex.py       # requires GUI
@@ -311,19 +390,38 @@ if(ROOT_python_FOUND)
              pyroot/parse_CSV_file_with_TTree_ReadStream.py # not a tutorial
              pyroot/qtexample.py    # requires GUI/Qt
              pyroot/numberEntry.py  # requires GUI
+             histfactory/example.py # not a tutorial
+             histfactory/makeQuickModel.py # not a tutorial
+             eve/lineset.py         # requires GUI
+             sql/sqlcreatedb.py     # same as the C++ case
+             sql/sqlfilldb.py       # same as the C++ case
+             sql/sqlselect.py       # same as the C++ case
              )
+  if(NOT ROOT_mathmore_FOUND)
+    list(APPEND pyveto math/Legendre.py)
+    list(APPEND pyveto math/Bessel.py)
+    list(APPEND pyveto math/tStudent.py)
+  endif()
+
   list(REMOVE_ITEM pytutorials ${pyveto})
 
+  if( CMAKE_SIZEOF_VOID_P EQUAL 4 )
+    set(bits32_veto_py dataframe/*.py)
+    file(GLOB bits32_veto_py RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} dataframe/*.py)
+    list(REMOVE_ITEM pytutorials ${bits32_veto_py})
+    list(REMOVE_ITEM pytutorials pyroot/pyroot002_TTreeAsMatrix.py)
+  endif()
+
   #---Python tutorials dependencies--------------------------------------
-  set(pyroot-ntuple1-depends tutorial-pyroot-hsimple)
-  set(pyroot-h1draw-depends tutorial-pyroot-hsimple)
-  set(pyroot-benchmarks-depends tutorial-pyroot-hsimple
-                                tutorial-pyroot-fit1
-                                tutorial-pyroot-na49view
-                                tutorial-pyroot-h1draw
-                                tutorial-pyroot-ntuple1)
-  set(pyroot-fit1-depends tutorial-pyroot-fillrandom)
-  set(pyroot-na49view-depends tutorial-pyroot-geometry)
+  set(pyroot-ntuple1-depends tutorial-pyroot-hsimple-py)
+  set(pyroot-h1draw-depends tutorial-pyroot-hsimple-py)
+  set(pyroot-benchmarks-depends tutorial-pyroot-hsimple-py
+                                tutorial-pyroot-fit1-py
+                                tutorial-pyroot-na49view-py
+                                tutorial-pyroot-h1draw-py
+                                tutorial-pyroot-ntuple1-py)
+  set(pyroot-fit1-depends tutorial-pyroot-fillrandom-py)
+  set(pyroot-na49view-depends tutorial-pyroot-geometry-py)
 
   foreach(t ${pytutorials})
     list(FIND returncode_1 ${t} index)
@@ -336,7 +434,7 @@ if(ROOT_python_FOUND)
     string(REPLACE ".py" "" tname ${t})
     string(REPLACE "/" "-" tname ${tname})
 
-    ROOT_ADD_TEST(tutorial-${tname}
+    ROOT_ADD_TEST(tutorial-${tname}-py
                 COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${t} -b
                 PASSRC ${rc} FAILREGEX "Error in" ": error:" "segmentation violation"
                 LABELS tutorial
@@ -345,11 +443,9 @@ if(ROOT_python_FOUND)
   endforeach()
 endif()
 
-
-
-
-
-
-
-
+#---Download files for tutorials---------
+set(rootsite http://root.cern.ch/files)
+set(csvtimeout 60)
+set (df014_csv df014_CsvDataSource_MuRun2010B.csv)
+file(DOWNLOAD ${rootsite}/tutorials/${df014_csv} ${CMAKE_CURRENT_BINARY_DIR}/${df014_csv} TIMEOUT ${csvtimeout})
 

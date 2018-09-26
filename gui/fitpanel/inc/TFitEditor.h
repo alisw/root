@@ -20,12 +20,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TGFrame
 #include "TGFrame.h"
-#endif
-#ifndef ROOT_TGButton
 #include "TGButton.h"
-#endif
 
 #include "Foption.h"
 #include "Math/MinimizerOptions.h"
@@ -155,6 +151,8 @@ protected:
    TGNumberEntryField  *fIterations;       // contains maximum number of iterations
 
    TGStatusBar         *fStatusBar;        // statusbar widget
+
+   Bool_t               fChangedParams;    // flag to indicate if the parameters have been set in the ParameterDialog GUI
 
    static TFitEditor *fgFitDialog;         // singleton fit panel
 

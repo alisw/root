@@ -10,13 +10,15 @@
 // This file implements RegionPass and RGPassManager. All region optimization
 // and transformation passes are derived from RegionPass. RGPassManager is
 // responsible for managing RegionPasses.
-// most of these codes are COPY from LoopPass.cpp
+// Most of this code has been COPIED from LoopPass.cpp
 //
 //===----------------------------------------------------------------------===//
 #include "llvm/Analysis/RegionPass.h"
 #include "llvm/Analysis/RegionIterator.h"
+#include "llvm/IR/OptBisect.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Timer.h"
+#include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "regionpassmgr"
@@ -63,9 +65,7 @@ bool RGPassManager::runOnFunction(Function &F) {
     return false;
 
   // Initialization
-  for (std::deque<Region *>::const_iterator I = RQ.begin(), E = RQ.end();
-       I != E; ++I) {
-    Region *R = *I;
+  for (Region *R : RQ) {
     for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index) {
       RegionPass *RP = (RegionPass *)getContainedPass(Index);
       Changed |= RP->doInitialization(R, *this);
@@ -83,9 +83,11 @@ bool RGPassManager::runOnFunction(Function &F) {
     for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index) {
       RegionPass *P = (RegionPass*)getContainedPass(Index);
 
-      dumpPassInfo(P, EXECUTION_MSG, ON_REGION_MSG,
-                   CurrentRegion->getNameStr());
-      dumpRequiredSet(P);
+      if (isPassDebuggingExecutionsOrMore()) {
+        dumpPassInfo(P, EXECUTION_MSG, ON_REGION_MSG,
+                     CurrentRegion->getNameStr());
+        dumpRequiredSet(P);
+      }
 
       initializeAnalysisImpl(P);
 
@@ -96,11 +98,13 @@ bool RGPassManager::runOnFunction(Function &F) {
         Changed |= P->runOnRegion(CurrentRegion, *this);
       }
 
-      if (Changed)
-        dumpPassInfo(P, MODIFICATION_MSG, ON_REGION_MSG,
-                     skipThisRegion ? "<deleted>" :
-                                    CurrentRegion->getNameStr());
-      dumpPreservedSet(P);
+      if (isPassDebuggingExecutionsOrMore()) {
+        if (Changed)
+          dumpPassInfo(P, MODIFICATION_MSG, ON_REGION_MSG,
+                       skipThisRegion ? "<deleted>" :
+                                      CurrentRegion->getNameStr());
+        dumpPreservedSet(P);
+      }
 
       if (!skipThisRegion) {
         // Manually check that this region is still healthy. This is done
@@ -120,8 +124,8 @@ bool RGPassManager::runOnFunction(Function &F) {
       removeNotPreservedAnalysis(P);
       recordAvailableAnalysis(P);
       removeDeadPasses(P,
-                       skipThisRegion ? "<deleted>" :
-                                      CurrentRegion->getNameStr(),
+                       (!isPassDebuggingExecutionsOrMore() || skipThisRegion) ?
+                       "<deleted>" :  CurrentRegion->getNameStr(),
                        ON_REGION_MSG);
 
       if (skipThisRegion)
@@ -194,7 +198,7 @@ public:
 
   bool runOnRegion(Region *R, RGPassManager &RGM) override {
     Out << Banner;
-    for (const auto BB : R->blocks()) {
+    for (const auto *BB : R->blocks()) {
       if (BB)
         BB->print(Out);
       else
@@ -203,6 +207,8 @@ public:
 
     return false;
   }
+
+  StringRef getPassName() const override { return "Print Region IR"; }
 };
 
 char PrintRegionPass::ID = 0;
@@ -274,4 +280,19 @@ void RegionPass::assignPassManager(PMStack &PMS,
 Pass *RegionPass::createPrinterPass(raw_ostream &O,
                                   const std::string &Banner) const {
   return new PrintRegionPass(Banner, O);
+}
+
+bool RegionPass::skipRegion(Region &R) const {
+  Function &F = *R.getEntry()->getParent();
+  if (!F.getContext().getOptBisect().shouldRunPass(this, R))
+    return true;
+
+  if (F.hasFnAttribute(Attribute::OptimizeNone)) {
+    // Report this only once per function.
+    if (R.getEntry() == &F.getEntryBlock())
+      DEBUG(dbgs() << "Skipping pass '" << getPassName()
+            << "' on function " << F.getName() << "\n");
+    return true;
+  }
+  return false;
 }

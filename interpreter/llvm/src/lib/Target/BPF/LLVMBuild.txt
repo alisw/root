@@ -16,17 +16,28 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = InstPrinter MCTargetDesc TargetInfo
+subdirectories = InstPrinter Disassembler MCTargetDesc TargetInfo
 
 [component_0]
 type = TargetGroup
 name = BPF
 parent = Target
 has_asmprinter = 1
+has_disassembler = 1
 
 [component_1]
 type = Library
 name = BPFCodeGen
 parent = BPF
-required_libraries = AsmPrinter CodeGen Core MC BPFAsmPrinter BPFDesc BPFInfo SelectionDAG Support Target
+required_libraries =
+ AsmPrinter
+ CodeGen
+ Core
+ MC
+ BPFAsmPrinter
+ BPFDesc
+ BPFInfo
+ SelectionDAG
+ Support
+ Target
 add_to_library_groups = BPF

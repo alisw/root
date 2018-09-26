@@ -22,12 +22,8 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TLeaf
 #include "TLeaf.h"
-#endif
-#ifndef ROOT_TClassRef
 #include "TClassRef.h"
-#endif
 
 class TClass;
 class TMethodCall;
@@ -35,18 +31,31 @@ class TMethodCall;
 class TLeafObject : public TLeaf {
 
 protected:
-   TClassRef    fClass;          //! pointer to class
-   void       **fObjAddress;     //! Address of Pointer to object
-   Bool_t       fVirtual;        //  Support for polymorphism, when set classname is written with object.
+   TClassRef    fClass;          ///<! pointer to class
+   void       **fObjAddress;     ///<! Address of Pointer to object
+   Bool_t       fVirtual;        ///<  Support for polymorphism, when set classname is written with object.
 
 public:
-   enum { kWarn = BIT(12) };
+   enum EStatusBits {
+      kWarn = BIT(14)
+   };
+
+   // In version of ROOT older then v6.12, kWarn was set to BIT(12)
+   // which overlaps with TBranch::kBranchObject.  Since it stored
+   // in ROOT files as part of the TBranchObject and that we want
+   // to reset in TBranchObject::Streamer, we need to keep track
+   // of the old value.
+   enum EStatusBitsOldValues {
+      kOldWarn = BIT(12)
+   };
 
    TLeafObject();
    TLeafObject(TBranch *parent, const char *name, const char *type);
    virtual ~TLeafObject();
 
+   virtual Bool_t  CanGenerateOffsetArray() { return false; }
    virtual void    FillBasket(TBuffer &b);
+   virtual Int_t  *GenerateOffsetArrayBase(Int_t /*base*/, Int_t /*events*/) { return nullptr; }
    TClass         *GetClass() const {return fClass;}
    TMethodCall    *GetMethodCall(const char *name);
    TObject        *GetObject() const {return (TObject*)(*fObjAddress);}

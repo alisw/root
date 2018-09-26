@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TSelectorList
+\ingroup tree
+
 A TList derived class that makes sure that objects added to it
 are not linked to the currently open file (like histograms,
 eventlists and trees). Also it makes sure the name of the added
@@ -20,7 +22,7 @@ output list.
 #include "TSelectorList.h"
 #include "TMethodCall.h"
 
-ClassImp(TSelectorList)
+ClassImp(TSelectorList);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// If the class of obj has the SetDirectory(TDirectory*) method

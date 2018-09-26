@@ -15,7 +15,7 @@
 #include "TH3.h"
 #include "TProfile2D.h"
 #include "TH2.h"
-#include "TF1.h"
+#include "TF3.h"
 #include "TVirtualPad.h"
 #include "TVirtualHistPainter.h"
 #include "THLimitsFinder.h"
@@ -24,19 +24,24 @@
 #include "TMath.h"
 #include "TObjString.h"
 
-ClassImp(TH3)
+ClassImp(TH3);
 
 /** \addtogroup Hist
 @{
-\class TH3C \brief tomato 3-D histogram with a bype per channel (see TH1 documentation)
-\class TH3S \brief tomato 3-D histogram with a short per channel (see TH1 documentation)
-\class TH3I \brief tomato 3-D histogram with a int per channel (see TH1 documentation)}
-\class TH3F \brief tomato 3-D histogram with a float per channel (see TH1 documentation)}
-\class TH3D \brief tomato 3-D histogram with a double per channel (see TH1 documentation)}
-@} 
+\class TH3C
+\brief 3-D histogram with a byte per channel (see TH1 documentation)
+\class TH3S
+\brief 3-D histogram with a short per channel (see TH1 documentation)
+\class TH3I
+\brief 3-D histogram with an int per channel (see TH1 documentation)}
+\class TH3F
+\brief 3-D histogram with a float per channel (see TH1 documentation)}
+\class TH3D
+\brief 3-D histogram with a double per channel (see TH1 documentation)}
+@}
 */
 
-/** \class TH3 
+/** \class TH3
     \ingroup Hist
 The 3-D histogram classes derived from the 1-D histogram classes.
 All operations are supported (fill, fit).
@@ -73,8 +78,14 @@ TH3::TH3(const char *name,const char *title,Int_t nbinsx,Double_t xlow,Double_t 
       TAtt3D()
 {
    fDimension   = 3;
-   if (nbinsy <= 0) {Warning("TH3","nbinsy is <=0 - set to nbinsy = 1"); nbinsy = 1; }
-   if (nbinsz <= 0) nbinsz = 1;
+   if (nbinsy <= 0) {
+      Warning("TH3","nbinsy is <=0 - set to nbinsy = 1");
+      nbinsy = 1;
+   }
+   if (nbinsz <= 0) {
+      Warning("TH3","nbinsz is <=0 - set to nbinsz = 1");
+      nbinsz = 1;
+   }
    fYaxis.Set(nbinsy,ylow,yup);
    fZaxis.Set(nbinsz,zlow,zup);
    fNcells      = (nbinsx+2)*(nbinsy+2)*(nbinsz+2);
@@ -299,14 +310,14 @@ Int_t TH3::Fill(Double_t x, Double_t y, Double_t z)
    if (fSumw2.fN) ++fSumw2.fArray[bin];
    AddBinContent(bin);
    if (binx == 0 || binx > fXaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
 
    if (biny == 0 || biny > fYaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (binz == 0 || binz > fZaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    ++fTsumw;
    ++fTsumw2;
@@ -348,13 +359,13 @@ Int_t TH3::Fill(Double_t x, Double_t y, Double_t z, Double_t w)
    if (fSumw2.fN) fSumw2.fArray[bin] += w*w;
    AddBinContent(bin,w);
    if (binx == 0 || binx > fXaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (biny == 0 || biny > fYaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (binz == 0 || binz > fZaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    fTsumw   += w;
    fTsumw2  += w*w;
@@ -437,7 +448,7 @@ Int_t TH3::Fill(const char *namex, Double_t y, const char *namez, Double_t w)
    AddBinContent(bin,w);
    if (binx == 0 || binx > fXaxis.GetNbins()) return -1;
    if (biny == 0 || biny > fYaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (binz == 0 || binz > fZaxis.GetNbins()) return -1;
    Double_t x = fXaxis.GetBinCenter(binx);
@@ -482,7 +493,7 @@ Int_t TH3::Fill(const char *namex, const char *namey, Double_t z, Double_t w)
    if (binx == 0 || binx > fXaxis.GetNbins()) return -1;
    if (biny == 0 || biny > fYaxis.GetNbins()) return -1;
    if (binz == 0 || binz > fZaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    Double_t x = fXaxis.GetBinCenter(binx);
    Double_t y = fYaxis.GetBinCenter(biny);
@@ -503,7 +514,7 @@ Int_t TH3::Fill(const char *namex, const char *namey, Double_t z, Double_t w)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Increment cell defined by x,namey,namezz by a weight w
+/// Increment cell defined by x,namey,namez by a weight w
 ///
 /// If the weight is not equal to 1, the storage of the sum of squares of
 ///  weights is automatically triggered and the sum of the squares of weights is incremented
@@ -524,7 +535,7 @@ Int_t TH3::Fill(Double_t x, const char *namey, const char *namez, Double_t w)
    if (fSumw2.fN) fSumw2.fArray[bin] += w*w;
    AddBinContent(bin,w);
    if (binx == 0 || binx > fXaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (biny == 0 || biny > fYaxis.GetNbins()) return -1;
    if (binz == 0 || binz > fZaxis.GetNbins()) return -1;
@@ -568,11 +579,11 @@ Int_t TH3::Fill(Double_t x, const char *namey, Double_t z, Double_t w)
    if (fSumw2.fN) fSumw2.fArray[bin] += w*w;
    AddBinContent(bin,w);
    if (binx == 0 || binx > fXaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (biny == 0 || biny > fYaxis.GetNbins()) return -1;
    if (binz == 0 || binz > fZaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    Double_t y = fYaxis.GetBinCenter(biny);
    Double_t v = w;
@@ -613,10 +624,10 @@ Int_t TH3::Fill(Double_t x, Double_t y, const char *namez, Double_t w)
    if (fSumw2.fN) fSumw2.fArray[bin] += w*w;
    AddBinContent(bin,w);
    if (binx == 0 || binx > fXaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (biny == 0 || biny > fYaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    if (binz == 0 || binz > fZaxis.GetNbins()) return -1;
    Double_t z = fZaxis.GetBinCenter(binz);
@@ -648,6 +659,10 @@ Int_t TH3::Fill(Double_t x, Double_t y, const char *namez, Double_t w)
 ///     - Fill histogram channel
 ///   ntimes random numbers are generated
 ///
+/// N.B. By dfault this methods approximates the integral of the function in each bin with the
+///      function value at the center of the bin, mutiplied by the bin width
+///      
+///
 ///  One can also call TF1::GetRandom to get a random variate from a function.
 
 void TH3::FillRandom(const char *fname, Int_t ntimes)
@@ -655,27 +670,49 @@ void TH3::FillRandom(const char *fname, Int_t ntimes)
    Int_t bin, binx, biny, binz, ibin, loop;
    Double_t r1, x, y,z, xv[3];
    //  Search for fname in the list of ROOT defined functions
-   TF1 *f1 = (TF1*)gROOT->GetFunction(fname);
-   if (!f1) { Error("FillRandom", "Unknown function: %s",fname); return; }
+   TObject *fobj = gROOT->GetFunction(fname);
+   if (!fobj) { Error("FillRandom", "Unknown function: %s",fname); return; }
+   TF3 *f1 = dynamic_cast<TF3*>( fobj );
+   if (!f1) { Error("FillRandom", "Function: %s is not a TF3, is a %s",fname,fobj->IsA()->GetName()); return; }
+
+   TAxis & xAxis = fXaxis;
+   TAxis & yAxis = fYaxis;
+   TAxis & zAxis = fZaxis;
+
+   // in case axes of histogram are not defined use the function axis
+   if (fXaxis.GetXmax() <= fXaxis.GetXmin()  || fYaxis.GetXmax() <= fYaxis.GetXmin() || fZaxis.GetXmax() <= fZaxis.GetXmin() ) {
+      Double_t xmin,xmax,ymin,ymax,zmin,zmax;
+      f1->GetRange(xmin,ymin,zmin,xmax,ymax,zmax);
+      Info("FillRandom","Using function axis and range ([%g,%g],[%g,%g],[%g,%g])",xmin, xmax,ymin,ymax,zmin,zmax);
+      xAxis = *(f1->GetHistogram()->GetXaxis());
+      yAxis = *(f1->GetHistogram()->GetYaxis());
+      zAxis = *(f1->GetHistogram()->GetZaxis());
+   }
 
    //  Allocate temporary space to store the integral and compute integral
-   Int_t nbinsx = GetNbinsX();
-   Int_t nbinsy = GetNbinsY();
-   Int_t nbinsz = GetNbinsZ();
-   Int_t nxy    = nbinsx*nbinsy;
-   Int_t nbins  = nxy*nbinsz;
+   Int_t nbinsx = xAxis.GetNbins();
+   Int_t nbinsy = yAxis.GetNbins();
+   Int_t nbinsz = zAxis.GetNbins();
+   Int_t nxy = nbinsx*nbinsy; 
+   Int_t nbins  = nbinsx*nbinsy*nbinsz;
 
    Double_t *integral = new Double_t[nbins+1];
    ibin = 0;
    integral[ibin] = 0;
+   // approximate integral with function value at bin center
    for (binz=1;binz<=nbinsz;binz++) {
-      xv[2] = fZaxis.GetBinCenter(binz);
+      xv[2] = zAxis.GetBinCenter(binz);
       for (biny=1;biny<=nbinsy;biny++) {
-         xv[1] = fYaxis.GetBinCenter(biny);
+         xv[1] = yAxis.GetBinCenter(biny);
          for (binx=1;binx<=nbinsx;binx++) {
-            xv[0] = fXaxis.GetBinCenter(binx);
+            xv[0] = xAxis.GetBinCenter(binx);
             ibin++;
-            integral[ibin] = integral[ibin-1] + f1->Eval(xv[0],xv[1],xv[2]);
+            Double_t fint = f1->EvalPar(xv, nullptr);
+            // uncomment this line to have the integral computation in a bin
+            // Double_t fint = f1->Integral(xAxis.GetBinLowEdge(binx), xAxis.GetBinUpEdge(binx),
+            //                              yAxis.GetBinLowEdge(biny), yAxis.GetBinUpEdge(biny),
+            //                              zAxis.GetBinLowEdge(binz), zAxis.GetBinUpEdge(binz));
+            integral[ibin] = integral[ibin-1] + fint; 
          }
       }
    }
@@ -691,16 +728,16 @@ void TH3::FillRandom(const char *fname, Int_t ntimes)
    if (fDimension < 2) nbinsy = -1;
    if (fDimension < 3) nbinsz = -1;
    for (loop=0;loop<ntimes;loop++) {
-      r1 = gRandom->Rndm(loop);
+      r1 = gRandom->Rndm();
       ibin = TMath::BinarySearch(nbins,&integral[0],r1);
       binz = ibin/nxy;
       biny = (ibin - nxy*binz)/nbinsx;
       binx = 1 + ibin - nbinsx*(biny + nbinsy*binz);
       if (nbinsz) binz++;
       if (nbinsy) biny++;
-      x    = fXaxis.GetBinCenter(binx);
-      y    = fYaxis.GetBinCenter(biny);
-      z    = fZaxis.GetBinCenter(binz);
+      x    = xAxis.GetBinCenter(binx);
+      y    = yAxis.GetBinCenter(biny);
+      z    = zAxis.GetBinCenter(binz);
       Fill(x,y,z, 1.);
    }
    delete [] integral;
@@ -837,7 +874,7 @@ Int_t TH3::FindLastBinAbove(Double_t threshold, Int_t axis) const
 ///     "R" means fit the function in the specified function range
 ///
 /// Note that the generated histograms are added to the list of objects
-/// in the current directory. It is the user's responsability to delete
+/// in the current directory. It is the user's responsibility to delete
 /// these histograms.
 ///
 ///  Example: Assume a 3-d histogram h3
@@ -1079,7 +1116,7 @@ Double_t TH3::GetCovariance(Int_t axis1, Int_t axis2) const
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return 3 random numbers along axis x , y and z distributed according
-/// the cellcontents of a 3-dim histogram
+/// the cell-contents of a 3-dim histogram
 
 void TH3::GetRandom3(Double_t &x, Double_t &y, Double_t &z)
 {
@@ -1115,7 +1152,7 @@ void TH3::GetRandom3(Double_t &x, Double_t &y, Double_t &z)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Fill the array stats from the contents of this histogram
-/// The array stats must be correctly dimensionned in the calling program.
+/// The array stats must be correctly dimensioned in the calling program.
 /// stats[0] = sumw
 /// stats[1] = sumw2
 /// stats[2] = sumwx
@@ -1145,7 +1182,7 @@ void TH3::GetStats(Double_t *stats) const
       Int_t firstBinZ = fZaxis.GetFirst();
       Int_t lastBinZ  = fZaxis.GetLast();
       // include underflow/overflow if TH1::StatOverflows(kTRUE) in case no range is set on the axis
-      if (fgStatOverflows) {
+      if (GetStatOverflowsBehaviour()) {
          if ( !fXaxis.TestBit(TAxis::kAxisRange) ) {
             if (firstBinX == 1) firstBinX = 0;
             if (lastBinX ==  fXaxis.GetNbins() ) lastBinX += 1;
@@ -1231,7 +1268,7 @@ Double_t TH3::Integral(Int_t binx1, Int_t binx2, Int_t biny1, Int_t biny2,
 ////////////////////////////////////////////////////////////////////////////////
 /// Return integral of bin contents in range [binx1,binx2],[biny1,biny2],[binz1,binz2]
 /// for a 3-D histogram. Calculates also the integral error using error propagation
-/// from the bin errors assumming that all the bins are uncorrelated.
+/// from the bin errors assuming that all the bins are uncorrelated.
 /// By default the integral is computed as the sum of bin contents in the range.
 /// if option "width" is specified, the integral is the sum of
 /// the bin contents multiplied by the bin width in x, y and in z.
@@ -1266,7 +1303,7 @@ Double_t TH3::Interpolate(Double_t, Double_t)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Given a point P(x,y,z), Interpolate approximates the value via trilinear interpolation
-/// based on the 8 nearest bin center points ( corner of the cube surronding the points)
+/// based on the 8 nearest bin center points (corner of the cube surrounding the points)
 /// The Algorithm is described in http://en.wikipedia.org/wiki/Trilinear_interpolation
 /// The given values (x,y,z) must be between first bin center and  last bin center for each coordinate:
 ///
@@ -1345,7 +1382,7 @@ Double_t TH3::Interpolate(Double_t x, Double_t y, Double_t z)
 ///
 ///   The KS test uses the distance between the pseudo-CDF's obtained
 ///   from the histogram. Since in more than 1D the order for generating the pseudo-CDF is
-///   arbitrary, we use the pseudo-CDF's obtained from all the possible 6 combinatons of the 3 axis.
+///   arbitrary, we use the pseudo-CDF's obtained from all the possible 6 combinations of the 3 axis.
 ///   The average of all the maximum  distances obtained is used in the tests.
 
 Double_t TH3::KolmogorovTest(const TH1 *h2, Option_t *option) const
@@ -1537,280 +1574,9 @@ Double_t TH3::KolmogorovTest(const TH1 *h2, Option_t *option) const
    if (TMath::Abs(rsum1-1) > 0.002) Warning("KolmogorovTest","Numerical problems with h1=%s\n",h1->GetName());
    if (TMath::Abs(rsum2-1) > 0.002) Warning("KolmogorovTest","Numerical problems with h2=%s\n",h2->GetName());
 
-   if (opt.Contains("M"))      return dfmax;  // return avergae of max distance
+   if (opt.Contains("M"))      return dfmax;  // return average of max distance
 
    return prb;
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// Add all histograms in the collection to this histogram.
-/// This function computes the min/max for the axes,
-/// compute a new number of bins, if necessary,
-/// add bin contents, errors and statistics.
-/// If overflows are present and limits are different the function will fail.
-/// The function returns the total number of entries in the result histogram
-/// if the merge is successfull, -1 otherwise.
-///
-/// IMPORTANT remark. The 2 axis x and y may have different number
-/// of bins and different limits, BUT the largest bin width must be
-/// a multiple of the smallest bin width and the upper limit must also
-/// be a multiple of the bin width.
-
-Long64_t TH3::Merge(TCollection *list)
-{
-   if (!list) return 0;
-   if (list->IsEmpty()) return (Long64_t) GetEntries();
-
-   TList inlist;
-   inlist.AddAll(list);
-
-   TAxis newXAxis;
-   TAxis newYAxis;
-   TAxis newZAxis;
-   Bool_t initialLimitsFound = kFALSE;
-   Bool_t allSameLimits = kTRUE;
-   Bool_t sameLimitsX = kTRUE;
-   Bool_t sameLimitsY = kTRUE;
-   Bool_t sameLimitsZ = kTRUE;
-   Bool_t allHaveLimits = kTRUE;
-   Bool_t firstHistWithLimits = kTRUE;
-
-   TIter next(&inlist);
-   TH3* h = this;
-   do {
-      Bool_t hasLimits = h->GetXaxis()->GetXmin() < h->GetXaxis()->GetXmax();
-      allHaveLimits = allHaveLimits && hasLimits;
-
-      if (hasLimits) {
-         h->BufferEmpty();
-
-         // this is done in case the first histograms are empty and
-         // the histogram have different limits
-         if (firstHistWithLimits ) {
-            // set axis limits in the case the first histogram did not have limits
-            if (h != this ) {
-              if (!SameLimitsAndNBins(fXaxis, *(h->GetXaxis())) ) {
-                if (h->GetXaxis()->GetXbins()->GetSize() != 0) fXaxis.Set(h->GetXaxis()->GetNbins(), h->GetXaxis()->GetXbins()->GetArray());
-                else                                           fXaxis.Set(h->GetXaxis()->GetNbins(), h->GetXaxis()->GetXmin(), h->GetXaxis()->GetXmax());
-              }
-              if (!SameLimitsAndNBins(fYaxis, *(h->GetYaxis())) ) {
-                if (h->GetYaxis()->GetXbins()->GetSize() != 0) fYaxis.Set(h->GetYaxis()->GetNbins(), h->GetYaxis()->GetXbins()->GetArray());
-                else                                           fYaxis.Set(h->GetYaxis()->GetNbins(), h->GetYaxis()->GetXmin(), h->GetYaxis()->GetXmax());
-              }
-              if (!SameLimitsAndNBins(fZaxis, *(h->GetZaxis())) ) {
-                if (h->GetZaxis()->GetXbins()->GetSize() != 0) fZaxis.Set(h->GetZaxis()->GetNbins(), h->GetZaxis()->GetXbins()->GetArray());
-                else                                           fZaxis.Set(h->GetZaxis()->GetNbins(), h->GetZaxis()->GetXmin(), h->GetZaxis()->GetXmax());
-              }
-            }
-            firstHistWithLimits = kFALSE;
-         }
-
-         if (!initialLimitsFound) {
-            // this is executed the first time an histogram with limits is found
-            // to set some initial values on the new axes
-            initialLimitsFound = kTRUE;
-            if (h->GetXaxis()->GetXbins()->GetSize() != 0) newXAxis.Set(h->GetXaxis()->GetNbins(), h->GetXaxis()->GetXbins()->GetArray());
-            else                                           newXAxis.Set(h->GetXaxis()->GetNbins(), h->GetXaxis()->GetXmin(), h->GetXaxis()->GetXmax());
-            if (h->GetYaxis()->GetXbins()->GetSize() != 0) newYAxis.Set(h->GetYaxis()->GetNbins(), h->GetYaxis()->GetXbins()->GetArray());
-            else                                           newYAxis.Set(h->GetYaxis()->GetNbins(), h->GetYaxis()->GetXmin(), h->GetYaxis()->GetXmax());
-            if (h->GetZaxis()->GetXbins()->GetSize() != 0) newZAxis.Set(h->GetZaxis()->GetNbins(), h->GetZaxis()->GetXbins()->GetArray());
-            else                                           newZAxis.Set(h->GetZaxis()->GetNbins(), h->GetZaxis()->GetXmin(), h->GetZaxis()->GetXmax());
-         }
-         else {
-           if(!SameLimitsAndNBins(newXAxis, *(h->GetXaxis()))) {
-             sameLimitsX = kFALSE;
-             if (!RecomputeAxisLimits(newXAxis, *(h->GetXaxis()))) {
-               Error("Merge", "Cannot merge histograms - limits are inconsistent:\n "
-                     "first: (%d, %f, %f), second: (%d, %f, %f)",
-                     newXAxis.GetNbins(), newXAxis.GetXmin(), newXAxis.GetXmax(),
-                     h->GetXaxis()->GetNbins(), h->GetXaxis()->GetXmin(),
-                     h->GetXaxis()->GetXmax());
-               return -1;
-             }
-           }
-           if(!SameLimitsAndNBins(newYAxis, *(h->GetYaxis()))) {
-             sameLimitsY = kFALSE;
-             if (!RecomputeAxisLimits(newYAxis, *(h->GetYaxis()))) {
-               Error("Merge", "Cannot merge histograms - limits are inconsistent:\n "
-                     "first: (%d, %f, %f), second: (%d, %f, %f)",
-                     newYAxis.GetNbins(), newYAxis.GetXmin(), newYAxis.GetXmax(),
-                     h->GetYaxis()->GetNbins(), h->GetYaxis()->GetXmin(),
-                     h->GetYaxis()->GetXmax());
-               return -1;
-             }
-           }
-           if(!SameLimitsAndNBins(newZAxis, *(h->GetZaxis()))) {
-             sameLimitsZ = kFALSE;
-             if (!RecomputeAxisLimits(newZAxis, *(h->GetZaxis()))) {
-               Error("Merge", "Cannot merge histograms - limits are inconsistent:\n "
-                     "first: (%d, %f, %f), second: (%d, %f, %f)",
-                     newZAxis.GetNbins(), newZAxis.GetXmin(), newZAxis.GetXmax(),
-                     h->GetZaxis()->GetNbins(), h->GetZaxis()->GetXmin(),
-                     h->GetZaxis()->GetXmax());
-               return -1;
-             }
-           }
-           allSameLimits = sameLimitsX && sameLimitsY && sameLimitsZ;
-         }
-      }
-   } while ( ( h = dynamic_cast<TH3*> ( next() ) ) != NULL );
-   if (!h && (*next) ) {
-      Error("Merge","Attempt to merge object of class: %s to a %s",
-            (*next)->ClassName(),this->ClassName());
-      return -1;
-   }
-   next.Reset();
-
-   // In the case of histogram with different limits
-   // newX(Y)Axis will now have the new found limits
-   // but one needs first to clone this histogram to perform the merge
-   // The clone is not needed when all histograms have the same limits
-   TH3 * hclone = 0;
-   if (!allSameLimits) {
-      // We don't want to add the clone to gDirectory,
-      // so remove our kMustCleanup bit temporarily
-      Bool_t mustCleanup = TestBit(kMustCleanup);
-      if (mustCleanup) ResetBit(kMustCleanup);
-      hclone = (TH3*)IsA()->New();
-      hclone->SetDirectory(0);
-      Copy(*hclone);
-      if (mustCleanup) SetBit(kMustCleanup);
-      BufferEmpty(1);         // To remove buffer.
-      Reset();                // BufferEmpty sets limits so we can't use it later.
-      SetEntries(0);
-      inlist.AddFirst(hclone);
-   }
-
-   if (!allSameLimits && initialLimitsFound) {
-     if (!sameLimitsX) {
-       fXaxis.SetRange(0,0);
-       if (newXAxis.GetXbins()->GetSize() != 0) fXaxis.Set(newXAxis.GetNbins(),newXAxis.GetXbins()->GetArray());
-       else                                     fXaxis.Set(newXAxis.GetNbins(),newXAxis.GetXmin(), newXAxis.GetXmax());
-     }
-     if (!sameLimitsY) {
-       fYaxis.SetRange(0,0);
-       if (newYAxis.GetXbins()->GetSize() != 0) fYaxis.Set(newYAxis.GetNbins(),newYAxis.GetXbins()->GetArray());
-       else                                     fYaxis.Set(newYAxis.GetNbins(),newYAxis.GetXmin(), newYAxis.GetXmax());
-     }
-     if (!sameLimitsZ) {
-       fZaxis.SetRange(0,0);
-       if (newZAxis.GetXbins()->GetSize() != 0) fZaxis.Set(newZAxis.GetNbins(),newZAxis.GetXbins()->GetArray());
-       else                                     fZaxis.Set(newZAxis.GetNbins(),newZAxis.GetXmin(), newZAxis.GetXmax());
-     }
-     fNcells = (fXaxis.GetNbins()+2)*(fYaxis.GetNbins()+2)*(fZaxis.GetNbins()+2);
-     SetBinsLength(fNcells);
-     if (fSumw2.fN) {
-       fSumw2.Set(fNcells);
-     }
-   }
-
-   if (!allHaveLimits) {
-      // fill this histogram with all the data from buffers of histograms without limits
-      while ( (h = dynamic_cast<TH3*> (next())) ) {
-         if (h->GetXaxis()->GetXmin() >= h->GetXaxis()->GetXmax() && h->fBuffer) {
-            // no limits
-            Int_t nbentries = (Int_t)h->fBuffer[0];
-            for (Int_t i = 0; i < nbentries; i++)
-               Fill(h->fBuffer[4*i + 2], h->fBuffer[4*i + 3],
-               h->fBuffer[4*i + 4], h->fBuffer[4*i + 1]);
-            // Entries from buffers have to be filled one by one
-            // because FillN doesn't resize histograms.
-         }
-      }
-      if (!initialLimitsFound) {
-         if (hclone) {
-            inlist.Remove(hclone);
-            delete hclone;
-         }
-         return (Long64_t) GetEntries();  // all histograms have been processed
-      }
-      next.Reset();
-   }
-
-   //merge bin contents and errors
-   Double_t stats[kNstat], totstats[kNstat];
-   for (Int_t i=0;i<kNstat;i++) {totstats[i] = stats[i] = 0;}
-   GetStats(totstats);
-   Double_t nentries = GetEntries();
-   Int_t binx, biny, binz, ix, iy, iz, nx, ny, nz, bin, ibin;
-   Double_t cu;
-   Int_t nbix = fXaxis.GetNbins();
-   Int_t nbiy = fYaxis.GetNbins();
-   Bool_t canExtend = CanExtendAllAxes();
-   SetCanExtend(TH1::kNoAxis); // reset, otherwise setting the under/overflow will extend the axis
-
-   while ( (h=(TH3*)next()) ) {
-
-      // skip empty histograms
-      Double_t histEntries = h->GetEntries();
-      if (h->fTsumw == 0 && h->GetEntries() == 0) continue;
-
-      // process only if the histogram has limits; otherwise it was processed before
-      if (h->GetXaxis()->GetXmin() < h->GetXaxis()->GetXmax()) {
-         // import statistics
-         h->GetStats(stats);
-         for (Int_t i = 0; i < kNstat; i++)
-            totstats[i] += stats[i];
-         nentries += histEntries;
-
-         nx = h->GetXaxis()->GetNbins();
-         ny = h->GetYaxis()->GetNbins();
-         nz = h->GetZaxis()->GetNbins();
-
-         // mantain loop in separate binz, biny and binz to avoid
-         // callinig FindBin(x,y,z) for every bin
-         for (binz = 0; binz <= nz + 1; binz++) {
-            if (!allSameLimits)
-               iz = fZaxis.FindBin(h->GetZaxis()->GetBinCenter(binz));
-            else
-               iz = binz;
-            for (biny = 0; biny <= ny + 1; biny++) {
-               if (!allSameLimits)
-                  iy = fYaxis.FindBin(h->GetYaxis()->GetBinCenter(biny));
-               else
-                  iy = biny;
-
-               for (binx = 0; binx <= nx + 1; binx++) {
-                  bin = binx +(nx+2)*(biny + (ny+2)*binz);
-                  cu  = h->RetrieveBinContent(bin);
-                  if (!allSameLimits) {
-                     // look at non-empty unerflow/overflows
-                     if (cu != 0 && ( (!sameLimitsX && (binx == 0 || binx == nx+1)) || (!sameLimitsY && (biny == 0 || biny == ny+1)) || (!sameLimitsZ && (binz == 0 || binz == nz+1)))) {
-                        Error("Merge", "Cannot merge histograms - the histograms have"
-                              " different limits and undeflows/overflows are present."
-                              " The initial histogram is now broken!");
-                        return -1;
-                     }
-                     ix = fXaxis.FindBin(h->GetXaxis()->GetBinCenter(binx));
-                  }
-                  else {
-                     // case histograms have same limits
-                     ix = binx;
-                  }
-
-                  ibin = ix +(nbix+2)*(iy + (nbiy+2)*iz);
-                  if (ibin <0) continue;
-                  AddBinContent(ibin,cu);
-                  if (fSumw2.fN) {
-                     Double_t error1 = h->GetBinError(bin);
-                     fSumw2.fArray[ibin] += error1*error1;
-                  }
-               }
-            }
-         }
-      }
-   }
-   if (canExtend) SetCanExtend(TH1::kAllAxes);
-
-   //copy merged stats
-   PutStats(totstats);
-   SetEntries(nentries);
-   if (hclone) {
-      inlist.Remove(hclone);
-      delete hclone;
-   }
-   return (Long64_t)nentries;
 }
 
 
@@ -1910,7 +1676,7 @@ TH1D *TH3::ProjectionZ(const char *name, Int_t ixmin, Int_t ixmax,
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// internal methdod performing the projection to 1D histogram
+/// internal method performing the projection to 1D histogram
 /// called from TH3::Project3D
 
 TH1D *TH3::DoProject1D(const char* name, const char * title, int imin1, int imax1, int imin2, int imax2,
@@ -1963,21 +1729,21 @@ TH1D *TH3::DoProject1D(const char* name, const char * title, int imin1, int imax
    return h1;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// internal methdod performing the projection to 1D histogram
+/// called from other TH3::DoProject1D
+
 TH1D *TH3::DoProject1D(const char* name, const char * title, const TAxis* projX,
                        bool computeErrors, bool originalRange,
                        bool useUF, bool useOF) const
 {
-   // internal methdod performing the projection to 1D histogram
-   // called from other TH3::DoProject1D
-
-
    // Create the projection histogram
    TH1D *h1 = 0;
 
    // Get range to use as well as bin limits
-   Int_t ixmin = projX->GetFirst();
-   Int_t ixmax = projX->GetLast();
-//   if (ixmin == 0 && ixmax == 0) { ixmin = 1; ixmax = projX->GetNbins(); }
+   // Projected range must be inside and not outside original one (ROOT-8781)
+   Int_t ixmin = std::max(projX->GetFirst(),1);
+   Int_t ixmax = std::min(projX->GetLast(),projX->GetNbins());
    Int_t nx = ixmax-ixmin+1;
 
    // Create the histogram, either reseting a preexisting one
@@ -2043,7 +1809,7 @@ TH1D *TH3::DoProject1D(const char* name, const char * title, const TAxis* projX,
    h1->SetMarkerStyle(this->GetMarkerStyle());
 
    // Activate errors
-   if ( computeErrors ) h1->Sumw2();
+   if ( computeErrors && (h1->GetSumw2N() != h1->GetNcells() ) ) h1->Sumw2();
 
    // Set references to the axis, so that the bucle has no branches.
    const TAxis* out1 = 0;
@@ -2072,7 +1838,7 @@ TH1D *TH3::DoProject1D(const char* name, const char * title, const TAxis* projX,
 
    Int_t out1min = out1->GetFirst();
    Int_t out1max = out1->GetLast();
-   // GetFirst(), GetLast() can return (0,0) when the range bit is set artifically (see TAxis::SetRange)
+   // GetFirst(), GetLast() can return (0,0) when the range bit is set artificially (see TAxis::SetRange)
  //if (out1min == 0 && out1max == 0) { out1min = 1; out1max = out1->GetNbins(); }
    // correct for underflow/overflows
    if (useUF && !out1->TestBit(TAxis::kAxisRange) )  out1min -= 1;
@@ -2169,12 +1935,11 @@ TH2D *TH3::DoProject2D(const char* name, const char * title, const TAxis* projX,
    TH2D *h2 = 0;
 
    // Get range to use as well as bin limits
-   Int_t ixmin = projX->GetFirst();
-   Int_t ixmax = projX->GetLast();
-   Int_t iymin = projY->GetFirst();
-   Int_t iymax = projY->GetLast();
-   if (ixmin == 0 && ixmax == 0) { ixmin = 1; ixmax = projX->GetNbins(); }
-   if (iymin == 0 && iymax == 0) { iymin = 1; iymax = projY->GetNbins(); }
+   Int_t ixmin = std::max(projX->GetFirst(),1);
+   Int_t ixmax = std::min(projX->GetLast(),projX->GetNbins());
+   Int_t iymin = std::max(projY->GetFirst(),1);
+   Int_t iymax = std::min(projY->GetLast(),projY->GetNbins());
+
    Int_t nx = ixmax-ixmin+1;
    Int_t ny = iymax-iymin+1;
 
@@ -2276,7 +2041,7 @@ TH2D *TH3::DoProject2D(const char* name, const char * title, const TAxis* projX,
    h2->SetMarkerStyle(this->GetMarkerStyle());
 
    // Activate errors
-   if ( computeErrors) h2->Sumw2();
+   if ( computeErrors && (h2->GetSumw2N() != h2->GetNcells()) ) h2->Sumw2();
 
    // Set references to the axis, so that the bucle has no branches.
    const TAxis* out = 0;
@@ -2304,7 +2069,7 @@ TH2D *TH3::DoProject2D(const char* name, const char * title, const TAxis* projX,
 
    Int_t outmin = out->GetFirst();
    Int_t outmax = out->GetLast();
-   // GetFirst(), GetLast() can return (0,0) when the range bit is set artifically (see TAxis::SetRange)
+   // GetFirst(), GetLast() can return (0,0) when the range bit is set artificially (see TAxis::SetRange)
    if (outmin == 0 && outmax == 0) { outmin = 1; outmax = out->GetNbins(); }
    // correct for underflow/overflows
    if (useUF && !out->TestBit(TAxis::kAxisRange) )  outmin -= 1;
@@ -2421,17 +2186,17 @@ TH2D *TH3::DoProject2D(const char* name, const char * title, const TAxis* projX,
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Project a 3-d histogram into 1 or 2-d histograms depending on the
-/// option parameter
-/// option may contain a combination of the characters x,y,z,e
-/// option = "x" return the x projection into a TH1D histogram
-/// option = "y" return the y projection into a TH1D histogram
-/// option = "z" return the z projection into a TH1D histogram
-/// option = "xy" return the x versus y projection into a TH2D histogram
-/// option = "yx" return the y versus x projection into a TH2D histogram
-/// option = "xz" return the x versus z projection into a TH2D histogram
-/// option = "zx" return the z versus x projection into a TH2D histogram
-/// option = "yz" return the y versus z projection into a TH2D histogram
-/// option = "zy" return the z versus y projection into a TH2D histogram
+/// option parameter, which may contain a combination of the characters x,y,z,e
+///  - option = "x" return the x projection into a TH1D histogram
+///  - option = "y" return the y projection into a TH1D histogram
+///  - option = "z" return the z projection into a TH1D histogram
+///  - option = "xy" return the x versus y projection into a TH2D histogram
+///  - option = "yx" return the y versus x projection into a TH2D histogram
+///  - option = "xz" return the x versus z projection into a TH2D histogram
+///  - option = "zx" return the z versus x projection into a TH2D histogram
+///  - option = "yz" return the y versus z projection into a TH2D histogram
+///  - option = "zy" return the z versus y projection into a TH2D histogram
+///
 /// NB: the notation "a vs b" means "a" vertical and "b" horizontal
 ///
 /// option = "o" original axis range of the target axes will be
@@ -2627,12 +2392,11 @@ TProfile2D *TH3::DoProjectProfile2D(const char* name, const char * title, const 
                                           bool originalRange, bool useUF, bool useOF) const
 {
    // Get the ranges where we will work.
-   Int_t ixmin = projX->GetFirst();
-   Int_t ixmax = projX->GetLast();
-   Int_t iymin = projY->GetFirst();
-   Int_t iymax = projY->GetLast();
-   if (ixmin == 0 && ixmax == 0) { ixmin = 1; ixmax = projX->GetNbins(); }
-   if (iymin == 0 && iymax == 0) { iymin = 1; iymax = projY->GetNbins(); }
+   Int_t ixmin = std::max(projX->GetFirst(),1);
+   Int_t ixmax = std::min(projX->GetLast(),projX->GetNbins());
+   Int_t iymin = std::max(projY->GetFirst(),1);
+   Int_t iymax = std::min(projY->GetLast(),projY->GetNbins());
+
    Int_t nx = ixmax-ixmin+1;
    Int_t ny = iymax-iymin+1;
 
@@ -2714,7 +2478,8 @@ TProfile2D *TH3::DoProjectProfile2D(const char* name, const char * title, const 
 
    // Weights management
    bool useWeights = (GetSumw2N() > 0);
-   if (useWeights ) p2->Sumw2(); // store sum of w2 in profile if histo is weighted
+   // store sum of w2 in profile if histo is weighted
+   if (useWeights && (p2->GetBinSumw2()->fN != p2->GetNcells() ) ) p2->Sumw2(); 
 
    // Set references to the bins, so that the loop has no branches.
    Int_t *refX = 0, *refY = 0, *refZ = 0;
@@ -2729,8 +2494,7 @@ TProfile2D *TH3::DoProjectProfile2D(const char* name, const char * title, const 
 
    Int_t outmin = outAxis->GetFirst();
    Int_t outmax = outAxis->GetLast();
-   // GetFirst(), GetLast() can return (0,0) when the range bit is set artifically (see TAxis::SetRange)
-   if (outmin == 0 && outmax == 0) { outmin = 1; outmax = outAxis->GetNbins(); }
+   // GetFirst, GetLast can return underflow or overflow bins
    // correct for underflow/overflows
    if (useUF && !outAxis->TestBit(TAxis::kAxisRange) )  outmin -= 1;
    if (useOF && !outAxis->TestBit(TAxis::kAxisRange) )  outmax += 1;
@@ -3531,7 +3295,7 @@ void TH3::Streamer(TBuffer &R__b)
 //  TH3C a 3-D histogram with one byte per cell (char)
 //______________________________________________________________________________
 
-ClassImp(TH3C)
+ClassImp(TH3C);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3792,7 +3556,7 @@ TH3C operator/(TH3C &h1, TH3C &h2)
 //  TH3S a 3-D histogram with two bytes per cell (short integer)
 //______________________________________________________________________________
 
-ClassImp(TH3S)
+ClassImp(TH3S);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4024,7 +3788,7 @@ TH3S operator/(TH3S &h1, TH3S &h2)
 //  TH3I a 3-D histogram with four bytes per cell (32 bits integer)
 //______________________________________________________________________________
 
-ClassImp(TH3I)
+ClassImp(TH3I);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4109,7 +3873,7 @@ void TH3I::AddBinContent(Int_t bin)
 
 void TH3I::AddBinContent(Int_t bin, Double_t w)
 {
-   Int_t newval = fArray[bin] + Int_t(w);
+   Long64_t newval = fArray[bin] + Long64_t(w);
    if (newval > -2147483647 && newval < 2147483647) {fArray[bin] = Int_t(newval); return;}
    if (newval < -2147483647) fArray[bin] = -2147483647;
    if (newval >  2147483647) fArray[bin] =  2147483647;
@@ -4223,7 +3987,7 @@ TH3I operator/(TH3I &h1, TH3I &h2)
 //  TH3F a 3-D histogram with four bytes per cell (float)
 //______________________________________________________________________________
 
-ClassImp(TH3F)
+ClassImp(TH3F);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4434,7 +4198,7 @@ TH3F operator/(TH3F &h1, TH3F &h2)
 //  TH3D a 3-D histogram with eight bytes per cell (double)
 //______________________________________________________________________________
 
-ClassImp(TH3D)
+ClassImp(TH3D);
 
 
 ////////////////////////////////////////////////////////////////////////////////

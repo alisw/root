@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TLeafL
+\ingroup tree
+
 A TLeaf for a 64 bit Integer data type.
 */
 
@@ -19,7 +21,7 @@ A TLeaf for a 64 bit Integer data type.
 #include "TClonesArray.h"
 #include "Riostream.h"
 
-ClassImp(TLeafL)
+ClassImp(TLeafL);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for LeafL.
@@ -117,6 +119,22 @@ LongDouble_t TLeafL::GetValueLongDouble(Int_t i) const
 {
    if (fIsUnsigned) return (LongDouble_t)((ULong64_t)fValue[i]);
    return fValue[i];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Copy/set fMinimum and fMaximum to include/be wide than those of the parameter
+
+Bool_t TLeafL::IncludeRange(TLeaf *input)
+{
+    if (input) {
+        if (input->GetMaximum() > this->GetMaximum())
+            this->SetMaximum( input->GetMaximum() );
+        if (input->GetMinimum() < this->GetMinimum())
+            this->SetMinimum( input->GetMinimum() );
+        return kTRUE;
+    } else {
+        return kFALSE;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

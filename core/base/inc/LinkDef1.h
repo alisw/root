@@ -143,6 +143,33 @@
 // #pragma link C++ typedef ROOT::DesFunc_t;
 // #pragma link C++ typedef Float16_t;
 // #pragma link C++ typedef Double32_t;
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Short_t*, Short_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Int_t*, Int_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Float_t*, Float_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Double_t*, Double_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Long_t*, Long_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Long64_t*, Long64_t);
+
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Short_t**, Short_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Int_t**, Int_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Float_t**, Float_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Double_t**, Double_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Long_t**, Long_t);
+#pragma link C++ function TMath::BinarySearch(Long64_t, const Long64_t**, Long64_t);
+
+#pragma link C++ function TMath::Sort(Long64_t, const Short_t*, Long64_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Long64_t, const Int_t*, Long64_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Long64_t, const Float_t*, Long64_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Long64_t, const Double_t*, Long64_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Long64_t, const Long_t*, Long64_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Long64_t, const Long64_t*, Long64_t*, Bool_t);
+
+#pragma link C++ function TMath::Sort(Int_t, const Short_t*, Int_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Int_t, const Int_t*, Int_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Int_t, const Float_t*, Int_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Int_t, const Double_t*, Int_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Int_t, const Long_t*, Int_t*, Bool_t);
+#pragma link C++ function TMath::Sort(Int_t, const Long64_t*, Int_t*, Bool_t);
 
 #pragma link C++ class TApplication;
 #pragma link C++ class TApplicationImp;
@@ -170,7 +197,7 @@
 #pragma link C++ class TControlBarImp+;
 #pragma link C++ class TInspectorImp+;
 #pragma link C++ class TDatime-;
-#pragma link C++ class TDirectory;
+#pragma link C++ class TDirectory-;
 #pragma link C++ class TEnv+;
 #pragma link C++ class TEnvRec+;
 #pragma link C++ class TFileHandler+;

@@ -28,12 +28,8 @@
 #ifndef ROOT_TMVA_PDEFoamKernelGauss
 #define ROOT_TMVA_PDEFoamKernelGauss
 
-#ifndef ROOT_TMVA_PDEFoam
 #include "TMVA/PDEFoam.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamKernelBase
 #include "TMVA/PDEFoamKernelBase.h"
-#endif
 
 namespace TMVA
 {
@@ -62,7 +58,7 @@ namespace TMVA
       virtual Float_t Estimate(PDEFoam*, std::vector<Float_t>&, ECellValue);
 
       ClassDef(PDEFoamKernelGauss, 1) // Gaussian PDEFoam kernel estimator
-   }; // end of PDEFoamKernelGauss
+         }; // end of PDEFoamKernelGauss
 }  // namespace TMVA
 
 #endif

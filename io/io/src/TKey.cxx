@@ -15,7 +15,7 @@
 
  Book space in a file, create I/O buffers, to fill them, (un)compress them.
 
- The TKey class includes functions to book space in a file, to create I/O 
+ The TKey class includes functions to book space in a file, to create I/O
  buffers, to fill these buffers, to compress/uncompress data buffers.
  Before saving (making persistent) an object in a file, a key must
  be created. The key structure contains all the information to
@@ -29,21 +29,21 @@
  |  fCycle     | Cycle number of the object. |
  |  fSeekKey   | Address of the object on file (points to fNbytes). This is a redundant information used to cross-check the data base integrity. |
  |  fSeekPdir  | Pointer to the directory supporting this object.|
- |  fClassName | Object class name. |  
- |  fName      | Name of the object. |                               
- |  fTitle     | Title of the object. |                              
-                                                                   
- In the 16 highest bits of fSeekPdir is encoded a pid offset.  This 
- offset is to be added to the pid index stored in the TRef object   
- and the referenced TObject.                                        
-                                                                   
- The TKey class is used by ROOT to:                                 
-   - Write an object in the current directory                    
-   - Write a new ntuple buffer                                   
-                                                                   
- The structure of a file is shown in TFile::TFile.                  
- The structure of a directory is shown in TDirectoryFile::TDirectoryFile.      
- The TKey class is used by the TBasket class.                       
+ |  fClassName | Object class name. |
+ |  fName      | Name of the object. |
+ |  fTitle     | Title of the object. |
+
+ In the 16 highest bits of fSeekPdir is encoded a pid offset.  This
+ offset is to be added to the pid index stored in the TRef object
+ and the referenced TObject.
+
+ The TKey class is used by ROOT to:
+   - Write an object in the current directory
+   - Write a new ntuple buffer
+
+ The structure of a file is shown in TFile::TFile.
+ The structure of a directory is shown in TDirectoryFile::TDirectoryFile.
+ The TKey class is used by the TBasket class.
  See also TTree.
 */
 
@@ -84,7 +84,7 @@ TString &gTDirectoryString() {
 }
 std::atomic<UInt_t> keyAbsNumber{0};
 
-ClassImp(TKey)
+ClassImp(TKey);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// TKey default constructor.
@@ -253,7 +253,7 @@ TKey::TKey(const TObject *obj, const char *name, Int_t bufsize, TDirectory* moth
    fObjlen    = lbuf - fKeylen;
 
    Int_t cxlevel = GetFile() ? GetFile()->GetCompressionLevel() : 0;
-   Int_t cxAlgorithm = GetFile() ? GetFile()->GetCompressionAlgorithm() : 0;
+   ROOT::ECompressionAlgorithm cxAlgorithm = static_cast<ROOT::ECompressionAlgorithm>(GetFile() ? GetFile()->GetCompressionAlgorithm() : 0);
    if (cxlevel > 0 && fObjlen > 256) {
       Int_t nbuffers = 1 + (fObjlen - 1)/kMAXZIPBUF;
       Int_t buflen = TMath::Max(512,fKeylen + fObjlen + 9*nbuffers + 28); //add 28 bytes in case object is placed in a deleted gap
@@ -344,7 +344,7 @@ TKey::TKey(const void *obj, const TClass *cl, const char *name, Int_t bufsize, T
    fObjlen    = lbuf - fKeylen;
 
    Int_t cxlevel = GetFile() ? GetFile()->GetCompressionLevel() : 0;
-   Int_t cxAlgorithm = GetFile() ? GetFile()->GetCompressionAlgorithm() : 0;
+   ROOT::ECompressionAlgorithm cxAlgorithm = static_cast<ROOT::ECompressionAlgorithm>(GetFile() ? GetFile()->GetCompressionAlgorithm() : 0);
    if (cxlevel > 0 && fObjlen > 256) {
       Int_t nbuffers = 1 + (fObjlen - 1)/kMAXZIPBUF;
       Int_t buflen = TMath::Max(512,fKeylen + fObjlen + 9*nbuffers + 28); //add 28 bytes in case object is placed in a deleted gap
@@ -431,7 +431,7 @@ void TKey::Browse(TBrowser *b)
 
    void* obj = fMotherDir->GetList()->FindObject(GetName());
    if (obj && objcl->IsTObject()) {
-      TObject *tobj = (TObject*)obj;
+      TObject *tobj = (TObject*) objcl->DynamicCast(TObject::Class(), obj);
       if (!tobj->IsFolder()) {
          if (tobj->InheritsFrom(TCollection::Class()))
             tobj->Delete();   // delete also collection elements
@@ -452,7 +452,7 @@ void TKey::Browse(TBrowser *b)
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a TKey object of specified size.
 ///
-/// If externFile!=0, key will be allocated in specified file, otherwise file 
+/// If externFile!=0, key will be allocated in specified file, otherwise file
 /// of mother directory will be used.
 
 void TKey::Create(Int_t nbytes, TFile* externFile)
@@ -483,6 +483,9 @@ void TKey::Create(Int_t nbytes, TFile* externFile)
    if (fSeekKey >= f->GetEND()) {
       f->SetEND(fSeekKey+nsize);
       bestfree->SetFirst(fSeekKey+nsize);
+      if (f->GetEND() > bestfree->GetLast()) {
+         bestfree->SetLast(bestfree->GetLast() + 1000000000);
+      }
       fLeft   = -1;
       if (!fBuffer) fBuffer = new char[nsize];
    } else {
@@ -619,14 +622,6 @@ void TKey::FillBuffer(char *&buffer)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// This Hash function should redefine the default from TNamed.
-
-ULong_t TKey::Hash() const
-{
-   return TNamed::Hash();
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// Increment fPidOffset by 'offset'.
 ///
 /// This offset is used when a key (or basket) is transfered from one file to
@@ -656,7 +651,7 @@ Bool_t TKey::IsFolder() const
 
    TClass *classPtr = TClass::GetClass((const char *) fClassName);
    if (classPtr && classPtr->GetState() > TClass::kEmulated && classPtr->IsTObject()) {
-      TObject *obj = (TObject *) classPtr->New(TClass::kDummyNew);
+      TObject *obj = (TObject *) classPtr->DynamicCast(TObject::Class(), classPtr->New(TClass::kDummyNew));
       if (obj) {
          ret = obj->IsFolder();
          delete obj;
@@ -851,7 +846,7 @@ CLEAR:
 ////////////////////////////////////////////////////////////////////////////////
 /// To read a TObject* from bufferRead.
 ///
-/// This function is identical to TKey::ReadObj, but it reads directly from 
+/// This function is identical to TKey::ReadObj, but it reads directly from
 /// bufferRead instead of reading from a file.
 /// The object associated to this key is read from the buffer into memory
 /// Using the class identifier we find the TClass object for this class.
@@ -980,8 +975,8 @@ CLEAR:
 ////////////////////////////////////////////////////////////////////////////////
 /// To read an object (non deriving from TObject) from the file.
 ///
-/// If expectedClass is not null, we checked that that actual class of the 
-/// object stored is suitable to be stored in a pointer pointing to an object 
+/// If expectedClass is not null, we checked that that actual class of the
+/// object stored is suitable to be stored in a pointer pointing to an object
 /// of class 'expectedClass'.  We also adjust the value of the returned address
 /// so that it is suitable to be cast (C-Style)
 /// a pointer pointing to an object of class 'expectedClass'.
@@ -1098,12 +1093,12 @@ void *TKey::ReadObjectAny(const TClass* expectedClass)
    }
 
    if (cl->IsTObject()) {
-      baseOffset = cl->GetBaseClassOffset(TObject::Class());
-      if (baseOffset==-1) {
+      auto tobjBaseOffset = cl->GetBaseClassOffset(TObject::Class());
+      if (tobjBaseOffset == -1) {
          Fatal("ReadObj","Incorrect detection of the inheritance from TObject for class %s.\n",
                fClassName.Data());
       }
-      TObject *tobj = (TObject*)( ((char*)pobj) +baseOffset);
+      TObject *tobj = (TObject*)( ((char*)pobj) + tobjBaseOffset);
 
       // See similar adjustments in ReadObj
       if (gROOT->GetForceStyle()) tobj->UseCurrentStyle();
@@ -1312,8 +1307,8 @@ void TKey::Reset()
 ////////////////////////////////////////////////////////////////////////////////
 /// Return the size in bytes of the key header structure.
 ///
-/// An explaination about the nbytes (Int_t nbytes) variable used in the 
-/// function. The size of fSeekKey and fSeekPdir is 8 instead of 4 if version is 
+/// An explaination about the nbytes (Int_t nbytes) variable used in the
+/// function. The size of fSeekKey and fSeekPdir is 8 instead of 4 if version is
 /// greater than 1000.
 /// | Component         | Sizeof |
 /// |-------------------|--------|

@@ -30,8 +30,14 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::PDF
+\ingroup TMVA
+PDF wrapper for histograms; uses user-defined spline interpolation.
+*/
+
 #include "TMVA/PDF.h"
 
+#include "TMVA/Configurable.h"
 #include "TMVA/KDEKernel.h"
 #include "TMVA/MsgLogger.h"
 #include "TMVA/Types.h"
@@ -40,55 +46,55 @@
 #include "TMVA/TSpline2.h"
 #include "TMVA/Version.h"
 
-#include "TMath.h"
+#include "Riostream.h"
 #include "TF1.h"
 #include "TH1F.h"
+#include "TMath.h"
 #include "TVectorD.h"
-#include "Riostream.h"
 
-#include <iomanip>
 #include <cstdlib>
+#include <iomanip>
 
 // static configuration settings
 const Int_t    TMVA::PDF::fgNbin_PdfHist      = 10000;
 const Bool_t   TMVA::PDF::fgManualIntegration = kTRUE;
 const Double_t TMVA::PDF::fgEpsilon           = 1.0e-12;
 
-ClassImp(TMVA::PDF)
+ClassImp(TMVA::PDF);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// default constructor needed for ROOT I/O
 
 TMVA::PDF::PDF( const TString& name, Bool_t norm )
-   : Configurable   (""),
-     fUseHistogram  ( kFALSE ),
-     fPDFName       ( name ),
-     fNsmooth       ( 0 ),
-     fMinNsmooth    (-1 ),
-     fMaxNsmooth    (-1 ),
-     fNSmoothHist   ( 0 ),
-     fInterpolMethod( PDF::kSpline2 ),
-     fSpline        ( 0 ),
-     fPDFHist       ( 0 ),
-     fHist          ( 0 ),
-     fHistOriginal  ( 0 ),
-     fGraph         ( 0 ),
-     fIGetVal       ( 0 ),
-     fHistAvgEvtPerBin  ( 0 ),
-     fHistDefinedNBins  ( 0 ),
-     fKDEtypeString     ( 0 ),
-     fKDEiterString     ( 0 ),
-     fBorderMethodString( 0 ),
-     fInterpolateString ( 0 ),
-     fKDEtype       ( KDEKernel::kNone ),
-     fKDEiter       ( KDEKernel::kNonadaptiveKDE ),
-     fKDEborder     ( KDEKernel::kNoTreatment ),
-     fFineFactor    ( 0. ),
-     fReadingVersion( 0 ),
-     fCheckHist     ( kFALSE ),
-     fNormalize     ( norm ),
-     fSuffix        ( "" ),
-     fLogger        ( 0 )
+: Configurable   (""),
+   fUseHistogram  ( kFALSE ),
+   fPDFName       ( name ),
+   fNsmooth       ( 0 ),
+   fMinNsmooth    (-1 ),
+   fMaxNsmooth    (-1 ),
+   fNSmoothHist   ( 0 ),
+   fInterpolMethod( PDF::kSpline2 ),
+   fSpline        ( 0 ),
+   fPDFHist       ( 0 ),
+   fHist          ( 0 ),
+   fHistOriginal  ( 0 ),
+   fGraph         ( 0 ),
+   fIGetVal       ( 0 ),
+   fHistAvgEvtPerBin  ( 0 ),
+   fHistDefinedNBins  ( 0 ),
+   fKDEtypeString     ( 0 ),
+   fKDEiterString     ( 0 ),
+   fBorderMethodString( 0 ),
+   fInterpolateString ( 0 ),
+   fKDEtype       ( KDEKernel::kNone ),
+   fKDEiter       ( KDEKernel::kNonadaptiveKDE ),
+   fKDEborder     ( KDEKernel::kNoTreatment ),
+   fFineFactor    ( 0. ),
+   fReadingVersion( 0 ),
+   fCheckHist     ( kFALSE ),
+   fNormalize     ( norm ),
+   fSuffix        ( "" ),
+   fLogger        ( 0 )
 {
    fLogger   = new MsgLogger(this);
    GetThisPdfThreadLocal() = this;
@@ -258,10 +264,10 @@ void TMVA::PDF::BuildPDF( const TH1* hist )
 
    // histogram should be non empty
    if (hist->GetEntries() <= 0)
-      Log() << kFATAL << "Number of entries <= 0 (" << hist->GetEntries() << " in histogram: " << hist->GetTitle() << Endl;
+      Log() << kFATAL << "Number of entries <= 0 (" << hist->GetEntries() << " in histogram: " << hist->GetTitle() << ")" << Endl;
 
    if (fInterpolMethod == PDF::kKDE) {
-      Log() << "Create "
+     Log()<< kDEBUG << "Create "
             << ((fKDEiter == KDEKernel::kNonadaptiveKDE) ? "nonadaptive " :
                 (fKDEiter == KDEKernel::kAdaptiveKDE)    ? "adaptive "    : "??? ")
             << ((fKDEtype == KDEKernel::kGauss)          ? "Gauss "       : "??? ")
@@ -402,11 +408,11 @@ void TMVA::PDF::BuildKDEPDF()
                                                             i)
                                  );
       }
-      if (fKDEborder == 3) { // mirror the saples and fill them again
-         // in order to save time do the mirroring only for the first (the lowwer) 1/5 of the histo to the left;
+      if (fKDEborder == 3) { // mirror the samples and fill them again
+         // in order to save time do the mirroring only for the first (the lower) 1/5 of the histo to the left;
          // and the last (the higher) 1/5 of the histo to the right.
          // the middle part of the histo, which is not mirrored, has no influence on the border effects anyway ...
-         if (i < fHist->GetNbinsX()/5  ) {  // the first (the lowwer) 1/5 of the histo
+         if (i < fHist->GetNbinsX()/5  ) {  // the first (the lower) 1/5 of the histo
             for (Int_t j=1;j<fPDFHist->GetNbinsX();j++) {
                // loop over the bins of the PDF histo and fill it
                fPDFHist->AddBinContent(j,fHist->GetBinContent(i)*
@@ -454,7 +460,7 @@ void TMVA::PDF::SmoothHistogram()
    }
 
    //calculating Mean, RMS of the relative errors and using them to set
-   //the bounderies of the liniar transformation
+   //the boundaries of the linear transformation
    Float_t Err=0, ErrAvg=0, ErrRMS=0 ; Int_t num=0, smooth;
    for (Int_t bin=0; bin<fHist->GetNbinsX(); bin++) {
       if (fHist->GetBinContent(bin+1) <= fHist->GetBinError(bin+1)) continue;
@@ -464,7 +470,7 @@ void TMVA::PDF::SmoothHistogram()
    ErrAvg /= num;
    ErrRMS = TMath::Sqrt(ErrRMS/num-ErrAvg*ErrAvg) ;
 
-   //liniarly convent the histogram to a vector of smoothnum
+   //linearly convent the histogram to a vector of smoothnum
    Float_t MaxErr=ErrAvg+ErrRMS, MinErr=ErrAvg-ErrRMS;
    fNSmoothHist = new TH1I("","",fHist->GetNbinsX(),0,fHist->GetNbinsX());
    fNSmoothHist->SetTitle( (TString)fHist->GetTitle() + "_Nsmooth" );
@@ -605,22 +611,22 @@ void TMVA::PDF::ValidatePDF( TH1* originalHist ) const
       if (y > 0) {
          ndof++;
          Double_t d = TMath::Abs( (y - yref*rref)/ey );
-         //         std::cout << "bin: " << bin << "  val: " << x << "  data(err): " << y << "(" << ey << ")   pdf: " 
+         //         std::cout << "bin: " << bin << "  val: " << x << "  data(err): " << y << "(" << ey << ")   pdf: "
          //              << yref << "  dev(chi2): " << d << "(" << chi2 << ")  rref: " << rref << std::endl;
          chi2 += d*d;
          if (d > 1) { nc1++; if (d > 2) { nc2++; if (d > 3) { nc3++; if (d > 6) nc6++; } } }
       }
    }
 
-   Log() << "Validation result for PDF \"" << originalHist->GetTitle() << "\"" << ": " << Endl;
-   Log() << Form( "    chi2/ndof(!=0) = %.1f/%i = %.2f (Prob = %.2f)",
+   Log() << kDEBUG << "Validation result for PDF \"" << originalHist->GetTitle() << "\"" << ": " << Endl;
+   Log() << kDEBUG << Form( "    chi2/ndof(!=0) = %.1f/%i = %.2f (Prob = %.2f)",
                   chi2, ndof, chi2/ndof, TMath::Prob( chi2, ndof ) ) << Endl;
    if ((1.0 - TMath::Prob( chi2, ndof )) > 0.9999994) {
-      Log() << kWARNING << "Comparison of the original histogram \"" << originalHist->GetTitle() << "\"" << Endl;
-      Log() << kWARNING << "with the corresponding PDF gave a chi2/ndof of " << chi2/ndof << "," << Endl;
-      Log() << kWARNING << "which corresponds to a deviation of more than 5 sigma! Please check!" << Endl;
+      Log() << kDEBUG << "Comparison of the original histogram \"" << originalHist->GetTitle() << "\"" << Endl;
+      Log() << kDEBUG << "with the corresponding PDF gave a chi2/ndof of " << chi2/ndof << "," << Endl;
+      Log() << kDEBUG << "which corresponds to a deviation of more than 5 sigma! Please check!" << Endl;
    }
-   Log() << Form( "    #bins-found(#expected-bins) deviating > [1,2,3,6] sigmas: " \
+   Log() << kDEBUG << Form( "    #bins-found(#expected-bins) deviating > [1,2,3,6] sigmas: " \
                   "[%i(%i),%i(%i),%i(%i),%i(%i)]",
                   nc1, Int_t(TMath::Prob(1.0,1)*ndof), nc2, Int_t(TMath::Prob(4.0,1)*ndof),
                   nc3, Int_t(TMath::Prob(9.0,1)*ndof), nc6, Int_t(TMath::Prob(36.0,1)*ndof) ) << Endl;
@@ -726,14 +732,14 @@ Double_t TMVA::PDF::GetVal( Double_t x ) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// returns value PDF^{-1}(y)
+/// returns value \f$ PDF^{-1}(y) \f$
 
 Double_t TMVA::PDF::GetValInverse( Double_t y, Bool_t isMonotonouslyIncreasingFunction ) const
 {
    Int_t    lowerBin=0,      higherBin=0;
    Double_t lowerBinValue=0, higherBinValue=0;
    FindBinInverse(fPDFHist,lowerBin,higherBin,lowerBinValue,higherBinValue,y,isMonotonouslyIncreasingFunction);
-   
+
    Double_t xValueLowerBin =fPDFHist->GetBinCenter (lowerBin);
    Double_t xValueHigherBin=fPDFHist->GetBinCenter (higherBin);
 
@@ -746,8 +752,8 @@ Double_t TMVA::PDF::GetValInverse( Double_t y, Bool_t isMonotonouslyIncreasingFu
    Double_t x       =xValueLowerBin+lengthX*fraction;
 
    // comparison for test purposes
-//   std::cout << "lb " << lowerBin << "  hb " << higherBin << "  lbv " << lowerBinValue << "  hbv " << higherBinValue << "  frac " << fraction << std::endl;
-//   std::cout << "y " << y << "  inv x " << x << "  straight y " << GetVal(x) << std::endl;
+   //   std::cout << "lb " << lowerBin << "  hb " << higherBin << "  lbv " << lowerBinValue << "  hbv " << higherBinValue << "  frac " << fraction << std::endl;
+   //   std::cout << "y " << y << "  inv x " << x << "  straight y " << GetVal(x) << std::endl;
 
    return x;
 }
@@ -755,26 +761,26 @@ Double_t TMVA::PDF::GetValInverse( Double_t y, Bool_t isMonotonouslyIncreasingFu
 ////////////////////////////////////////////////////////////////////////////////
 /// find bin from value on ordinate
 
-void TMVA::PDF::FindBinInverse( const TH1* histogram, Int_t& lowerBin, Int_t& higherBin, Double_t& lowerBinValue, Double_t& higherBinValue, 
-				Double_t y, Bool_t isMonotonouslyIncreasingFunction ) const
+void TMVA::PDF::FindBinInverse( const TH1* histogram, Int_t& lowerBin, Int_t& higherBin, Double_t& lowerBinValue, Double_t& higherBinValue,
+                                Double_t y, Bool_t isMonotonouslyIncreasingFunction ) const
 {
    if (isMonotonouslyIncreasingFunction) {
       higherBin=histogram->GetNbinsX();
       lowerBin =0;
 
       Int_t bin=higherBin/2;
-      
-      while (bin>lowerBin && bin<higherBin) {
-	 Double_t binContent=histogram->GetBinContent(bin);
 
-	 if (y<binContent) {
-	    higherBin     =bin;
-	    higherBinValue=binContent;
-	 }
-	 else if (y>=binContent){
-	    lowerBin      =bin;
-	    lowerBinValue =binContent;
-	 }
+      while (bin>lowerBin && bin<higherBin) {
+         Double_t binContent=histogram->GetBinContent(bin);
+
+         if (y<binContent) {
+            higherBin     =bin;
+            higherBinValue=binContent;
+         }
+         else if (y>=binContent){
+            lowerBin      =bin;
+            lowerBinValue =binContent;
+         }
          bin=lowerBin+(higherBin-lowerBin)/2;
       }
       return;
@@ -783,15 +789,15 @@ void TMVA::PDF::FindBinInverse( const TH1* histogram, Int_t& lowerBin, Int_t& hi
    for (Int_t bin=0, binEnd=histogram->GetNbinsX(); bin<binEnd; ++bin) {
       Double_t binContent=histogram->GetBinContent(bin);
       if (binContent<y) {
-	 lowerBin =bin;
-	 higherBin=bin;
-	 lowerBinValue =binContent;
-	 higherBinValue=binContent;
+         lowerBin =bin;
+         higherBin=bin;
+         lowerBinValue =binContent;
+         higherBinValue=binContent;
       }
       else {
-	 higherBin=bin;
-	 higherBinValue=binContent;
-	 break;
+         higherBin=bin;
+         higherBinValue=binContent;
+         break;
       }
    }
 }
@@ -799,18 +805,20 @@ void TMVA::PDF::FindBinInverse( const TH1* histogram, Int_t& lowerBin, Int_t& hi
 
 ////////////////////////////////////////////////////////////////////////////////
 /// define the options (their key words) that can be set in the option string
+///
 /// know options:
+///
 /// PDFInterpol[ivar] <string>   Spline0, Spline1, Spline2 <default>, Spline3, Spline5, KDE  used to interpolate reference histograms
 ///             if no variable index is given, it is valid for ALL the variables
 ///
-/// NSmooth           <int>    how often the input histos are smoothed
-/// MinNSmooth        <int>    min number of smoothing iterations, for bins with most data
-/// MaxNSmooth        <int>    max number of smoothing iterations, for bins with least data
-/// NAvEvtPerBin      <int>    minimum average number of events per PDF bin
-/// TransformOutput   <bool>   transform (often strongly peaked) likelihood output through sigmoid inversion
-/// fKDEtype          <KernelType>   type of the Kernel to use (1 is Gaussian)
-/// fKDEiter          <KerneIter>    number of iterations (1 --> "static KDE", 2 --> "adaptive KDE")
-/// fBorderMethod     <KernelBorder> the method to take care about "border" effects (1=no treatment , 2=kernel renormalization, 3=sample mirroring)
+///  - NSmooth           <int>    how often the input histos are smoothed
+///  - MinNSmooth        <int>    min number of smoothing iterations, for bins with most data
+///  - MaxNSmooth        <int>    max number of smoothing iterations, for bins with least data
+///  - NAvEvtPerBin      <int>    minimum average number of events per PDF bin
+///  - TransformOutput   <bool>   transform (often strongly peaked) likelihood output through sigmoid inversion
+///  - fKDEtype          <KernelType>   type of the Kernel to use (1 is Gaussian)
+///  - fKDEiter          <KerneIter>    number of iterations (1 --> "static KDE", 2 --> "adaptive KDE")
+///  - fBorderMethod     <KernelBorder> the method to take care about "border" effects (1=no treatment , 2=kernel renormalization, 3=sample mirroring)
 
 void TMVA::PDF::DeclareOptions()
 {
@@ -837,7 +845,7 @@ void TMVA::PDF::DeclareOptions()
    AddPreDefVal(TString("Spline1")); // linear interpolation between bins
    AddPreDefVal(TString("Spline2")); // quadratic interpolation
    AddPreDefVal(TString("Spline3")); // cubic interpolation
-   AddPreDefVal(TString("Spline5")); // fifth order polynome interpolation
+   AddPreDefVal(TString("Spline5")); // fifth order polynom interpolation
    AddPreDefVal(TString("KDE"));     // use kernel density estimator
 
    DeclareOptionRef( fKDEtypeString, Form("KDEtype%s",fSuffix.Data()), "KDE kernel type (1=Gauss)" );
@@ -848,7 +856,7 @@ void TMVA::PDF::DeclareOptions()
    AddPreDefVal(TString("Adaptive"));
 
    DeclareOptionRef( fFineFactor , Form("KDEFineFactor%s",fSuffix.Data()),
-                     "Fine tuning factor for Adaptive KDE: Factor to multyply the width of the kernel");
+                     "Fine tuning factor for Adaptive KDE: Factor to multiply the width of the kernel");
 
    DeclareOptionRef( fBorderMethodString, Form("KDEborder%s",fSuffix.Data()),
                      "Border effects treatment (1=no treatment , 2=kernel renormalization, 3=sample mirroring)" );

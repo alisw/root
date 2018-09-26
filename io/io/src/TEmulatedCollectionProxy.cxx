@@ -111,7 +111,7 @@ void TEmulatedCollectionProxy::DeleteArray(void* p, Bool_t dtorOnly) const
 TGenCollectionProxy *TEmulatedCollectionProxy::InitializeEx(Bool_t silent)
 {
    // Proxy initializer
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    if (fClass) return this;
 
 
@@ -131,12 +131,15 @@ TGenCollectionProxy *TEmulatedCollectionProxy::InitializeEx(Bool_t silent)
          if ( inside[0].find("__gnu_cxx::hash_") != std::string::npos ) {
             inside[0].replace(0,16,"std::");
          }
-         fSTL_type = TClassEdit::STLKind(inside[0].c_str());
+         fSTL_type = TClassEdit::STLKind(inside[0]);
          // Note: an emulated collection proxy is never really associative
          // since under-neath is actually an array.
 
          // std::cout << "Initialized " << typeid(*this).name() << ":" << fName << std::endl;
-         int slong = sizeof(void*);
+         auto alignedSize = [](size_t in) {
+            constexpr size_t kSizeOfPtr = sizeof(void*);
+            return in + (kSizeOfPtr - in%kSizeOfPtr)%kSizeOfPtr;
+         };
          switch ( fSTL_type )  {
             case ROOT::kSTLmap:
             case ROOT::kSTLmultimap:
@@ -156,14 +159,16 @@ TGenCollectionProxy *TEmulatedCollectionProxy::InitializeEx(Bool_t silent)
                if (fPointers || (0 != (fKey->fProperties&kNeedDelete))) {
                   fProperties |= kNeedDelete;
                }
-               if ( 0 == fValDiff )  {
-                  fValDiff = fKey->fSize + fVal->fSize;
-                  fValDiff += (slong - fKey->fSize%slong)%slong;
-                  fValDiff += (slong - fValDiff%slong)%slong;
-               }
                if ( 0 == fValOffset )  {
-                  fValOffset  = fKey->fSize;
-                  fValOffset += (slong - fKey->fSize%slong)%slong;
+                  fValOffset = alignedSize(fKey->fSize);
+               }
+               if ( 0 == fValDiff )  {
+                  fValDiff = alignedSize(fValOffset + fVal->fSize);
+               }
+               if (num > 3 && !inside[3].empty()) {
+                  if (! TClassEdit::IsDefAlloc(inside[3].c_str(),inside[0].c_str())) {
+                     fProperties |= kCustomAlloc;
+                  }
                }
                break;
             case ROOT::kSTLbitset:
@@ -177,8 +182,12 @@ TGenCollectionProxy *TEmulatedCollectionProxy::InitializeEx(Bool_t silent)
                }
                if ( 0 == fValDiff )  {
                   fValDiff  = fVal->fSize;
-                  if (fVal->fCase != kIsFundamental) {
-                     fValDiff += (slong - fValDiff%slong)%slong;
+                  // No need to align, the size even for a class should already
+                  // be correctly padded for use in a vector.
+               }
+               if (num > 2 && !inside[2].empty()) {
+                  if (! TClassEdit::IsDefAlloc(inside[2].c_str(),inside[0].c_str())) {
+                     fProperties |= kCustomAlloc;
                   }
                }
                break;
@@ -478,7 +487,6 @@ void TEmulatedCollectionProxy::ReadItems(int nElements, TBuffer &b)
             case kFloat_t:   b.ReadFastArray(&itm->flt       , nElements); break;
             case kFloat16_t: b.ReadFastArrayFloat16(&itm->flt, nElements); break;
             case kDouble_t:  b.ReadFastArray(&itm->dbl       , nElements); break;
-            case kBOOL_t:    b.ReadFastArray(&itm->boolean   , nElements); break;
             case kUChar_t:   b.ReadFastArray(&itm->u_char    , nElements); break;
             case kUShort_t:  b.ReadFastArray(&itm->u_short   , nElements); break;
             case kUInt_t:    b.ReadFastArray(&itm->u_int     , nElements); break;
@@ -528,7 +536,6 @@ void TEmulatedCollectionProxy::WriteItems(int nElements, TBuffer &b)
             case kFloat_t:   b.WriteFastArray(&itm->flt       , nElements); break;
             case kFloat16_t: b.WriteFastArrayFloat16(&itm->flt, nElements); break;
             case kDouble_t:  b.WriteFastArray(&itm->dbl       , nElements); break;
-            case kBOOL_t:    b.WriteFastArray(&itm->boolean   , nElements); break;
             case kUChar_t:   b.WriteFastArray(&itm->u_char    , nElements); break;
             case kUShort_t:  b.WriteFastArray(&itm->u_short   , nElements); break;
             case kUInt_t:    b.WriteFastArray(&itm->u_int     , nElements); break;

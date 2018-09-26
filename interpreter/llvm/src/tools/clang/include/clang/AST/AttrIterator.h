@@ -24,7 +24,7 @@ namespace clang {
 
 // Defined in ASTContext.h
 void *operator new(size_t Bytes, const clang::ASTContext &C,
-                   size_t Alignment = 16);
+                   size_t Alignment = 8);
 // FIXME: Being forced to not have a default argument here due to redeclaration
 //        rules on default arguments sucks
 void *operator new[](size_t Bytes, const clang::ASTContext &C,
@@ -39,8 +39,7 @@ void operator delete[](void *Ptr, const clang::ASTContext &C, size_t);
 namespace clang {
 
 /// AttrVec - A vector of Attr, which is how they are stored on the AST.
-typedef SmallVector<Attr*, 2> AttrVec;
-typedef SmallVector<const Attr*, 2> ConstAttrVec;
+typedef SmallVector<Attr *, 4> AttrVec;
 
 /// specific_attr_iterator - Iterates over a subrange of an AttrVec, only
 /// providing attributes that are of a specific type.

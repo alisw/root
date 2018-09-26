@@ -29,7 +29,7 @@
 R__EXTERN TH1  *gCurrentHist;
 R__EXTERN Hoption_t Hoption;
 
-ClassImp(TGraph2DPainter)
+ClassImp(TGraph2DPainter);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -157,7 +157,7 @@ TGraph2DPainter::~TGraph2DPainter()
 
 void TGraph2DPainter::FindTriangles()
 {
-   if (fDelaunay) { 
+   if (fDelaunay) {
       fDelaunay->FindAllTriangles();
       fNdt    = fDelaunay->GetNdt();
       fXN     = fDelaunay->GetXN();
@@ -188,7 +188,7 @@ void TGraph2DPainter::FindTriangles()
 
 TList *TGraph2DPainter::GetContourList(Double_t contour)
 {
-   // Exit if the contour is outisde the Z range.
+   // Exit if the contour is outside the Z range.
    Double_t zmin = gCurrentHist->GetMinimum();
    Double_t zmax = gCurrentHist->GetMaximum();
    if (Hoption.Logz) {
@@ -239,7 +239,7 @@ TList *TGraph2DPainter::GetContourList(Double_t contour)
    // making the contour.
 
    // old implementation
-   if (fDelaunay) { 
+   if (fDelaunay) {
       for(it=0; it<fNdt; it++) {
          t[0] = fPTried[it];
          t[1] = fNTried[it];
@@ -250,7 +250,7 @@ TList *TGraph2DPainter::GetContourList(Double_t contour)
          x0   = fX[p0]; x2 = fX[p0];
          y0   = fY[p0]; y2 = fY[p0];
          z0   = fZ[p0]; z2 = fZ[p0];
-         
+
          // Order along Z axis the points (xi,yi,zi) where "i" belongs to {0,1,2}
          // After this z0 < z1 < z2
          i0=0, i1=0, i2=0;
@@ -365,7 +365,7 @@ TList *TGraph2DPainter::GetContourList(Double_t contour)
       }
    }
 
-   Bool_t *segUsed = new Bool_t[fNdt];
+   Int_t *segUsed = new Int_t[fNdt];
    for(i=0; i<fNdt; i++) segUsed[i]=kFALSE;
 
    // Find all the graphs making the contour. There is two kind of graphs,
@@ -413,7 +413,7 @@ TList *TGraph2DPainter::GetContourList(Double_t contour)
          js = 0;
 L01:
          findNew = kFALSE;
-         if (segUsed[js] && js<nbSeg) {
+         if (js < nbSeg && segUsed[js]) {
             js++;
             goto L01;
          } else if (xc==xs0[js] && yc==ys0[js]) {
@@ -452,7 +452,7 @@ L01:
       graph->SetPoint(npg,xc,yc); npg++;
 L02:
       findNew = kFALSE;
-      if (segUsed[js] && js<nbSeg) {
+      if (js < nbSeg && segUsed[js]) {
          js++;
          goto L02;
       } else if (xc==xs0[js] && yc==ys0[js]) {
@@ -698,7 +698,7 @@ void TGraph2DPainter::PaintLevels(Int_t *t,Double_t *x, Double_t *y,
    Int_t i, fillColor, ncolors, theColor0, theColor2;
 
    Int_t p[3];
-   if (fDelaunay) { 
+   if (fDelaunay) {
       p[0]=t[0]-1;
       p[1]=t[1]-1;
       p[2]=t[2]-1;
@@ -716,7 +716,8 @@ void TGraph2DPainter::PaintLevels(Int_t *t,Double_t *x, Double_t *y,
    Double_t zmin = fGraph2D->GetMinimum();
    Double_t zmax = fGraph2D->GetMaximum();
    if (zmin==-1111 && zmax==-1111) {
-      zmin = fZmin;
+      zmin = TMath::Min(fZmin, 0.);
+      if (Hoption.Logz && zmin <= 0) zmin = TMath::Min((Double_t)1, (Double_t)0.001*fGraph2D->GetZmax());
       zmax = fZmax;
    }
 
@@ -917,13 +918,31 @@ void TGraph2DPainter::PaintPolyMarker(Option_t *option)
    Double_t *zm = new Double_t[fNpoints];
    Double_t hzmin = gCurrentHist->GetMinimum();
    Double_t hzmax = gCurrentHist->GetMaximum();
+
+   // min and max for colors
+   Double_t hzmincol = hzmin;
+   Double_t hzmaxcol = hzmax;
+   if (hzmincol==-1111 && hzmaxcol==-1111) {
+      hzmincol = TMath::Min(hzmincol, 0.);
+      if (Hoption.Logz && hzmincol <= 0) hzmincol = TMath::Min((Double_t)1, (Double_t)0.001*fGraph2D->GetZmax());
+      hzmaxcol = fZmax;
+   }
+   if (Hoption.Logz) {
+      hzmincol = TMath::Log10(hzmincol);
+      hzmaxcol = TMath::Log10(hzmaxcol);
+   }
+
+   Double_t Xeps = (fXmax-fXmin)*0.0001;
+   Double_t Yeps = (fYmax-fYmin)*0.0001;
+   Double_t Zeps = (hzmax-hzmin)*0.0001;
+
    Int_t    npd = 0;
    for (it=0; it<fNpoints; it++) {
       xm[it] = 0;
       ym[it] = 0;
-      if(fX[it] < fXmin || fX[it] > fXmax) continue;
-      if(fY[it] < fYmin || fY[it] > fYmax) continue;
-      if(fZ[it] < hzmin || fZ[it] > hzmax) continue;
+      if(fXmin - fX[it] > Xeps || fX[it] - fXmax > Xeps) continue;
+      if(fYmin - fY[it] > Yeps || fY[it] - fYmax > Yeps) continue;
+      if(hzmin - fZ[it] > Zeps || fZ[it] - hzmax > Zeps) continue;
       temp1[0] = fX[it];
       temp1[1] = fY[it];
       temp1[2] = fZ[it];
@@ -937,7 +956,7 @@ void TGraph2DPainter::PaintPolyMarker(Option_t *option)
       view->WCtoNDC(temp1, &temp2[0]);
       xm[npd] = temp2[0];
       ym[npd] = temp2[1];
-      zm[npd] = fZ[it];
+      zm[npd] = temp1[2];
       npd++;
    }
    if (markers0) {
@@ -945,7 +964,7 @@ void TGraph2DPainter::PaintPolyMarker(Option_t *option)
    } else if (colors) {
       Int_t cols = fGraph2D->GetMarkerColor();
       for (it=0; it<npd; it++) {
-         theColor = (Int_t)( ((zm[it]-hzmin)/(hzmax-hzmin))*(ncolors-1) );
+         theColor = (Int_t)( ((zm[it]-hzmincol)/(hzmaxcol-hzmincol))*(ncolors-1) );
          fGraph2D->SetMarkerColor(gStyle->GetColorPalette(theColor));
          fGraph2D->TAttMarker::Modify();
          gPad->PaintPolyMarker(1,&xm[it],&ym[it]);
@@ -978,13 +997,18 @@ void TGraph2DPainter::PaintPolyLine(Option_t * /* option */)
    }
 
    Int_t  it;
+   Double_t Xeps = (fXmax - fXmin) * 0.0001;
+   Double_t Yeps = (fYmax - fYmin) * 0.0001;
 
    Double_t *xm = new Double_t[fNpoints];
    Double_t *ym = new Double_t[fNpoints];
    Int_t    npd = 0;
+
    for (it=0; it<fNpoints; it++) {
-      if(fX[it] < fXmin || fX[it] > fXmax) continue;
-      if(fY[it] < fYmin || fY[it] > fYmax) continue;
+      if (fXmin - fX[it] > Xeps || fX[it] - fXmax > Xeps)
+         continue;
+      if (fYmin - fY[it] > Yeps || fY[it] - fYmax > Yeps)
+         continue;
       npd++;
       temp1[0] = fX[it];
       temp1[1] = fY[it];
@@ -997,8 +1021,8 @@ void TGraph2DPainter::PaintPolyLine(Option_t * /* option */)
       if (Hoption.Logy) temp1[1] = TMath::Log10(temp1[1]);
       if (Hoption.Logz) temp1[2] = TMath::Log10(temp1[2]);
       view->WCtoNDC(temp1, &temp2[0]);
-      xm[it] = temp2[0];
-      ym[it] = temp2[1];
+      xm[npd - 1] = temp2[0];
+      ym[npd - 1] = temp2[1];
    }
    fGraph2D->SetLineStyle(fGraph2D->GetLineStyle());
    fGraph2D->SetLineWidth(fGraph2D->GetLineWidth());
@@ -1034,14 +1058,18 @@ void TGraph2DPainter::PaintPolyMarker0(Int_t n, Double_t *x, Double_t *y)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Paints the 2D graph as triangles
+
 void TGraph2DPainter::PaintTriangles(Option_t *option)
 {
    if (fDelaunay)
       PaintTriangles_old(option);
-   else if (fDelaunay2D) 
+   else if (fDelaunay2D)
       PaintTriangles_new(option);
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+/// Paints the 2D graph as triangles (old implementation)
 
 void TGraph2DPainter::PaintTriangles_old(Option_t *option)
 {
@@ -1195,9 +1223,9 @@ endloop:
 }
 
 
-/////////
-// Paints the 2D graph as triangles (new implementation)
-/////
+////////////////////////////////////////////////////////////////////////////////
+/// Paints the 2D graph as triangles (new implementation)
+
 void TGraph2DPainter::PaintTriangles_new(Option_t *option)
 {
 
@@ -1270,27 +1298,27 @@ void TGraph2DPainter::PaintTriangles_new(Option_t *option)
    if ((cp >= 0) && (sp >= 0.)) {
       fDist = [&](Double_t xd, Double_t yd) -> Double_t { return -(fXNmax-xd+fYNmax-yd);};
    } else if ((cp <= 0) && (sp >= 0.)) {
-	   fDist = [&](Double_t xd, Double_t yd) -> Double_t { return -(fXNmax-xd+yd-fYNmin);};
-	   reverse = kTRUE;
+      fDist = [&](Double_t xd, Double_t yd) -> Double_t { return -(fXNmax-xd+yd-fYNmin);};
+      reverse = kTRUE;
    } else if ((cp <= 0) && (sp <= 0.)) {
-	   fDist = [&](Double_t xd, Double_t yd) -> Double_t { return -(xd-fXNmin+yd-fYNmin);};
+      fDist = [&](Double_t xd, Double_t yd) -> Double_t { return -(xd-fXNmin+yd-fYNmin);};
    } else {
-	   fDist = [&](Double_t xd, Double_t yd) -> Double_t { return -(xd-fXNmin+fYNmax-yd);};
-	   reverse = kTRUE;
+      fDist = [&](Double_t xd, Double_t yd) -> Double_t { return -(xd-fXNmin+fYNmax-yd);};
+      reverse = kTRUE;
    }
 
    typedef std::pair<Double_t, TGraphDelaunay2D::Triangles::const_iterator> DistEntry;
    std::vector<DistEntry> dist;
    for(auto it = fDelaunay2D->begin(); it != fDelaunay2D->end(); ++it){
-	   auto face = *it;
-	   Double_t xd = (face.x[0] + face.x[1] + face.x[2]) / 3;
-	   Double_t yd = (face.y[0] + face.y[1] + face.y[2]) / 3;
+      auto face = *it;
+      Double_t xd = (face.x[0] + face.x[1] + face.x[2]) / 3;
+      Double_t yd = (face.y[0] + face.y[1] + face.y[2]) / 3;
 
-	   dist.emplace_back(fDist(xd, yd), it);
+      dist.emplace_back(fDist(xd, yd), it);
    }
 
    std::sort(dist.begin(), dist.end(),
-		   [&](const DistEntry & a, const DistEntry & b){ return !reverse ? (a.first < b.first) : (b.first < a .first); });
+             [&](const DistEntry & a, const DistEntry & b){ return !reverse ? (a.first < b.first) : (b.first < a .first); });
 
    // Draw the triangles and markers if requested
    fGraph2D->SetFillColor(fGraph2D->GetFillColor());
@@ -1301,9 +1329,9 @@ void TGraph2DPainter::PaintTriangles_new(Option_t *option)
    fGraph2D->TAttLine::Modify();
    int lst = fGraph2D->GetLineStyle();
    for (const auto & it : dist) {
-	  p[0] = it.second->idx[0];
-	  p[1] = it.second->idx[1];
-	  p[2] = it.second->idx[2];
+      p[0] = it.second->idx[0];
+      p[1] = it.second->idx[1];
+      p[2] = it.second->idx[2];
       for (Int_t k=0; k<3; k++) {
          if(fX[p[k]] < fXmin || fX[p[k]] > fXmax) goto endloop;
          if(fY[p[k]] < fYmin || fY[p[k]] > fYmax) goto endloop;

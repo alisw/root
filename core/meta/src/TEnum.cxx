@@ -26,7 +26,7 @@ The TEnum class implements the enum type.
 
 #include "TListOfEnums.h"
 
-ClassImp(TEnum)
+ClassImp(TEnum);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor for TEnum class.
@@ -111,9 +111,7 @@ TEnum *TEnum::GetEnum(const std::type_info &ti, ESearchAction sa)
    char *demangledEnumName = TClassEdit::DemangleName(ti.name(), errorCode);
 
    if (errorCode != 0) {
-      if (!demangledEnumName) {
-         free(demangledEnumName);
-      }
+      free(demangledEnumName);
       std::cerr << "ERROR TEnum::GetEnum - A problem occurred while demangling name.\n";
       return nullptr;
    }

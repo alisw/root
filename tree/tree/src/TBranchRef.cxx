@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TBranchRef
+\ingroup tree
+
 A branch containing and managing a TRefTable for TRef autoloading.
 It loads the TBranch containing a referenced object when requested
 by TRef::GetObject(), so the reference can be resolved. The
@@ -18,7 +20,7 @@ TBranch has read the TBranchRef's current entry it will not be told
 to re-read, in case the use has changed objects read from the
 branch.
 
-*** LIMITATION ***
+### LIMITATION :
 Note that this does NOT allow for autoloading of references spanning
 different entries. The TBranchRef's current entry has to correspond
 to the entry of the TBranch containing the referenced object.
@@ -36,7 +38,7 @@ TObjArray.
 #include "TFile.h"
 #include "TFriendElement.h"
 
-ClassImp(TBranchRef)
+ClassImp(TBranchRef);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
@@ -58,7 +60,7 @@ TBranchRef::TBranchRef(TTree *tree)
    SetTitle("List of branch numbers with referenced objects");
    fRefTable = new TRefTable(this,100);
 
-   fCompress       = 1;
+   fCompress       = 4;
    fBasketSize     = 32000;
    fAddress        = 0;
    fBasketBytes    = new Int_t[fMaxBaskets];
@@ -98,9 +100,9 @@ void TBranchRef::Clear(Option_t *option)
 ////////////////////////////////////////////////////////////////////////////////
 /// Fill the branch basket with the referenced objects parent numbers.
 
-Int_t TBranchRef::Fill()
+Int_t TBranchRef::FillImpl(ROOT::Internal::TBranchIMTHelper *imtHelper)
 {
-   Int_t nbytes = TBranch::Fill();
+   Int_t nbytes = TBranch::FillImpl(imtHelper);
    return nbytes;
 }
 

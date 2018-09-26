@@ -34,11 +34,10 @@ an error contour.
 #include "Riostream.h"
 #include "TClass.h"
 #include <math.h>
-#include <assert.h>
 
 using namespace std;
 
-ClassImp(RooEllipse)
+ClassImp(RooEllipse);
 
 
 

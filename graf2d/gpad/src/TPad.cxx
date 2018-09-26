@@ -19,6 +19,8 @@
 #include "TSystem.h"
 #include "TStyle.h"
 #include "TH1.h"
+#include "TH2.h"
+#include "TH3.h"
 #include "TClass.h"
 #include "TBaseClass.h"
 #include "TClassTable.h"
@@ -31,6 +33,7 @@
 #include "TMultiGraph.h"
 #include "THStack.h"
 #include "TPaveText.h"
+#include "TPaveStats.h"
 #include "TGroupButton.h"
 #include "TBrowser.h"
 #include "TVirtualGL.h"
@@ -133,7 +136,6 @@ TPad::TPad()
    fPrimitives = 0;
    fExecs      = 0;
    fCanvas     = 0;
-   fMother     = 0;
    fPadPaint   = 0;
    fPixmapID   = -1;
    fGLDevice   = -1;
@@ -178,6 +180,12 @@ TPad::TPad()
 
    fFixedAspectRatio = kFALSE;
    fAspectRatio      = 0.;
+
+   fNumPaletteColor = 0;
+   fNextPaletteColor = 0;
+   fCollideGrid = 0;
+   fCGnx = 0;
+   fCGny = 0;
 
    fLogx  = 0;
    fLogy  = 0;
@@ -269,8 +277,48 @@ TPad::TPad(const char *name, const char *title, Double_t xlow,
    fCrosshair  = 0;
    fCrosshairPos = 0;
 
+   fVtoAbsPixelk = 0.;
+   fVtoPixelk    = 0.;
+   fVtoPixel     = 0.;
+   fAbsPixeltoXk = 0.;
+   fPixeltoXk    = 0.;
+   fPixeltoX     = 0;
+   fAbsPixeltoYk = 0.;
+   fPixeltoYk    = 0.;
+   fPixeltoY     = 0.;
+   fXlowNDC      = 0;
+   fYlowNDC      = 0;
+   fWNDC         = 1;
+   fHNDC         = 1;
+   fXUpNDC       = 0.;
+   fYUpNDC       = 0.;
+   fAbsXlowNDC   = 0.;
+   fAbsYlowNDC   = 0.;
+   fAbsWNDC      = 0.;
+   fAbsHNDC      = 0.;
+   fXtoAbsPixelk = 0.;
+   fXtoPixelk    = 0.;
+   fXtoPixel     = 0.;
+   fYtoAbsPixelk = 0.;
+   fYtoPixelk    = 0.;
+   fYtoPixel     = 0.;
+   fUtoAbsPixelk = 0.;
+   fUtoPixelk    = 0.;
+   fUtoPixel     = 0.;
+
+   fUxmin = fUymin = fUxmax = fUymax = 0;
+   fLogx = gStyle->GetOptLogx();
+   fLogy = gStyle->GetOptLogy();
+   fLogz = gStyle->GetOptLogz();
+
    fFixedAspectRatio = kFALSE;
    fAspectRatio      = 0.;
+
+   fNumPaletteColor = 0;
+   fNextPaletteColor = 0;
+   fCollideGrid = 0;
+   fCGnx = 0;
+   fCGny = 0;
 
    fViewer3D = 0;
 
@@ -329,9 +377,20 @@ TPad::~TPad()
    Close();
    CloseToolTip(fTip);
    DeleteToolTip(fTip);
-   SafeDelete(fPrimitives);
+   auto primitives = fPrimitives;
+   // In some cases, fPrimitives has the kMustCleanup bit set which will lead
+   // its destructor to call RecursiveRemove and since this pad is still
+   // likely to be (indirectly) in the list of cleanups, we must set
+   // fPrimitives to nullptr to avoid TPad::RecursiveRemove from calling
+   // a member function of a partially destructed object.
+   fPrimitives = nullptr;
+   delete primitives;
    SafeDelete(fExecs);
    delete fViewer3D;
+   if (fCollideGrid) delete [] fCollideGrid;
+
+   // Required since we overload TObject::Hash.
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -407,20 +466,33 @@ void TPad::Browse(TBrowser *b)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Build a legend from the graphical objects in the pad
+/// Build a legend from the graphical objects in the pad.
 ///
-/// A simple method to build automatically a TLegend from the
-/// primitives in a TPad. Only those deriving from TAttLine,
-/// TAttMarker and TAttFill are added, excluding TPave and TFrame
-/// derived classes. x1, y1, x2, y2 are the TLegend coordinates.
-/// title is the legend title. By default it is " ". The caller
-/// program owns the returned TLegend.
+/// A simple method to build automatically a TLegend from the primitives in a TPad.
+///
+/// Only those deriving from TAttLine, TAttMarker and TAttFill are added, excluding
+/// TPave and TFrame derived classes.
+///
+/// \return    The built TLegend
+///
+/// \param[in] x1, y1, x2, y2       The TLegend coordinates
+/// \param[in] title                The legend title. By default it is " "
+/// \param[in] option               The TLegend option
+///
+/// The caller program owns the returned TLegend.
 ///
 /// If the pad contains some TMultiGraph or THStack the individual
 /// graphs or histograms in them are added to the TLegend.
+///
+/// ### Automatic placement of the legend
+/// If `x1` is equal to `x2` and `y1` is equal to `y2` the legend will be automatically
+/// placed to avoid overlapping with the existing primitives already displayed.
+/// `x1` is considered as the width of the legend and `y1` the height. By default
+/// the legend is automatically placed with width = `x1`= `x2` = 0.3 and
+/// height = `y1`= `y2` = 0.21.
 
 TLegend *TPad::BuildLegend(Double_t x1, Double_t y1, Double_t x2, Double_t y2,
-                           const char* title)
+                           const char* title, Option_t *option)
 {
    TList *lop=GetListOfPrimitives();
    if (!lop) return 0;
@@ -428,6 +500,7 @@ TLegend *TPad::BuildLegend(Double_t x1, Double_t y1, Double_t x2, Double_t y2,
    TIter next(lop);
    TString mes;
    TObject *o=0;
+   TString opt("");
    while( (o=next()) ) {
       if((o->InheritsFrom(TAttLine::Class()) || o->InheritsFrom(TAttMarker::Class()) ||
           o->InheritsFrom(TAttFill::Class())) &&
@@ -439,10 +512,13 @@ TLegend *TPad::BuildLegend(Double_t x1, Double_t y1, Double_t x2, Double_t y2,
                mes = o->GetName();
             else
                mes = o->ClassName();
-            TString opt("");
-            if (o->InheritsFrom(TAttLine::Class()))   opt += "l";
-            if (o->InheritsFrom(TAttMarker::Class())) opt += "p";
-            if (o->InheritsFrom(TAttFill::Class()))   opt += "f";
+            if (strlen(option)) {
+               opt = option;
+            } else {
+               if (o->InheritsFrom(TAttLine::Class()))   opt += "l";
+               if (o->InheritsFrom(TAttMarker::Class())) opt += "p";
+               if (o->InheritsFrom(TAttFill::Class()))   opt += "f";
+            }
             leg->AddEntry(o,mes.Data(),opt.Data());
       } else if ( o->InheritsFrom(TMultiGraph::Class() ) ) {
          if (!leg) leg = new TLegend(x1, y1, x2, y2, title);
@@ -455,7 +531,9 @@ TLegend *TPad::BuildLegend(Double_t x1, Double_t y1, Double_t x2, Double_t y2,
             if      (strlen(gr->GetTitle())) mes = gr->GetTitle();
             else if (strlen(gr->GetName()))  mes = gr->GetName();
             else                             mes = gr->ClassName();
-            leg->AddEntry( obj, mes.Data(), "lpf" );
+            if (strlen(option))              opt = option;
+            else                             opt = "lpf";
+            leg->AddEntry( obj, mes.Data(), opt );
          }
       } else if ( o->InheritsFrom(THStack::Class() ) ) {
          if (!leg) leg = new TLegend(x1, y1, x2, y2, title);
@@ -468,7 +546,9 @@ TLegend *TPad::BuildLegend(Double_t x1, Double_t y1, Double_t x2, Double_t y2,
             if      (strlen(hist->GetTitle())) mes = hist->GetTitle();
             else if (strlen(hist->GetName()))  mes = hist->GetName();
             else                               mes = hist->ClassName();
-            leg->AddEntry( obj, mes.Data(), "lpf" );
+            if (strlen(option))                opt = option;
+            else                               opt = "lpf";
+            leg->AddEntry( obj, mes.Data(), opt );
          }
       }
    }
@@ -544,7 +624,7 @@ void TPad::Clear(Option_t *option)
 {
    if (!IsEditable()) return;
 
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
 
    if (!fPadPaint) {
       SafeDelete(fView);
@@ -569,6 +649,13 @@ void TPad::Clear(Option_t *option)
 
    PaintBorder(GetFillColor(), kTRUE);
    fCrosshairPos = 0;
+   fNumPaletteColor = 0;
+   if (fCollideGrid) {
+      delete [] fCollideGrid;
+      fCollideGrid = 0;
+      fCGnx = 0;
+      fCGny = 0;
+   }
    ResetBit(TGraph::kClipFrame);
 }
 
@@ -917,10 +1004,8 @@ void TPad::Close(Option_t *)
 
    if (fPixmapID != -1) {
       if (gPad) {
-         if (!gPad->IsBatch()) {
-            GetPainter()->SelectDrawable(fPixmapID);
-            GetPainter()->DestroyDrawable();
-         }
+         if (!gPad->IsBatch())
+            GetPainter()->DestroyDrawable(fPixmapID);
       }
       fPixmapID = -1;
 
@@ -1020,13 +1105,17 @@ Int_t TPad::DistancetoPrimitive(Int_t px, Int_t py)
    // Are we on the edges?
    // ====================
    Int_t dxl = TMath::Abs(px - pxl);
-   if (py < pyl) dxl += pyl - py; if (py > pyt) dxl += py - pyt;
+   if (py < pyl) dxl += pyl - py;
+   if (py > pyt) dxl += py - pyt;
    Int_t dxt = TMath::Abs(px - pxt);
-   if (py < pyl) dxt += pyl - py; if (py > pyt) dxt += py - pyt;
+   if (py < pyl) dxt += pyl - py;
+   if (py > pyt) dxt += py - pyt;
    Int_t dyl = TMath::Abs(py - pyl);
-   if (px < pxl) dyl += pxl - px; if (px > pxt) dyl += px - pxt;
+   if (px < pxl) dyl += pxl - px;
+   if (px > pxt) dyl += px - pxt;
    Int_t dyt = TMath::Abs(py - pyt);
-   if (px < pxl) dyt += pxl - px; if (px > pxt) dyt += px - pxt;
+   if (px < pxl) dyt += pxl - px;
+   if (px > pxt) dyt += px - pxt;
 
    Int_t distance = dxl;
    if (dxt < distance) distance = dxt;
@@ -1151,8 +1240,8 @@ void TPad::Divide(Int_t nx, Int_t ny, Float_t xmargin, Float_t ymargin, Int_t co
             pad->SetBorderMode(0);
             if (i == 0)    pad->SetLeftMargin(xl*nx);
             else           pad->SetLeftMargin(0);
-                           pad->SetRightMargin(0);
-                           pad->SetTopMargin(0);
+            pad->SetRightMargin(0);
+            pad->SetTopMargin(0);
             if (j == ny-1) pad->SetBottomMargin(yb*ny);
             else           pad->SetBottomMargin(0);
             pad->Draw();
@@ -1341,11 +1430,11 @@ void TPad::DrawClassObject(const TObject *classobj, Option_t *option)
 
             Int_t dim = d->GetArrayDim();
             Int_t indx = 0;
-            snprintf(dname,256,"%s",obj->EscapeChars(d->GetName()));
+            snprintf(dname,256,"%s",d->GetName());
             Int_t ldname = 0;
             while (indx < dim ){
                ldname = strlen(dname);
-               snprintf(&dname[ldname],256,"[%d]",d->GetMaxIndex(indx));
+               snprintf(&dname[ldname],256-ldname,"[%d]",d->GetMaxIndex(indx));
                indx++;
             }
             pt->AddText(x,(y-v1)/dv,dname);
@@ -1379,8 +1468,8 @@ void TPad::DrawClassObject(const TObject *classobj, Option_t *option)
             if (fcount > nf) break;
             if (i >= nkf) { i = 1; y = ysep - 0.5*dy; x += 1/Double_t(nc); }
             else { i++; y -= dy; }
-            ptext = pt->AddText(x,(y-v1)/dv,obj->EscapeChars(m->GetName()));
 
+            ptext = pt->AddText(x,(y-v1)/dv,m->GetName());
             // Check if method is overloaded in a derived class
             // If yes, Change the color of the text to blue
             for (j=ilevel-1;j>=0;j--) {
@@ -1463,6 +1552,8 @@ void TPad::DrawCrosshair()
 
 ////////////////////////////////////////////////////////////////////////////////
 ///  Draw an empty pad frame with X and Y axis.
+///
+///   \return   The pointer to the histogram used to draw the frame.
 ///
 ///   \param[in] xmin      X axis lower limit
 ///   \param[in] xmax      X axis upper limit
@@ -2110,6 +2201,7 @@ void TPad::ExecuteEvent(Int_t event, Int_t px, Int_t py)
          // Reset pad parameters and recompute conversion coefficients
          ResizePad();
 
+
          // emit signal
          RangeChanged();
       }
@@ -2287,10 +2379,12 @@ void TPad::ExecuteEventAxis(Int_t event, Int_t px, Int_t py, TAxis *axis)
                zby1 = TMath::Power(10,zby1);
                zby2 = TMath::Power(10,zby2);
             }
-            zoombox->SetX1(zbx1);
-            zoombox->SetY1(zby1);
-            zoombox->SetX2(zbx2);
-            zoombox->SetY2(zby2);
+            if (zoombox) {
+               zoombox->SetX1(zbx1);
+               zoombox->SetY1(zby1);
+               zoombox->SetX2(zbx2);
+               zoombox->SetY2(zby2);
+            }
             gPad->Modified();
             gPad->Update();
          }
@@ -2845,10 +2939,10 @@ void TPad::HighLight(Color_t color, Bool_t set)
       // momentarily such that when DrawClone is called, it is
       // not the right value (for DrawClone). Should be FIXED.
       gROOT->SetSelectedPad(this);
-      if (set)
-         PaintBorder(-color, kFALSE);
-      else
-         PaintBorder(-GetFillColor(), kFALSE);
+      if (GetBorderMode()>0) {
+         if (set) PaintBorder(-color, kFALSE);
+         else     PaintBorder(-GetFillColor(), kFALSE);
+      }
    }
 
    AbsCoordinates(kFALSE);
@@ -2867,6 +2961,385 @@ void TPad::ls(Option_t *option) const
    fPrimitives->ls(option);
    TROOT::DecreaseDirLevel();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// Increment (i==1) or set (i>1) the number of autocolor in the pad.
+
+Int_t TPad::IncrementPaletteColor(Int_t i, TString opt)
+{
+   if (opt.Index("pfc")>=0 || opt.Index("plc")>=0 || opt.Index("pmc")>=0) {
+       if (i==1) fNumPaletteColor++;
+       else      fNumPaletteColor = i;
+       return    fNumPaletteColor;
+   } else {
+      return 0;
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get the next autocolor in the pad.
+
+Int_t TPad::NextPaletteColor()
+{
+   Int_t i = 0;
+   Int_t ncolors = gStyle->GetNumberOfColors();
+   if (fNumPaletteColor>1) {
+      i = fNextPaletteColor*(ncolors/(fNumPaletteColor-1));
+      if (i>=ncolors) i = ncolors-1;
+   }
+   fNextPaletteColor++;
+   if (fNextPaletteColor > fNumPaletteColor-1) fNextPaletteColor = 0;
+   return gStyle->GetColorPalette(i);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Initialise the grid used to find empty space when adding a box (Legend) in a pad
+
+void TPad::FillCollideGrid(TObject *oi)
+{
+   Int_t const cellSize = 10; // Sive of an individual grid cell in pixels.
+
+   if (fCGnx == 0 && fCGny == 0) {
+      fCGnx = gPad->GetWw()/cellSize;
+      fCGny = gPad->GetWh()/cellSize;
+   } else {
+      Int_t CGnx = gPad->GetWw()/cellSize;
+      Int_t CGny = gPad->GetWh()/cellSize;
+      if (fCGnx != CGnx || fCGny != CGny) {
+         fCGnx = CGnx;
+         fCGny = CGny;
+         delete [] fCollideGrid;
+         fCollideGrid = 0;
+      }
+   }
+
+   // Initialise the collide grid
+   if (!fCollideGrid) {
+      fCollideGrid = new Bool_t [fCGnx*fCGny];
+      for (int i = 0; i<fCGnx; i++) {
+         for (int j = 0; j<fCGny; j++) {
+            fCollideGrid[i + j*fCGnx] = kTRUE;
+         }
+      }
+   }
+
+   // Fill the collide grid
+   TList *l = GetListOfPrimitives();
+   Int_t np = l->GetSize();
+   TObject *o;
+
+   for (int i=0; i<np; i++) {
+      o = (TObject *) l->At(i);
+      if (o!=oi) {
+         if (o->InheritsFrom(TFrame::Class())) { FillCollideGridTFrame(o); continue;}
+         if (o->InheritsFrom(TBox::Class()))   { FillCollideGridTBox(o);   continue;}
+         if (o->InheritsFrom(TH1::Class()))    { FillCollideGridTH1(o);    continue;}
+         if (o->InheritsFrom(TGraph::Class())) { FillCollideGridTGraph(o); continue;}
+      }
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Check if a box of size w and h collide some primitives in the pad at
+/// position i,j
+
+Bool_t TPad::Collide(Int_t i, Int_t j, Int_t w, Int_t h)
+{
+   for (int r=i; r<w+i; r++) {
+      for (int c=j; c<h+j; c++) {
+         if (!fCollideGrid[r + c*fCGnx]) return kTRUE;
+      }
+   }
+   return kFALSE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Place a box in NDC space
+///
+/// \return `true` if the box could be placed, `false` if not.
+///
+/// \param[in]  w        box width to be placed
+/// \param[in]  h        box height to be placed
+/// \param[out] xl       x position of the bottom left corner of the placed box
+/// \param[out] yb       y position of the bottom left corner of the placed box
+
+Bool_t TPad::PlaceBox(TObject *o, Double_t w, Double_t h, Double_t &xl, Double_t &yb)
+{
+   FillCollideGrid(o);
+
+   Int_t iw = (int)(fCGnx*w);
+   Int_t ih = (int)(fCGny*h);
+
+   Int_t nxmax = fCGnx-iw-1;
+   Int_t nymax = fCGny-ih-1;
+
+   for (Int_t i = 0; i<nxmax; i++) {
+      for (Int_t j = 0; j<=nymax; j++) {
+         if (Collide(i,j,iw,ih)) {
+            continue;
+         } else {
+            xl = (Double_t)(i)/(Double_t)(fCGnx);
+            yb = (Double_t)(j)/(Double_t)(fCGny);
+            return kTRUE;
+         }
+      }
+   }
+   return kFALSE;
+}
+
+#define NotFree(i, j) fCollideGrid[TMath::Max(TMath::Min(i+j*fCGnx,fCGnx*fCGny),0)] = kFALSE;
+
+////////////////////////////////////////////////////////////////////////////////
+/// Mark as "not free" the cells along a line.
+
+void TPad::LineNotFree(Int_t x1, Int_t x2, Int_t y1, Int_t y2)
+{
+   NotFree(x1, y1);
+   NotFree(x2, y2);
+   Int_t i, j, xt, yt;
+
+   // horizontal lines
+   if (y1==y2) {
+      for (i=x1+1; i<x2; i++) NotFree(i,y1);
+      return;
+   }
+
+   // vertical lines
+   if (x1==x2) {
+      for (i=y1+1; i<y2; i++) NotFree(x1,i);
+      return;
+   }
+
+   // other lines
+   if (TMath::Abs(x2-x1)>TMath::Abs(y2-y1)) {
+      if (x1>x2) {
+         xt = x1; x1 = x2; x2 = xt;
+         yt = y1; y1 = y2; y2 = yt;
+      }
+      for (i=x1+1; i<x2; i++) {
+         j = (Int_t)((Double_t)(y2-y1)*(Double_t)((i-x1)/(Double_t)(x2-x1))+y1);
+         NotFree(i,j);
+         NotFree(i,(j+1));
+      }
+   } else {
+      if (y1>y2) {
+         yt = y1; y1 = y2; y2 = yt;
+         xt = x1; x1 = x2; x2 = xt;
+      }
+      for (j=y1+1; j<y2; j++) {
+         i = (Int_t)((Double_t)(x2-x1)*(Double_t)((j-y1)/(Double_t)(y2-y1))+x1);
+         NotFree(i,j);
+         NotFree((i+1),j);
+      }
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void TPad::FillCollideGridTBox(TObject *o)
+{
+   TBox *b = (TBox *)o;
+
+   Double_t xs   = (fX2-fX1)/fCGnx;
+   Double_t ys   = (fY2-fY1)/fCGny;
+
+   Int_t x1 = (Int_t)((b->GetX1()-fX1)/xs);
+   Int_t x2 = (Int_t)((b->GetX2()-fX1)/xs);
+   Int_t y1 = (Int_t)((b->GetY1()-fY1)/ys);
+   Int_t y2 = (Int_t)((b->GetY2()-fY1)/ys);
+   for (int i = x1; i<=x2; i++) {
+      for (int j = y1; j<=y2; j++) NotFree(i, j);
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void TPad::FillCollideGridTFrame(TObject *o)
+{
+   TFrame *f = (TFrame *)o;
+
+   Double_t xs   = (fX2-fX1)/fCGnx;
+   Double_t ys   = (fY2-fY1)/fCGny;
+
+   Int_t x1 = (Int_t)((f->GetX1()-fX1)/xs);
+   Int_t x2 = (Int_t)((f->GetX2()-fX1)/xs);
+   Int_t y1 = (Int_t)((f->GetY1()-fY1)/ys);
+   Int_t y2 = (Int_t)((f->GetY2()-fY1)/ys);
+   Int_t i;
+
+   for (i = x1; i<=x2; i++) {
+      NotFree(i, y1);
+      NotFree(i, (y1-1));
+      NotFree(i, (y1-2));
+   }
+   for (i = y1; i<=y2; i++) {
+      NotFree(x1, i);
+      NotFree((x1-1), i);
+      NotFree((x1-2), i);
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void TPad::FillCollideGridTGraph(TObject *o)
+{
+   TGraph *g = (TGraph *)o;
+
+   Double_t xs   = (fX2-fX1)/fCGnx;
+   Double_t ys   = (fY2-fY1)/fCGny;
+
+   Int_t n = g->GetN();
+   Double_t x1, x2, y1, y2;
+
+   for (Int_t i=1; i<n; i++) {
+      g->GetPoint(i-1,x1,y1);
+      g->GetPoint(i  ,x2,y2);
+      if (fLogx) {
+         if (x1 > 0) x1 = TMath::Log10(x1);
+         else        x1 = fUxmin;
+         if (x2 > 0) x2 = TMath::Log10(x2);
+         else        x2 = fUxmin;
+      }
+      if (fLogy) {
+         if (y1 > 0) y1 = TMath::Log10(y1);
+         else        y1 = fUymin;
+         if (y2 > 0) y2 = TMath::Log10(y2);
+         else        y2 = fUymin;
+      }
+      LineNotFree((int)((x1-fX1)/xs), (int)((x2-fX1)/xs),
+                  (int)((y1-fY1)/ys), (int)((y2-fY1)/ys));
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void TPad::FillCollideGridTH1(TObject *o)
+{
+   TH1 *h = (TH1 *)o;
+
+   if (o->InheritsFrom(TH2::Class())) return;
+   if (o->InheritsFrom(TH3::Class())) return;
+
+   TString name = h->GetName();
+   if (name.Index("hframe") >= 0) return;
+
+   Double_t xs   = (fX2-fX1)/fCGnx;
+   Double_t ys   = (fY2-fY1)/fCGny;
+
+   bool haserrors = false;
+   TString drawOption = h->GetDrawOption();
+   drawOption.ToLower();
+   drawOption.ReplaceAll("same","");
+
+   if (drawOption.Index("hist") < 0) {
+      if (drawOption.Index("e") >= 0) haserrors = true;
+   }
+
+   Int_t nx = h->GetNbinsX();
+   Int_t  x1, y1, y2;
+   Int_t i, j;
+   Double_t x1l, y1l, y2l;
+
+   for (i = 1; i<nx; i++) {
+      if (haserrors) {
+         x1l = h->GetBinCenter(i);
+         if (fLogx) {
+            if (x1l > 0) x1l = TMath::Log10(x1l);
+            else         x1l = fUxmin;
+         }
+         x1 = (Int_t)((x1l-fX1)/xs);
+         y1l = h->GetBinContent(i)-h->GetBinErrorLow(i);
+         if (fLogy) {
+            if (y1l > 0) y1l = TMath::Log10(y1l);
+            else         y1l = fUymin;
+         }
+         y1 = (Int_t)((y1l-fY1)/ys);
+         y2l = h->GetBinContent(i)+h->GetBinErrorUp(i);
+         if (fLogy) {
+            if (y2l > 0) y2l = TMath::Log10(y2l);
+            else         y2l = fUymin;
+         }
+         y2 = (Int_t)((y2l-fY1)/ys);
+         for (j=y1; j<=y2; j++) {
+         NotFree(x1, j);
+         }
+      }
+      x1l = h->GetBinLowEdge(i);
+      if (fLogx) {
+         if (x1l > 0) x1l = TMath::Log10(x1l);
+         else         x1l = fUxmin;
+      }
+      x1 = (Int_t)((x1l-fX1)/xs);
+      y1l = h->GetBinContent(i);
+      if (fLogy) {
+         if (y1l > 0) y1l = TMath::Log10(y1l);
+         else         y1l = fUymin;
+      }
+      y1 = (Int_t)((y1l-fY1)/ys);
+      NotFree(x1, y1);
+      x1l = h->GetBinLowEdge(i)+h->GetBinWidth(i);
+      if (fLogx) {
+         if (x1l > 0) x1l = TMath::Log10(x1l);
+         else         x1l = fUxmin;
+      }
+      x1 = (int)((x1l-fX1)/xs);
+      NotFree(x1, y1);
+   }
+
+   // Extra objects in the list of function
+   TPaveStats *ps = (TPaveStats*)h->GetListOfFunctions()->FindObject("stats");
+   if (ps) FillCollideGridTBox(ps);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// This method draws the collide grid on top of the canvas. This is used for
+/// debugging only. At some point it will be removed.
+
+void TPad::DrawCollideGrid()
+{
+   auto box = new TBox();
+   box->SetFillColorAlpha(kRed,0.5);
+
+   Double_t xs   = (fX2-fX1)/fCGnx;
+   Double_t ys   = (fY2-fY1)/fCGny;
+
+   Double_t X1L, X2L, Y1L, Y2L;
+   Double_t t = 0.15;
+   Double_t Y1, Y2;
+   Double_t X1 = fX1;
+   Double_t X2 = X1+xs;
+
+   for (int i = 0; i<fCGnx; i++) {
+      Y1 = fY1;
+      Y2 = Y1+ys;
+      for (int j = 0; j<fCGny; j++) {
+         if (gPad->GetLogx()) {
+            X1L = TMath::Power(10,X1);
+            X2L = TMath::Power(10,X2);
+         } else {
+            X1L = X1;
+            X2L = X2;
+         }
+         if (gPad->GetLogy()) {
+            Y1L = TMath::Power(10,Y1);
+            Y2L = TMath::Power(10,Y2);
+         } else {
+            Y1L = Y1;
+            Y2L = Y2;
+         }
+         if (!fCollideGrid[i + j*fCGnx]) {
+            box->SetFillColorAlpha(kBlack,t);
+            box->DrawBox(X1L, Y1L, X2L, Y2L);
+         } else {
+            box->SetFillColorAlpha(kRed,t);
+            box->DrawBox(X1L, Y1L, X2L, Y2L);
+         }
+         Y1 = Y2;
+         Y2 = Y1+ys;
+         if (t==0.15) t = 0.1;
+         else         t = 0.15;
+      }
+      X1 = X2;
+      X2 = X1+xs;
+   }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Convert x from pad to X.
@@ -3389,6 +3862,22 @@ void TPad::PaintFillArea(Int_t nn, Double_t *xx, Double_t *yy, Option_t *)
    delete [] x;
    delete [] y;
    Modified();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Paint fill area in CurrentPad NDC coordinates.
+
+void TPad::PaintFillAreaNDC(Int_t n, Double_t *x, Double_t *y, Option_t *option)
+{
+   auto xw = new Double_t[n];
+   auto yw = new Double_t[n];
+   for (int i=0; i<n; i++) {
+      xw[i] = fX1 + x[i]*(fX2 - fX1);
+      yw[i] = fY1 + y[i]*(fY2 - fY1);
+   }
+   PaintFillArea(n, xw, yw, option);
+   delete [] xw;
+   delete [] yw;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4090,6 +4579,15 @@ TPad *TPad::Pick(Int_t px, Int_t py, TObjLink *&pickobj)
       if (!button->IsEditable()) pickobj = 0;
    }
 
+   if (TestBit(kCannotPick)) {
+
+      if (picked == this) {
+         // cannot pick pad itself!
+         picked = 0;
+      }
+
+   }
+
    gPad = padsav;
    return picked;
 }
@@ -4128,6 +4626,7 @@ void TPad::Pop()
 ///  - if filename contains .C or .cxx, a C++ macro file is produced
 ///  - if filename contains .root, a Root file is produced
 ///  - if filename contains .xml,  a XML file is produced
+///  - if filename contains .json,  a JSON file is produced
 ///
 ///  See comments in TPad::SaveAs or the TPad::Print function below
 
@@ -4162,25 +4661,27 @@ static Bool_t ContainsTImage(TList *li)
 ///
 /// option can be:
 ///  -           0  as "ps"
-///  -        "ps"  Postscript file is produced (see special cases below)
-///  -  "Portrait"  Postscript file is produced (Portrait)
-///  - "Landscape"  Postscript file is produced (Landscape)
-///  -    "Title:"  The character string after "Title:" becomes a table
-///                 of content entry (for PDF files).
-///  -       "eps"  an Encapsulated Postscript file is produced
-///  -   "Preview"  an Encapsulated Postscript file with preview is produced.
-///  -       "pdf"  a PDF file is produced
-///  -       "svg"  a SVG file is produced
-///  -       "tex"  a TeX file is produced
-///  -       "gif"  a GIF file is produced
-///  -    "gif+NN"  an animated GIF file is produced, where NN is delay in 10ms units NOTE: See other variants for looping animation in TASImage::WriteImage
-///  -       "xpm"  a XPM file is produced
-///  -       "png"  a PNG file is produced
-///  -       "jpg"  a JPEG file is produced. NOTE: JPEG's lossy compression will make all sharp edges fuzzy.
-///  -      "tiff"  a TIFF file is produced
-///  -       "cxx"  a C++ macro file is produced
-///  -       "xml"  a XML file
-///  -      "root"  a ROOT binary file
+///  -         "ps"  Postscript file is produced (see special cases below)
+///  -   "Portrait"  Postscript file is produced (Portrait)
+///  -  "Landscape"  Postscript file is produced (Landscape)
+///  -     "Title:"  The character string after "Title:" becomes a table
+///                  of content entry (for PDF files).
+///  -        "eps"  an Encapsulated Postscript file is produced
+///  -    "Preview"  an Encapsulated Postscript file with preview is produced.
+///  - "EmbedFonts"  a PDF file with embedded fonts is generated.
+///  -        "pdf"  a PDF file is produced
+///  -        "svg"  a SVG file is produced
+///  -        "tex"  a TeX file is produced
+///  -        "gif"  a GIF file is produced
+///  -     "gif+NN"  an animated GIF file is produced, where NN is delay in 10ms units NOTE: See other variants for looping animation in TASImage::WriteImage
+///  -        "xpm"  a XPM file is produced
+///  -        "png"  a PNG file is produced
+///  -        "jpg"  a JPEG file is produced. NOTE: JPEG's lossy compression will make all sharp edges fuzzy.
+///  -       "tiff"  a TIFF file is produced
+///  -        "cxx"  a C++ macro file is produced
+///  -        "xml"  a XML file
+///  -       "json"  a JSON file
+///  -       "root"  a ROOT binary file
 ///
 ///     filename = 0 - filename  is defined by the GetName and its
 ///                    extension is defined with the option
@@ -4209,17 +4710,27 @@ static Bool_t ContainsTImage(TList *li)
 /// ~~~
 ///   The above numbers take into account some margins and are in centimeters.
 ///
-///  The "Preview" option allows to generate a preview (in the TIFF format) within
-///  the Encapsulated Postscript file. This preview can be used by programs like
-///  MSWord to visualize the picture on screen. The "Preview" option relies on the
-///  epstool command (http://www.cs.wisc.edu/~ghost/gsview/epstool.htm).
+/// ### The "Preview" option
 ///
-///  Example:
+/// The "Preview" option allows to generate a preview (in the TIFF format) within
+/// the Encapsulated Postscript file. This preview can be used by programs like
+/// MSWord to visualize the picture on screen. The "Preview" option relies on the
+/// "epstool" command (http://www.cs.wisc.edu/~ghost/gsview/epstool.htm).
+///
+/// Example:
 /// ~~~ {.cpp}
 ///     canvas->Print("example.eps","Preview");
 /// ~~~
-///  To generate a Postscript file containing more than one picture, see
-///  class TPostScript.
+///
+/// ### The "EmbedFonts" option
+///
+/// The "EmbedFonts" option allows to embed the fonts used in a PDF file inside
+/// that file. This option relies on the "gs" command (https://ghostscript.com).
+///
+/// Example:
+/// ~~~ {.cpp}
+///     canvas->Print("example.pdf","EmbedFonts");
+/// ~~~
 ///
 /// ### Writing several canvases to the same Postscript or PDF file:
 ///
@@ -4380,7 +4891,7 @@ void TPad::Print(const char *filenam, Option_t *option)
          gPad->GetCanvas()->SetHighLightColor(-1);
          gPad->Modified();
          gPad->Update();
-         if (gVirtualX->InheritsFrom("TGQt")) {
+         if (TClass::GetClass("TGQt", kFALSE) && gVirtualX->InheritsFrom("TGQt")) {
             wid = (this == GetCanvas()) ? GetCanvas()->GetCanvasID() : GetPixmapID();
             gVirtualX->WritePixmap(wid,UtoPixel(1.),VtoPixel(0.),(char *)psname.Data());
          } else {
@@ -4420,6 +4931,12 @@ void TPad::Print(const char *filenam, Option_t *option)
       return;
    }
 
+   //==============Save pad/canvas as a JSON file================================
+   if (strstr(opt,"json")) {
+      if (gDirectory) gDirectory->SaveObjectAs(this,psname.Data(),"");
+      return;
+   }
+
    //==============Save pad/canvas as a SVG file================================
    if (strstr(opt,"svg")) {
       gVirtualPS = (TVirtualPS*)gROOT->GetListOfSpecials()->FindObject(psname);
@@ -4444,10 +4961,12 @@ void TPad::Print(const char *filenam, Option_t *option)
       }
 
       // Create a new SVG file
-      gVirtualPS->SetName(psname);
-      gVirtualPS->Open(psname);
-      gVirtualPS->SetBit(kPrintingPS);
-      gVirtualPS->NewPage();
+      if (gVirtualPS) {
+         gVirtualPS->SetName(psname);
+         gVirtualPS->Open(psname);
+         gVirtualPS->SetBit(kPrintingPS);
+         gVirtualPS->NewPage();
+      }
       Paint();
       if (noScreen)  GetCanvas()->SetBatch(kFALSE);
 
@@ -4483,13 +5002,14 @@ void TPad::Print(const char *filenam, Option_t *option)
          }
       }
 
-      // Create a new SVG file
-      gVirtualPS->SetName(psname);
-      gVirtualPS->Open(psname);
-      gVirtualPS->SetBit(kPrintingPS);
-      gVirtualPS->NewPage();
+      // Create a new TeX file
+      if (gVirtualPS) {
+         gVirtualPS->SetName(psname);
+         gVirtualPS->Open(psname);
+         gVirtualPS->SetBit(kPrintingPS);
+         gVirtualPS->NewPage();
+      }
       Paint();
-
       if (noScreen)  GetCanvas()->SetBatch(kFALSE);
 
       if (!gSystem->AccessPathName(psname)) Info("Print", "TeX file %s has been created", psname.Data());
@@ -4542,7 +5062,7 @@ void TPad::Print(const char *filenam, Option_t *option)
    if (!gVirtualPS || mustOpen) {
       // Plugin Postscript driver
       TPluginHandler *h;
-      if (strstr(opt,"pdf") || strstr(opt,"Title:")) {
+      if (strstr(opt,"pdf") || strstr(opt,"Title:") || strstr(opt,"EmbedFonts")) {
          if ((h = gROOT->GetPluginManager()->FindHandler("TVirtualPS", "pdf"))) {
             if (h->LoadPlugin() == -1) return;
             h->ExecPlugin(0);
@@ -4616,6 +5136,11 @@ void TPad::Print(const char *filenam, Option_t *option)
    }
 
    if (strstr(opt,"Preview")) gSystem->Exec(Form("epstool --quiet -t6p %s %s",psname.Data(),psname.Data()));
+   if (strstr(opt,"EmbedFonts")) {
+      gSystem->Exec(Form("gs -quiet -dSAFER -dNOPLATFONTS -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dUseCIEColor -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dCompatibilityLevel=1.4 -dMaxSubsetPct=100 -dSubsetFonts=true -dEmbedAllFonts=true -sOutputFile=pdf_temp.pdf -f %s",
+                          psname.Data()));
+      gSystem->Rename("pdf_temp.pdf", psname.Data());
+   }
 
    padsav->cd();
 }
@@ -4969,6 +5494,7 @@ void TPad::ResizePad(Option_t *option)
             fPixmapID = GetPainter()->CreateDrawable(w, h);
          } else {
             if (gVirtualX->ResizePixmap(fPixmapID, w, h)) {
+               Resized();
                Modified(kTRUE);
             }
          }
@@ -5033,6 +5559,8 @@ void TPad::SaveAs(const char *filename, Option_t * /*option*/) const
       ((TPad*)this)->Print(psname,"root");
    else if (psname.EndsWith(".xml"))
       ((TPad*)this)->Print(psname,"xml");
+   else if (psname.EndsWith(".json"))
+      ((TPad*)this)->Print(psname,"json");
    else if (psname.EndsWith(".eps"))
       ((TPad*)this)->Print(psname,"eps");
    else if (psname.EndsWith(".pdf"))
@@ -5308,6 +5836,7 @@ void TPad::SetLogx(Int_t value)
    fLogx = value;
    delete fView; fView=0;
    Modified();
+   RangeAxisChanged();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5321,6 +5850,7 @@ void TPad::SetLogy(Int_t value)
    fLogy = value;
    delete fView; fView=0;
    Modified();
+   RangeAxisChanged();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5331,6 +5861,7 @@ void TPad::SetLogz(Int_t value)
    fLogz = value;
    delete fView; fView=0;
    Modified();
+   RangeAxisChanged();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6233,9 +6764,13 @@ void TPad::UseCurrentStyle()
 ///   }
 ///}
 /// ~~~
+///
+/// If ROOT runs in batch mode a call to this method does nothing.
 
 TObject *TPad::WaitPrimitive(const char *pname, const char *emode)
 {
+   if (!gPad) return 0;
+
    if (strlen(emode)) gROOT->SetEditorMode(emode);
    if (gROOT->GetEditorMode() == 0 && strlen(pname) > 2) gROOT->SetEditorMode(&pname[1]);
 
@@ -6318,7 +6853,7 @@ void TPad::CloseToolTip(TObject *tip)
 
 void TPad::x3d(Option_t *type)
 {
-   ::Info("TPad::x3d()", "Fn is depreciated - use TPad::GetViewer3D() instead");
+   ::Info("TPad::x3d()", "This function is deprecated. Use %s->GetViewer3D(\"x3d\") instead",this->GetName());
 
    // Default on GetViewer3D is pad - for x3d it was x3d...
    if (!type || !type[0]) {

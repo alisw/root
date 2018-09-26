@@ -31,41 +31,39 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_____________________________________________________________________
-//
-// PDEFoamDecisionTreeDensity
-//
-// This is a concrete implementation of PDEFoam.  The Density(...)
-// function returns allways 0.  The function FillHistograms() is
-// added, which returns all events in a given TMVA::Volume.
-// _____________________________________________________________________
+/*! \class TMVA::PDEFoamDecisionTreeDensity
+\ingroup TMVA
 
-#include <limits>
+This is a concrete implementation of PDEFoam.  The Density(...)
+function returns allways 0.  The function FillHistograms() is
+added, which returns all events in a given TMVA::Volume.
+*/
 
-#ifndef ROOT_TMVA_PDEFoamDecisionTreeDensity
 #include "TMVA/PDEFoamDecisionTreeDensity.h"
-#endif
 
 #include "TMVA/BinarySearchTree.h"
 #include "TMVA/MethodPDERS.h"
 #include "TMVA/MsgLogger.h"
+#include "TMVA/PDEFoamDensityBase.h"
 #include "TMVA/Types.h"
 #include "TMVA/Volume.h"
 
 #include "RtypesCore.h"
 #include "TH1D.h"
 
-ClassImp(TMVA::PDEFoamDecisionTreeDensity)
+#include <limits>
+
+ClassImp(TMVA::PDEFoamDecisionTreeDensity);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TMVA::PDEFoamDecisionTreeDensity::PDEFoamDecisionTreeDensity()
-   : PDEFoamDensityBase()
+: PDEFoamDensityBase()
    , fClass(0)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
-/// User construcor:
+/// User constructor:
 ///
 /// Parameters:
 ///

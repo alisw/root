@@ -14,7 +14,10 @@
 #pragma link off all classes;
 #pragma link off all functions;
 
+#pragma link C++ class TBufferIO;
 #pragma link C++ class TBufferFile;
+#pragma link C++ class TBufferText;
+#pragma link C++ class TBufferJSON;
 #pragma link C++ class TDirectoryFile-;
 #pragma link C++ class TFile-;
 #pragma link C++ class TFileCacheRead+;
@@ -49,5 +52,7 @@
 #pragma link C++ class TStreamerInfoActions::TConfiguredAction+;
 #pragma link C++ class TStreamerInfoActions::TActionSequence+;
 #pragma link C++ class TStreamerInfoActions::TConfiguration-;
+#pragma link C++ class ROOT::Experimental::TBufferMerger;
+#pragma link C++ class ROOT::Experimental::TBufferMergerFile;
 
 #endif

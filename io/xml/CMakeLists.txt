@@ -2,9 +2,19 @@
 # CMakeLists.txt file for building ROOT io/xml package
 ############################################################################
 
-ROOT_GENERATE_DICTIONARY(G__XML *.h MODULE XMLIO LINKDEF LinkDef.h)
-
-
-ROOT_LINKER_LIBRARY(XMLIO *.cxx G__XML.cxx DEPENDENCIES RIO )
-ROOT_INSTALL_HEADERS()
-
+ROOT_STANDARD_LIBRARY_PACKAGE(XMLIO
+                              HEADERS
+                                 TBufferXML.h
+                                 TKeyXML.h
+                                 TXMLEngine.h
+                                 TXMLFile.h
+                                 TXMLPlayer.h
+                                 TXMLSetup.h
+                              SOURCES
+                                 src/TBufferXML.cxx
+                                 src/TKeyXML.cxx
+                                 src/TXMLEngine.cxx
+                                 src/TXMLFile.cxx
+                                 src/TXMLPlayer.cxx
+                                 src/TXMLSetup.cxx
+                              DEPENDENCIES RIO)

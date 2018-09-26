@@ -217,7 +217,7 @@ Bool_t TStopTimer::Notify()
 
 //------------------------------------------------------------------------------
 
-ClassImp(TProofPlayer)
+ClassImp(TProofPlayer);
 
 THashList *TProofPlayer::fgDrawInputPars = 0;
 
@@ -970,24 +970,26 @@ Int_t TProofPlayer::AssertSelector(const char *selector_file)
       if (fCreateSelObj) SafeDelete(fSelector);
 
       // Get selector files from cache
+      TString ocwd = gSystem->WorkingDirectory();
       if (gProofServ) {
          gProofServ->GetCacheLock()->Lock();
-         TString ocwd = gSystem->WorkingDirectory();
          gSystem->ChangeDirectory(gProofServ->GetCacheDir());
+      }
 
-         fSelector = TSelector::GetSelector(selector_file);
+      fSelector = TSelector::GetSelector(selector_file);
 
+      if (gProofServ) {
          gSystem->ChangeDirectory(ocwd);
          gProofServ->GetCacheLock()->Unlock();
-
-         if (!fSelector) {
-            Error("AssertSelector", "cannot load: %s", selector_file );
-           return -1;
-         }
+      }
+ 
+      if (!fSelector) {
+         Error("AssertSelector", "cannot load: %s", selector_file );
+        return -1;
       }
 
       fCreateSelObj = kTRUE;
-      Info("AssertSelector", "Processing via filename");
+      Info("AssertSelector", "Processing via filename (%s)", selector_file);
    } else if (!fSelector) {
       Error("AssertSelector", "no TSelector object define : cannot continue!");
       return -1;
@@ -1839,7 +1841,7 @@ void TProofPlayerRemote::SetMerging(Bool_t on)
 
 //------------------------------------------------------------------------------
 
-ClassImp(TProofPlayerLocal)
+ClassImp(TProofPlayerLocal);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Process the specified TSelector object 'nentries' times.
@@ -1890,7 +1892,7 @@ Long64_t TProofPlayerLocal::Process(const char *selector,
 
 //------------------------------------------------------------------------------
 
-ClassImp(TProofPlayerRemote)
+ClassImp(TProofPlayerRemote);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Destructor.
@@ -1904,8 +1906,7 @@ TProofPlayerRemote::~TProofPlayerRemote()
    SafeDelete(fFeedbackLists);
    SafeDelete(fPacketizer);
 
-   if (fProcessMessage)
-      SafeDelete(fProcessMessage);
+   SafeDelete(fProcessMessage);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3802,7 +3803,6 @@ TObject *TProofPlayerRemote::HandleHistogram(TObject *obj, Bool_t &merged)
          }
       }
    }
-   PDB(kOutput,1) Info("HandleHistogram", "leaving");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4313,7 +4313,7 @@ void TProofPlayerRemote::SetInitTime()
 //------------------------------------------------------------------------------
 
 
-ClassImp(TProofPlayerSlave)
+ClassImp(TProofPlayerSlave);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Setup feedback.
@@ -4407,7 +4407,7 @@ Bool_t TProofPlayerSlave::HandleTimer(TTimer *)
    m << fb;
 
    // send message to client;
-   gProofServ->GetSocket()->Send(m);
+   if (gProofServ) gProofServ->GetSocket()->Send(m);
 
    delete fb;
 
@@ -4472,7 +4472,7 @@ void TProofPlayerSlave::HandleGetTreeHeader(TMessage *mess)
 
 //------------------------------------------------------------------------------
 
-ClassImp(TProofPlayerSuperMaster)
+ClassImp(TProofPlayerSuperMaster);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Process specified TDSet on PROOF. Runs on super master.

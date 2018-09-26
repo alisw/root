@@ -24,6 +24,12 @@
  * modification, are permitted according to the terms listed in LICENSE           *
  * (http://mva.sourceforge.net/license.txt)                                       *
  **********************************************************************************/
+
+/*! \class TMVA::Types
+\ingroup TMVA
+Singleton class for Global types used by TMVA
+*/
+
 #include "TMVA/Types.h"
 
 #include "TMVA/MsgLogger.h"
@@ -59,24 +65,25 @@ TMVA::Types::~Types()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// the the single instance of "Types" if existin already, or create it  (Signleton)
+/// the the single instance of "Types" if existing already, or create it  (Singleton)
 
 TMVA::Types& TMVA::Types::Instance()
 {
 #if __cplusplus > 199711L
-  if(!fgTypesPtr) {
-    Types* tmp = new Types();
-    Types* expected = 0;
-    if(!fgTypesPtr.compare_exchange_strong(expected,tmp)) {
-      //Another thread already did it
-      delete tmp;
-    }
-  }
-  return *fgTypesPtr;
+   if(!fgTypesPtr) {
+      Types* tmp = new Types();
+      Types* expected = 0;
+      if(!fgTypesPtr.compare_exchange_strong(expected,tmp)) {
+         //Another thread already did it
+         delete tmp;
+      }
+   }
+   return *fgTypesPtr;
 #else
    return fgTypesPtr ? *fgTypesPtr : *(fgTypesPtr = new Types());
 #endif
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 /// "destructor" of the single instance
 
@@ -88,7 +95,6 @@ void   TMVA::Types::DestroyInstance()
    if (fgTypesPtr != 0) { delete fgTypesPtr; fgTypesPtr = 0; }
 #endif
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -110,13 +116,13 @@ Bool_t TMVA::Types::AddTypeMapping( Types::EMVA method, const TString& methodnam
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// returns the method type (enum) for a given method (string)
 
 TMVA::Types::EMVA TMVA::Types::GetMethodType( const TString& method ) const
 {
 #if __cplusplus > 199711L
    std::lock_guard<std::mutex> guard(gTypesMutex);
 #endif
-   // returns the method type (enum) for a given method (string)
    std::map<TString, EMVA>::const_iterator it = fStr2type.find( method );
    if (it == fStr2type.end()) {
       Log() << kFATAL << "Unknown method in map: " << method << Endl;
@@ -133,7 +139,7 @@ TString TMVA::Types::GetMethodName( TMVA::Types::EMVA method ) const
    std::lock_guard<std::mutex> guard(gTypesMutex);
 #endif
    std::map<TString, EMVA>::const_iterator it = fStr2type.begin();
-   for (; it!=fStr2type.end(); it++) if (it->second == method) return it->first;
+   for (; it!=fStr2type.end(); ++it) if (it->second == method) return it->first;
    Log() << kFATAL << "Unknown method index in map: " << method << Endl;
    return "";
 }

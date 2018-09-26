@@ -21,21 +21,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TVirtualHistPainter
 #include "TVirtualHistPainter.h"
-#endif
-#ifndef ROOT_TAttLine
 #include "TAttLine.h"
-#endif
-#ifndef ROOT_TAttFill
 #include "TAttFill.h"
-#endif
-#ifndef ROOT_TAttMarker
 #include "TAttMarker.h"
-#endif
 
 class TAxis;
 class TList;
@@ -51,23 +41,23 @@ class TGraph2D : public TNamed, public TAttLine, public TAttFill, public TAttMar
 
 protected:
 
-   Int_t       fNpoints;          // Number of points in the data set
-   Int_t       fNpx;              // Number of bins along X in fHistogram
-   Int_t       fNpy;              // Number of bins along Y in fHistogram
-   Int_t       fMaxIter;          // Maximum number of iterations to find Delaunay triangles
-   Int_t       fSize;             //!Real size of fX, fY and fZ
-   Double_t   *fX;                //[fNpoints]
-   Double_t   *fY;                //[fNpoints] Data set to be plotted
-   Double_t   *fZ;                //[fNpoints]
-   Double_t    fMinimum;          // Minimum value for plotting along z
-   Double_t    fMaximum;          // Maximum value for plotting along z
-   Double_t    fMargin;           // Extra space (in %) around interpolated area for fHistogram
-   Double_t    fZout;             // fHistogram bin height for points lying outside the interpolated area
-   TList      *fFunctions;        // Pointer to list of functions (fits and user)
-   TH2D       *fHistogram;        //!2D histogram of z values linearly interpolated on the triangles
-   TObject    *fDelaunay;         //! Pointer to Delaunay interpolator object
-   TDirectory *fDirectory;        //!Pointer to directory holding this 2D graph
-   TVirtualHistPainter *fPainter; //!Pointer to histogram painter
+   Int_t       fNpoints;          ///< Number of points in the data set
+   Int_t       fNpx;              ///< Number of bins along X in fHistogram
+   Int_t       fNpy;              ///< Number of bins along Y in fHistogram
+   Int_t       fMaxIter;          ///< Maximum number of iterations to find Delaunay triangles
+   Int_t       fSize;             ///<!Real size of fX, fY and fZ
+   Double_t   *fX;                ///<[fNpoints]
+   Double_t   *fY;                ///<[fNpoints] Data set to be plotted
+   Double_t   *fZ;                ///<[fNpoints]
+   Double_t    fMinimum;          ///< Minimum value for plotting along z
+   Double_t    fMaximum;          ///< Maximum value for plotting along z
+   Double_t    fMargin;           ///< Extra space (in %) around interpolated area for fHistogram
+   Double_t    fZout;             ///< fHistogram bin height for points lying outside the interpolated area
+   TList      *fFunctions;        ///< Pointer to list of functions (fits and user)
+   TH2D       *fHistogram;        ///<!2D histogram of z values linearly interpolated on the triangles
+   TObject    *fDelaunay;         ///<! Pointer to Delaunay interpolator object
+   TDirectory *fDirectory;        ///<!Pointer to directory holding this 2D graph
+   TVirtualHistPainter *fPainter; ///<!Pointer to histogram painter
 
    void     Build(Int_t n);
 
@@ -75,7 +65,7 @@ private:
 
    Bool_t      fUserHisto;   // True when SetHistogram has been called
 
-   enum {
+   enum EStatusBits {
       kOldInterpolation =  BIT(15)
    };
 
@@ -102,7 +92,7 @@ public:
    virtual void          Clear(Option_t *option="");
    virtual void          DirectoryAutoAdd(TDirectory *);
    Int_t                 DistancetoPrimitive(Int_t px, Int_t py);
-   virtual void          Draw(Option_t *option="");
+   virtual void          Draw(Option_t *option="P0");
    void                  ExecuteEvent(Int_t event, Int_t px, Int_t py);
    virtual TObject      *FindObject(const char *name) const;
    virtual TObject      *FindObject(const TObject *obj) const;
@@ -143,8 +133,10 @@ public:
    virtual Double_t      GetYminE() const {return GetYmin();};
    virtual Double_t      GetZmaxE() const {return GetZmax();};
    virtual Double_t      GetZminE() const {return GetZmin();};
+   virtual Int_t         GetPoint(Int_t i, Double_t &x, Double_t &y, Double_t &z) const;
    Double_t              Interpolate(Double_t x, Double_t y);
    void                  Paint(Option_t *option="");
+   virtual void          Print(Option_t *chopt="") const;
    TH1                  *Project(Option_t *option="x") const; // *MENU*
    Int_t                 RemovePoint(Int_t ipoint); // *MENU*
    virtual void          SavePrimitive(std::ostream &out, Option_t *option = "");

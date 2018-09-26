@@ -31,45 +31,40 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_____________________________________________________________________
-//
-// PDEFoamDensityBase
-//
-// This is an abstract class, which provides an interface for a
-// PDEFoam density estimator.  Derived classes have to implement the
-// Density(...) function, which returns the density of a certain
-// quantity at a given phase-space point during the foam build-up.
-//
-// Variants of PDEFoamDensityBase are:
-//
-//   - PDEFoamEventDensity
-//   - PDEFoamDiscriminantDensity
-//   - PDEFoamTargetDensity
-//   - PDEFoamDecisionTreeDensity
-//
-// Usage:
-//
-// The user has to instantiate a child class of PDEFoamDensityBase and
-// set the pointer to the owner, which is a PDEFoam object:
-//
-//   PDEFoamDensityBase *dens = new MyDensity();
-//   pdefoam->SetDensity(dens);
-//
-// Afterwards the binary search tree should be filled with TMVA
-// events, by either using
-//
-//   pdefoam->FillBinarySearchTree(event);
-//
-// or
-//
-//   dens->FillBinarySearchTree(event);
-// _____________________________________________________________________
+/*! \class TMVA::PDEFoamDensityBase
+\ingroup TMVA
+
+This is an abstract class, which provides an interface for a
+PDEFoam density estimator.  Derived classes have to implement the
+Density(...) function, which returns the density of a certain
+quantity at a given phase-space point during the foam build-up.
+
+Variants of PDEFoamDensityBase are:
+
+  - PDEFoamEventDensity
+  - PDEFoamDiscriminantDensity
+  - PDEFoamTargetDensity
+  - PDEFoamDecisionTreeDensity
+
+Usage:
+
+The user has to instantiate a child class of PDEFoamDensityBase and
+set the pointer to the owner, which is a PDEFoam object:
+
+  PDEFoamDensityBase *dens = new MyDensity();
+  pdefoam->SetDensity(dens);
+
+Afterwards the binary search tree should be filled with TMVA
+events, by either using:
+
+     pdefoam->FillBinarySearchTree(event);
+
+or:
+
+     dens->FillBinarySearchTree(event);
+*/
 
 #include "TMVA/PDEFoamDensityBase.h"
-
-#include <functional>
-#include <numeric>
-#include <vector>
 
 #include "TMVA/BinarySearchTree.h"
 #include "TMVA/MsgLogger.h"
@@ -77,18 +72,23 @@
 
 #include "RtypesCore.h"
 #include "Rtypes.h"
+#include "TObject.h"
 
-ClassImp(TMVA::PDEFoamDensityBase)
+#include <functional>
+#include <numeric>
+#include <vector>
+
+ClassImp(TMVA::PDEFoamDensityBase);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TMVA::PDEFoamDensityBase::PDEFoamDensityBase()
-   : TObject(),
-     fBox(),
-     fBoxVolume(1.0),
-     fBoxHasChanged(kTRUE),
-     fBst(new TMVA::BinarySearchTree()),
-     fLogger(new MsgLogger("PDEFoamDensityBase"))
+: TObject(),
+   fBox(),
+   fBoxVolume(1.0),
+   fBoxHasChanged(kTRUE),
+   fBst(new TMVA::BinarySearchTree()),
+   fLogger(new MsgLogger("PDEFoamDensityBase"))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////

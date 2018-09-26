@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TLeafB
+\ingroup tree
+
 A TLeaf for an 8 bit Integer data type.
 */
 
@@ -19,7 +21,7 @@ A TLeaf for an 8 bit Integer data type.
 #include "TClonesArray.h"
 #include "Riostream.h"
 
-ClassImp(TLeafB)
+ClassImp(TLeafB);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
@@ -102,6 +104,22 @@ const char *TLeafB::GetTypeName() const
       return "UChar_t";
    }
    return "Char_t";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Copy/set fMinimum and fMaximum to include/be wide than those of the parameter
+
+Bool_t TLeafB::IncludeRange(TLeaf *input)
+{
+    if (input) {
+        if (input->GetMaximum() > this->GetMaximum())
+            this->SetMaximum( input->GetMaximum() );
+        if (input->GetMinimum() < this->GetMinimum())
+            this->SetMinimum( input->GetMinimum() );
+        return kTRUE;
+    } else {
+        return kFALSE;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

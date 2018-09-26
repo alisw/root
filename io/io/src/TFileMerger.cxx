@@ -14,10 +14,10 @@
 \ingroup IO
 
 This class provides file copy and merging services.
-                                                                  
+
 It can be used to copy files (not only ROOT files), using TFile or
-any of its remote file access plugins. It is therefore usefull in
-a Grid environment where the files might be accessable via Castor,
+any of its remote file access plugins. It is therefore useful in
+a Grid environment where the files might be accessible via Castor,
 rfio, dcap, etc.
 The merging interface allows files containing histograms and trees
 to be merged, like the standalone hadd program.
@@ -39,6 +39,7 @@ to be merged, like the standalone hadd program.
 #include "TClassRef.h"
 #include "TROOT.h"
 #include "TMemFile.h"
+#include "TVirtualMutex.h"
 
 #ifdef WIN32
 // For _getmaxstdio
@@ -49,7 +50,7 @@ to be merged, like the standalone hadd program.
 #include <sys/resource.h>
 #endif
 
-ClassImp(TFileMerger)
+ClassImp(TFileMerger);
 
 TClassRef R__TH1_Class("TH1");
 TClassRef R__TTree_Class("TTree");
@@ -87,18 +88,13 @@ static Int_t R__GetSystemMaxOpenedFiles()
 /// Create file merger object.
 
 TFileMerger::TFileMerger(Bool_t isLocal, Bool_t histoOneGo)
-            : fOutputFile(0), fFastMethod(kTRUE), fNoTrees(kFALSE), fExplicitCompLevel(kFALSE), fCompressionChange(kFALSE),
-              fPrintLevel(0), fMsgPrefix("TFileMerger"), fMaxOpenedFiles( R__GetSystemMaxOpenedFiles() ),
-              fLocal(isLocal), fHistoOneGo(histoOneGo), fObjectNames()
+            : fMaxOpenedFiles( R__GetSystemMaxOpenedFiles() ),
+              fLocal(isLocal), fHistoOneGo(histoOneGo)
 {
-   fFileList = new TList;
+   fMergeList.SetOwner(kTRUE);
+   fExcessFiles.SetOwner(kTRUE);
 
-   fMergeList = new TList;
-   fMergeList->SetOwner(kTRUE);
-
-   fExcessFiles = new TList;
-   fExcessFiles->SetOwner(kTRUE);
-
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfCleanups()->Add(this);
 }
 
@@ -107,11 +103,11 @@ TFileMerger::TFileMerger(Bool_t isLocal, Bool_t histoOneGo)
 
 TFileMerger::~TFileMerger()
 {
-   gROOT->GetListOfCleanups()->Remove(this);
-   SafeDelete(fFileList);
-   SafeDelete(fMergeList);
+   {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfCleanups()->Remove(this);
+   }
    SafeDelete(fOutputFile);
-   SafeDelete(fExcessFiles);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -119,9 +115,9 @@ TFileMerger::~TFileMerger()
 
 void TFileMerger::Reset()
 {
-   fFileList->Clear();
-   fMergeList->Clear();
-   fExcessFiles->Clear();
+   fFileList.Clear();
+   fMergeList.Clear();
+   fExcessFiles.Clear();
    fObjectNames.Clear();
 }
 
@@ -131,20 +127,20 @@ void TFileMerger::Reset()
 Bool_t TFileMerger::AddFile(const char *url, Bool_t cpProgress)
 {
    if (fPrintLevel > 0) {
-      Printf("%s Source file %d: %s",fMsgPrefix.Data(),fFileList->GetEntries()+fExcessFiles->GetEntries()+1,url);
+      Printf("%s Source file %d: %s", fMsgPrefix.Data(), fFileList.GetEntries() + fExcessFiles.GetEntries() + 1, url);
    }
 
    TFile *newfile = 0;
    TString localcopy;
 
-   if (fFileList->GetEntries() >= (fMaxOpenedFiles-1)) {
+   if (fFileList.GetEntries() >= (fMaxOpenedFiles-1)) {
 
       TObjString *urlObj = new TObjString(url);
-      fMergeList->Add(urlObj);
+      fMergeList.Add(urlObj);
 
       urlObj = new TObjString(url);
       urlObj->SetBit(kCpProgress);
-      fExcessFiles->Add(urlObj);
+      fExcessFiles.Add(urlObj);
       return kTRUE;
    }
 
@@ -163,6 +159,12 @@ Bool_t TFileMerger::AddFile(const char *url, Bool_t cpProgress)
       newfile = TFile::Open(url, "READ");
    }
 
+   // Zombie files should also be skipped
+   if (newfile && newfile->IsZombie()) {
+      delete newfile;
+      newfile = 0;
+   }
+
    if (!newfile) {
       if (fLocal)
          Error("AddFile", "cannot open local copy %s of URL %s",
@@ -174,10 +176,10 @@ Bool_t TFileMerger::AddFile(const char *url, Bool_t cpProgress)
       if (fOutputFile && fOutputFile->GetCompressionLevel() != newfile->GetCompressionLevel()) fCompressionChange = kTRUE;
 
       newfile->SetBit(kCanDelete);
-      fFileList->Add(newfile);
+      fFileList.Add(newfile);
 
       TObjString *urlObj = new TObjString(url);
-      fMergeList->Add(urlObj);
+      fMergeList.Add(urlObj);
 
       return  kTRUE;
    }
@@ -213,12 +215,12 @@ Bool_t TFileMerger::AddAdoptFile(TFile *source, Bool_t cpProgress)
 
 Bool_t TFileMerger::AddFile(TFile *source, Bool_t own, Bool_t cpProgress)
 {
-   if (source == 0) {
+   if (source == 0 || source->IsZombie()) {
       return kFALSE;
    }
 
    if (fPrintLevel > 0) {
-      Printf("%s Source file %d: %s",fMsgPrefix.Data(),fFileList->GetEntries()+1,source->GetName());
+      Printf("%s Source file %d: %s",fMsgPrefix.Data(),fFileList.GetEntries()+1,source->GetName());
    }
 
    TFile *newfile = 0;
@@ -234,6 +236,11 @@ Bool_t TFileMerger::AddFile(TFile *source, Bool_t own, Bool_t cpProgress)
          return kFALSE;
       }
       newfile = TFile::Open(localcopy, "READ");
+      // Zombie files should also be skipped
+      if (newfile && newfile->IsZombie()) {
+         delete newfile;
+         newfile = 0;
+      }
    } else {
       newfile = source;
    }
@@ -246,20 +253,17 @@ Bool_t TFileMerger::AddFile(TFile *source, Bool_t own, Bool_t cpProgress)
          Error("AddFile", "cannot open file %s", source->GetName());
       return kFALSE;
    } else {
-      if (fOutputFile && fOutputFile->GetCompressionLevel() != newfile->GetCompressionLevel()) fCompressionChange = kTRUE;
+      if (fOutputFile && fOutputFile->GetCompressionSettings() != newfile->GetCompressionSettings()) fCompressionChange = kTRUE;
 
       if (own || newfile != source) {
          newfile->SetBit(kCanDelete);
       } else {
          newfile->ResetBit(kCanDelete);
       }
-      fFileList->Add(newfile);
+      fFileList.Add(newfile);
 
-      if (!fMergeList) {
-         fMergeList = new TList;
-      }
       TObjString *urlObj = new TObjString(source->GetName());
-      fMergeList->Add(urlObj);
+      fMergeList.Add(urlObj);
 
       if (newfile != source && own) {
          delete source;
@@ -289,26 +293,48 @@ Bool_t TFileMerger::OutputFile(const char *outputfile, Bool_t force)
 ////////////////////////////////////////////////////////////////////////////////
 /// Open merger output file.
 ///
-/// The 'mode' parameter is passed to the TFile constructor as the option, it 
+/// The 'mode' parameter is passed to the TFile constructor as the option, it
 /// should be one of 'NEW','CREATE','RECREATE','UPDATE'
 /// 'UPDATE' is usually used in conjunction with IncrementalMerge.
 
 Bool_t TFileMerger::OutputFile(const char *outputfile, const char *mode, Int_t compressionLevel)
 {
+   // We want gDirectory untouched by anything going on here
+   TDirectory::TContext ctxt;
+   if (TFile *outputFile = TFile::Open(outputfile, mode, "", compressionLevel))
+      return OutputFile(std::unique_ptr<TFile>(outputFile));
+
+   Error("OutputFile", "cannot open the MERGER output file %s", fOutputFilename.Data());
+   return kFALSE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set an output file opened externally by the users
+
+Bool_t TFileMerger::OutputFile(std::unique_ptr<TFile> outputfile)
+{
+   if (!outputfile || outputfile->IsZombie()) {
+      Error("OutputFile", "cannot open the MERGER output file %s", (outputfile) ? outputfile->GetName() : "");
+      return kFALSE;
+   }
+
+   if (!outputfile->IsWritable()) {
+      Error("OutputFile", "output file %s is not writable", outputfile->GetName());
+      return kFALSE;
+   }
+
    fExplicitCompLevel = kTRUE;
 
    TFile *oldfile = fOutputFile;
-   fOutputFile = 0; // This avoids the complaint from RecursiveRemove about the file being deleted which is here spurrious. (see RecursiveRemove).
+   fOutputFile = 0; // This avoids the complaint from RecursiveRemove about the file being deleted which is here
+                    // spurrious. (see RecursiveRemove).
    SafeDelete(oldfile);
 
-   fOutputFilename = outputfile;
-
+   fOutputFilename = outputfile->GetName();
    // We want gDirectory untouched by anything going on here
    TDirectory::TContext ctxt;
-   if (!(fOutputFile = TFile::Open(outputfile, mode, "", compressionLevel)) || fOutputFile->IsZombie()) {
-      Error("OutputFile", "cannot open the MERGER output file %s", fOutputFilename.Data());
-      return kFALSE;
-   }
+   fOutputFile = outputfile.release(); // Transfer the ownership of the file.
+
    return kTRUE;
 }
 
@@ -329,12 +355,12 @@ Bool_t TFileMerger::OutputFile(const char *outputfile, const char *mode /* = "RE
 
 void TFileMerger::PrintFiles(Option_t *options)
 {
-   fFileList->Print(options);
-   fExcessFiles->Print(options);
+   fFileList.Print(options);
+   fExcessFiles.Print(options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Merge the files. 
+/// Merge the files.
 ///
 /// If no output file was specified it will write into
 /// the file "FileMerger.root" in the working directory. Returns true
@@ -378,6 +404,7 @@ Bool_t TFileMerger::MergeRecursive(TDirectory *target, TList *sourcelist, Int_t 
    ((THashList*)target->GetListOfKeys())->Rehash(nguess);
 
    TFileMergeInfo info(target);
+   info.fIOFeatures = fIOFeatures;
    info.fOptions = fMergeOptions;
    if (fFastMethod && ((type&kKeepCompression) || !fCompressionChange) ) {
       info.fOptions.Append(" fast");
@@ -405,7 +432,7 @@ Bool_t TFileMerger::MergeRecursive(TDirectory *target, TList *sourcelist, Int_t 
          while ( (key = (TKey*)nextkey())) {
 
             // Keep only the highest cycle number for each key for mergeable objects. They are stored
-            // in the (hash) list onsecutively and in decreasing order of cycles, so we can continue
+            // in the (hash) list consecutively and in decreasing order of cycles, so we can continue
             // until the name changes. We flag the case here and we act consequently later.
             Bool_t alreadyseen = (oldkeyname == key->GetName()) ? kTRUE : kFALSE;
 
@@ -788,12 +815,12 @@ Bool_t TFileMerger::PartialMerge(Int_t in_type)
    }
 
    // Special treament for the single file case ...
-   if ((fFileList->GetEntries() == 1) && !fExcessFiles->GetEntries() &&
+   if ((fFileList.GetEntries() == 1) && !fExcessFiles.GetEntries() &&
       !(in_type & kIncremental) && !fCompressionChange && !fExplicitCompLevel) {
       fOutputFile->Close();
       SafeDelete(fOutputFile);
 
-      TFile *file = (TFile *) fFileList->First();
+      TFile *file = (TFile *) fFileList.First();
       if (!file || (file && file->IsZombie())) {
          Error("PartialMerge", "one-file case: problem attaching to file");
          return kFALSE;
@@ -807,12 +834,12 @@ Bool_t TFileMerger::PartialMerge(Int_t in_type)
       if (file->TestBit(kCanDelete)) file->Close();
 
       // Remove the temporary file
-      if (fLocal) {
+      if (fLocal && !file->InheritsFrom(TMemFile::Class())) {
          TUrl u(file->GetPath(), kTRUE);
          if (gSystem->Unlink(u.GetFile()) != 0)
             Warning("PartialMerge", "problems removing temporary local file '%s'", u.GetFile());
       }
-      fFileList->Clear();
+      fFileList.Clear();
       return result;
    }
 
@@ -822,31 +849,31 @@ Bool_t TFileMerger::PartialMerge(Int_t in_type)
 
    Bool_t result = kTRUE;
    Int_t type = in_type;
-   while (result && fFileList->GetEntries()>0) {
-      result = MergeRecursive(fOutputFile, fFileList, type);
+   while (result && fFileList.GetEntries()>0) {
+      result = MergeRecursive(fOutputFile, &fFileList, type);
 
       // Remove local copies if there are any
-      TIter next(fFileList);
+      TIter next(&fFileList);
       TFile *file;
       while ((file = (TFile*) next())) {
          // close the files
          if (file->TestBit(kCanDelete)) file->Close();
          // remove the temporary files
-         if(fLocal) {
+         if(fLocal && !file->InheritsFrom(TMemFile::Class())) {
             TString p(file->GetPath());
             // coverity[unchecked_value] Index is return a value with range or NPos to select the whole name.
             p = p(0, p.Index(':',0));
             gSystem->Unlink(p);
          }
       }
-      fFileList->Clear();
-      if (fExcessFiles->GetEntries() > 0) {
+      fFileList.Clear();
+      if (result && fExcessFiles.GetEntries() > 0) {
          // We merge the first set of files in the output,
          // we now need to open the next set and make
          // sure we accumulate into the output, so we
          // switch to incremental merging (if not already set)
          type = type | kIncremental;
-         OpenExcessFiles();
+         result = OpenExcessFiles();
       }
    }
    if (!result) {
@@ -876,10 +903,10 @@ Bool_t TFileMerger::PartialMerge(Int_t in_type)
 Bool_t TFileMerger::OpenExcessFiles()
 {
    if (fPrintLevel > 0) {
-      Printf("%s Opening the next %d files",fMsgPrefix.Data(),TMath::Min(fExcessFiles->GetEntries(),(fMaxOpenedFiles-1)));
+      Printf("%s Opening the next %d files", fMsgPrefix.Data(), TMath::Min(fExcessFiles.GetEntries(), fMaxOpenedFiles - 1));
    }
    Int_t nfiles = 0;
-   TIter next(fExcessFiles);
+   TIter next(&fExcessFiles);
    TObjString *url = 0;
    TString localcopy;
    // We want gDirectory untouched by anything going on here
@@ -909,9 +936,9 @@ Bool_t TFileMerger::OpenExcessFiles()
          if (fOutputFile && fOutputFile->GetCompressionLevel() != newfile->GetCompressionLevel()) fCompressionChange = kTRUE;
 
          newfile->SetBit(kCanDelete);
-         fFileList->Add(newfile);
+         fFileList.Add(newfile);
          ++nfiles;
-         fExcessFiles->Remove(url);
+         fExcessFiles.Remove(url);
       }
    }
    return kTRUE;
@@ -929,7 +956,7 @@ void TFileMerger::RecursiveRemove(TObject *obj)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set a limit to the number file that TFileMerger will opened at one time.
+/// Set a limit to the number of files that TFileMerger will open simultaneously.
 ///
 /// If the request is higher than the system limit, we reset it to the system limit.
 /// If the request is less than two, we reset it to 2 (one for the output file and one for the input file).

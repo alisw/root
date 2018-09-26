@@ -23,27 +23,13 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_RRemoteProtocol
 #include "RRemoteProtocol.h"
-#endif
-#ifndef ROOT_TApplication
 #include "TApplication.h"
-#endif
-#ifndef ROOT_TMD5
 #include "TMD5.h"
-#endif
-#ifndef ROOT_TUrl
 #include "TUrl.h"
-#endif
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TMessage
 #include "TMessage.h"
-#endif
-#ifndef ROOT_TSysEvtHandler
 #include "TSysEvtHandler.h"
-#endif
 
 
 class THashList;
@@ -57,13 +43,13 @@ class TApplicationRemote : public TApplication {
 
 public:
    enum ESendFileOpt {
-      kAscii            = 0x0,
-      kBinary           = 0x1,
-      kForce            = 0x2
+      kAscii  = 0x0,
+      kBinary = 0x1,
+      kForce  = 0x2
    };
    // TApplication specific bits
    enum EStatusBits {
-      kCollecting       = BIT(16)   // TRUE while collecting from server
+      kCollecting = BIT(17)   // TRUE while collecting from server
    };
 
 private:

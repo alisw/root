@@ -24,6 +24,13 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::DataSetInfo
+\ingroup TMVA
+
+Class that contains all the data information.
+
+*/
+
 #include <vector>
 
 #include "TEventList.h"
@@ -38,24 +45,12 @@
 #include "TROOT.h"
 #include "TObjString.h"
 
-#ifndef ROOT_TMVA_MsgLogger
 #include "TMVA/MsgLogger.h"
-#endif
-#ifndef ROOT_TMVA_Tools
 #include "TMVA/Tools.h"
-#endif
-#ifndef ROOT_TMVA_DataSet
 #include "TMVA/DataSet.h"
-#endif
-#ifndef ROOT_TMVA_DataSetInfo
 #include "TMVA/DataSetInfo.h"
-#endif
-#ifndef ROOT_TMVA_DataSetManager
 #include "TMVA/DataSetManager.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
 
 #include "TMVA/Types.h"
 #include "TMVA/VariableInfo.h"
@@ -93,7 +88,7 @@ TMVA::DataSetInfo::DataSetInfo(const TString& name)
 TMVA::DataSetInfo::~DataSetInfo()
 {
    ClearDataSet();
-   
+
    for(UInt_t i=0, iEnd = fClasses.size(); i<iEnd; ++i) {
       delete fClasses[i];
    }
@@ -105,10 +100,12 @@ TMVA::DataSetInfo::~DataSetInfo()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TMVA::DataSetInfo::ClearDataSet() const 
+void TMVA::DataSetInfo::ClearDataSet() const
 {
    if(fDataSet!=0) { delete fDataSet; fDataSet=0; }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 void
 TMVA::DataSetInfo::SetMsgType( EMsgType t ) const
@@ -118,16 +115,21 @@ TMVA::DataSetInfo::SetMsgType( EMsgType t ) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMVA::ClassInfo* TMVA::DataSetInfo::AddClass( const TString& className ) 
+TMVA::ClassInfo* TMVA::DataSetInfo::AddClass( const TString& className )
 {
    ClassInfo* theClass = GetClassInfo(className);
    if (theClass) return theClass;
 
+
    fClasses.push_back( new ClassInfo(className) );
    fClasses.back()->SetNumber(fClasses.size()-1);
 
-   Log() << kINFO << Form("Dataset[%s] : ",fName.Data()) << "Added class \"" << className << "\"\t with internal class number " 
-         << fClasses.back()->GetNumber() << Endl;
+   //Log() << kHEADER << Endl;
+
+   Log() << kHEADER << Form("[%s] : ",fName.Data()) << "Added class \"" << className << "\""<< Endl;
+
+   Log() << kDEBUG <<"\t with internal class number " << fClasses.back()->GetNumber() << Endl;
+
 
    if (className == "Signal") fSignalClass = fClasses.size()-1;  // store the signal class index ( for comparison reasons )
 
@@ -136,9 +138,9 @@ TMVA::ClassInfo* TMVA::DataSetInfo::AddClass( const TString& className )
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMVA::ClassInfo* TMVA::DataSetInfo::GetClassInfo( const TString& name ) const 
+TMVA::ClassInfo* TMVA::DataSetInfo::GetClassInfo( const TString& name ) const
 {
-   for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); it++) {
+   for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); ++it) {
       if ((*it)->GetName() == name) return (*it);
    }
    return 0;
@@ -146,7 +148,7 @@ TMVA::ClassInfo* TMVA::DataSetInfo::GetClassInfo( const TString& name ) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMVA::ClassInfo* TMVA::DataSetInfo::GetClassInfo( Int_t cls ) const 
+TMVA::ClassInfo* TMVA::DataSetInfo::GetClassInfo( Int_t cls ) const
 {
    try {
       return fClasses.at(cls);
@@ -158,7 +160,7 @@ TMVA::ClassInfo* TMVA::DataSetInfo::GetClassInfo( Int_t cls ) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TMVA::DataSetInfo::PrintClasses() const 
+void TMVA::DataSetInfo::PrintClasses() const
 {
    for (UInt_t cls = 0; cls < GetNClasses() ; cls++) {
       Log() << kINFO << Form("Dataset[%s] : ",fName.Data()) << "Class index : " << cls << "  name : " << GetClassInfo(cls)->GetName() << Endl;
@@ -167,17 +169,17 @@ void TMVA::DataSetInfo::PrintClasses() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Bool_t TMVA::DataSetInfo::IsSignal( const TMVA::Event* ev ) const 
+Bool_t TMVA::DataSetInfo::IsSignal( const TMVA::Event* ev ) const
 {
-   return (ev->GetClass()  == fSignalClass); 
+   return (ev->GetClass()  == fSignalClass);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<Float_t>*  TMVA::DataSetInfo::GetTargetsForMulticlass( const TMVA::Event* ev ) 
+std::vector<Float_t>*  TMVA::DataSetInfo::GetTargetsForMulticlass( const TMVA::Event* ev )
 {
    if( !fTargetsForMulticlass ) fTargetsForMulticlass = new std::vector<Float_t>( GetNClasses() );
-//   fTargetsForMulticlass->resize( GetNClasses() );
+   //   fTargetsForMulticlass->resize( GetNClasses() );
    fTargetsForMulticlass->assign( GetNClasses(), 0.0 );
    fTargetsForMulticlass->at( ev->GetClass() ) = 1.0;
    return fTargetsForMulticlass;
@@ -189,7 +191,7 @@ std::vector<Float_t>*  TMVA::DataSetInfo::GetTargetsForMulticlass( const TMVA::E
 Bool_t TMVA::DataSetInfo::HasCuts() const
 {
    Bool_t hasCuts = kFALSE;
-   for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); it++) {
+   for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); ++it) {
       if( TString((*it)->GetCut()) != TString("") ) hasCuts = kTRUE;
    }
    return hasCuts;
@@ -294,14 +296,14 @@ TMVA::VariableInfo& TMVA::DataSetInfo::AddSpectator( const VariableInfo& varInfo
 
 Int_t TMVA::DataSetInfo::FindVarIndex(const TString& var) const
 {
-   for (UInt_t ivar=0; ivar<GetNVariables(); ivar++) 
+   for (UInt_t ivar=0; ivar<GetNVariables(); ivar++)
       if (var == GetVariableInfo(ivar).GetInternalName()) return ivar;
-   
-   for (UInt_t ivar=0; ivar<GetNVariables(); ivar++) 
+
+   for (UInt_t ivar=0; ivar<GetNVariables(); ivar++)
       Log() << kINFO  << Form("Dataset[%s] : ",fName.Data()) <<  GetVariableInfo(ivar).GetInternalName() << Endl;
-   
+
    Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << "<FindVarIndex> Variable \'" << var << "\' not found." << Endl;
- 
+
    return -1;
 }
 
@@ -310,7 +312,7 @@ Int_t TMVA::DataSetInfo::FindVarIndex(const TString& var) const
 /// if class name is specified, set only for this class
 /// if class name is unknown, register new class with this name
 
-void TMVA::DataSetInfo::SetWeightExpression( const TString& expr, const TString& className ) 
+void TMVA::DataSetInfo::SetWeightExpression( const TString& expr, const TString& className )
 {
    if (className != "") {
       TMVA::ClassInfo* ci = AddClass(className);
@@ -321,7 +323,7 @@ void TMVA::DataSetInfo::SetWeightExpression( const TString& expr, const TString&
       if (fClasses.empty()) {
          Log() << kWARNING << Form("Dataset[%s] : ",fName.Data()) << "No classes registered yet, cannot specify weight expression!" << Endl;
       }
-      for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); it++) {
+      for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); ++it) {
          (*it)->SetWeight( expr );
       }
    }
@@ -329,18 +331,18 @@ void TMVA::DataSetInfo::SetWeightExpression( const TString& expr, const TString&
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TMVA::DataSetInfo::SetCorrelationMatrix( const TString& className, TMatrixD* matrix ) 
+void TMVA::DataSetInfo::SetCorrelationMatrix( const TString& className, TMatrixD* matrix )
 {
-   GetClassInfo(className)->SetCorrelationMatrix(matrix); 
+   GetClassInfo(className)->SetCorrelationMatrix(matrix);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// set the cut for the classes
 
-void TMVA::DataSetInfo::SetCut( const TCut& cut, const TString& className ) 
+void TMVA::DataSetInfo::SetCut( const TCut& cut, const TString& className )
 {
    if (className == "") {  // if no className has been given set the cut for all the classes
-      for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); it++) {
+      for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); ++it) {
          (*it)->SetCut( cut );
       }
    }
@@ -353,10 +355,10 @@ void TMVA::DataSetInfo::SetCut( const TCut& cut, const TString& className )
 ////////////////////////////////////////////////////////////////////////////////
 /// set the cut for the classes
 
-void TMVA::DataSetInfo::AddCut( const TCut& cut, const TString& className ) 
+void TMVA::DataSetInfo::AddCut( const TCut& cut, const TString& className )
 {
    if (className == "") {  // if no className has been given set the cut for all the classes
-      for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); it++) {
+      for (std::vector<ClassInfo*>::iterator it = fClasses.begin(); it < fClasses.end(); ++it) {
          const TCut& oldCut = (*it)->GetCut();
          (*it)->SetCut( oldCut+cut );
       }
@@ -374,18 +376,20 @@ std::vector<TString> TMVA::DataSetInfo::GetListOfVariables() const
 {
    std::vector<TString> vNames;
    std::vector<TMVA::VariableInfo>::const_iterator viIt = GetVariableInfos().begin();
-   for(;viIt != GetVariableInfos().end(); viIt++) vNames.push_back( (*viIt).GetExpression() );
+   for(;viIt != GetVariableInfos().end(); ++viIt) vNames.push_back( (*viIt).GetExpression() );
 
    return vNames;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// calculates the correlation matrices for signal and background, 
+/// calculates the correlation matrices for signal and background,
 /// prints them to standard output, and fills 2D histograms
 
 void TMVA::DataSetInfo::PrintCorrelationMatrix( const TString& className )
 {
-   Log() << kINFO << Form("Dataset[%s] : ",fName.Data()) << "Correlation matrix (" << className << "):" << Endl;
+
+   Log() << kHEADER //<< Form("Dataset[%s] : ",fName.Data())
+    << "Correlation matrix (" << className << "):" << Endl;
    gTools().FormattedOutput( *CorrelationMatrix( className ), GetListOfVariables(), Log() );
 }
 
@@ -396,10 +400,10 @@ TH2* TMVA::DataSetInfo::CreateCorrelationMatrixHist( const TMatrixD* m,
                                                      const TString&  hTitle ) const
 {
    if (m==0) return 0;
-   
+
    const UInt_t nvar = GetNVariables();
 
-   // workaround till the TMatrix templates are comonly used
+   // workaround till the TMatrix templates are commonly used
    // this keeps backward compatibility
    TMatrixF* tm = new TMatrixF( nvar, nvar );
    for (UInt_t ivar=0; ivar<nvar; ivar++) {
@@ -415,7 +419,7 @@ TH2* TMVA::DataSetInfo::CreateCorrelationMatrixHist( const TMatrixD* m,
       h2->GetXaxis()->SetBinLabel( ivar+1, GetVariableInfo(ivar).GetTitle() );
       h2->GetYaxis()->SetBinLabel( ivar+1, GetVariableInfo(ivar).GetTitle() );
    }
-   
+
    // present in percent, and round off digits
    // also, use absolute value of correlation coefficient (ignore sign)
    h2->Scale( 100.0  );
@@ -424,7 +428,7 @@ TH2* TMVA::DataSetInfo::CreateCorrelationMatrixHist( const TMatrixD* m,
          h2->SetBinContent( ibin, jbin, Int_t(h2->GetBinContent( ibin, jbin )) );
       }
    }
-   
+
    // style settings
    const Float_t labelSize = 0.055;
    h2->SetStats( 0 );
@@ -459,7 +463,7 @@ TMVA::DataSet* TMVA::DataSetInfo::GetDataSet() const
 {
    if (fDataSet==0 || fNeedsRebuilding) {
       if(fDataSet!=0) ClearDataSet();
-//      fDataSet = DataSetManager::Instance().CreateDataSet(GetName()); //DSMTEST replaced by following lines
+      //      fDataSet = DataSetManager::Instance().CreateDataSet(GetName()); //DSMTEST replaced by following lines
       if( !fDataSetManager )
          Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << "DataSetManager has not been set in DataSetInfo (GetDataSet() )." << Endl;
       fDataSet = fDataSetManager->CreateDataSet(GetName());
@@ -494,21 +498,55 @@ Int_t TMVA::DataSetInfo::GetClassNameMaxLength() const
    return maxL;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+Int_t TMVA::DataSetInfo::GetVariableNameMaxLength() const
+{
+   Int_t maxL = 0;
+   for (UInt_t i = 0; i < GetNVariables(); i++) {
+      if (TString(GetVariableInfo(i).GetExpression()).Length() > maxL) maxL = TString(GetVariableInfo(i).GetExpression()).Length();
+   }
+
+   return maxL;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+Int_t TMVA::DataSetInfo::GetTargetNameMaxLength() const
+{
+   Int_t maxL = 0;
+   for (UInt_t i = 0; i < GetNTargets(); i++) {
+      if (TString(GetTargetInfo(i).GetExpression()).Length() > maxL) maxL = TString(GetTargetInfo(i).GetExpression()).Length();
+   }
+
+   return maxL;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 Double_t TMVA::DataSetInfo::GetTrainingSumSignalWeights(){
-   if (fTrainingSumSignalWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of training signal event weights which is not initicalised yet" << Endl;
+   if (fTrainingSumSignalWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of training signal event weights which is not initialized yet" << Endl;
    return fTrainingSumSignalWeights;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
 Double_t TMVA::DataSetInfo::GetTrainingSumBackgrWeights(){
-   if (fTrainingSumBackgrWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of training backgr event weights which is not initicalised yet" << Endl;
+   if (fTrainingSumBackgrWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of training backgr event weights which is not initialized yet" << Endl;
    return fTrainingSumBackgrWeights;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
 Double_t TMVA::DataSetInfo::GetTestingSumSignalWeights (){
-   if (fTestingSumSignalWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of testing signal event weights which is not initicalised yet" << Endl;
+   if (fTestingSumSignalWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of testing signal event weights which is not initialized yet" << Endl;
    return fTestingSumSignalWeights ;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
 Double_t TMVA::DataSetInfo::GetTestingSumBackgrWeights (){
-   if (fTestingSumBackgrWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of testing backgr event weights which is not initicalised yet" << Endl;
+   if (fTestingSumBackgrWeights<0) Log() << kFATAL << Form("Dataset[%s] : ",fName.Data()) << " asking for the sum of testing backgr event weights which is not initialized yet" << Endl;
    return fTestingSumBackgrWeights ;
 }
 

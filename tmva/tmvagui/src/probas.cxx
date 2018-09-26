@@ -1,35 +1,18 @@
+#include "TCanvas.h"
+#include "TFile.h"
+#include "TH2F.h"
+#include "TIterator.h"
+#include "TKey.h"
+#include "TLegend.h"
+#include "TList.h"
 #include "TMVA/probas.h"
+#include "TMVA/tmvaglob.h"
+#include "TString.h"
+
 #include <iostream>
-#include <iomanip>
+
 using std::cout;
 using std::endl;
-
-
-
-#include "RQ_OBJECT.h"
-
-#include "TH1.h"
-#include "TROOT.h"
-#include "TList.h"
-#include "TIterator.h"
-#include "TStyle.h"
-#include "TPad.h"
-#include "TCanvas.h"
-#include "TLatex.h"
-#include "TLegend.h"
-#include "TLine.h"
-#include "TH2.h"
-#include "TFormula.h"
-#include "TFile.h"
-#include "TApplication.h"
-#include "TKey.h"
-#include "TClass.h"
-#include "TGaxis.h"
-
-#include "TGWindow.h"
-#include "TGButton.h"
-#include "TGLabel.h"
-#include "TGNumberEntry.h"
 
 // this macro plots the MVA probability distributions (Signal and
 // Background overlayed) of different MVA methods run in TMVA
@@ -124,7 +107,7 @@ void TMVA::probas(TString dataset, TString fin , Bool_t useTMVAStyle  )
                for (int i=0; i<= 5; i++) {
                   TString hspline = hnameS + Form("_smoothed_hist_from_spline%i",i);
                   sigF = (TH1*)instDir->Get( hspline );
-  	    
+            
                   if (sigF) {
                      bkgF = (TH1*)instDir->Get( hspline.ReplaceAll("_tr_S","_tr_B") );
                      break;
@@ -144,7 +127,7 @@ void TMVA::probas(TString dataset, TString fin , Bool_t useTMVAStyle  )
                   return;
                }
                else  {
-                    // remove the signal suffix
+                  // remove the signal suffix
 
                   // check that exist
                   if (NULL != sigF && NULL != bkgF && NULL!=sig && NULL!=bgd) {

@@ -41,8 +41,6 @@
 
 #include "Riostream.h"
 #include <iomanip>
-#include <fstream>
-#include <list>
 #include "TClass.h"
 #include "RooErrorHandler.h"
 #include "RooArgSet.h"
@@ -62,7 +60,7 @@ using namespace std ;
 char* operator+( streampos&, char* );
 #endif
 
-ClassImp(RooArgSet)
+ClassImp(RooArgSet);
   ;
 
 char* RooArgSet::_poolBegin = 0 ;
@@ -86,7 +84,7 @@ void RooArgSet::cleanup()
   while(iter!=_memPoolList.end()) {
     free(iter->_base) ;
     iter->_base=0 ;
-    iter++ ;
+    ++iter ;
   }
   _memPoolList.clear() ;
 }
@@ -136,6 +134,7 @@ void* RooArgSet::operator new (size_t bytes)
     }
     
     void* mem = malloc(POOLSIZE) ;
+    memset(mem, TStorage::kObjectAllocMemValue, POOLSIZE);
 
     _poolBegin = (char*)mem ;
     // Reserve space for pool counter at head of pool
@@ -1036,6 +1035,3 @@ Bool_t RooArgSet::isInRange(const char* rangeSpec)
   delete iter ;
   return kFALSE ;
 }
-
-
-

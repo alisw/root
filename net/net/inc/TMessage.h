@@ -22,15 +22,9 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TBufferFile
 #include "TBufferFile.h"
-#endif
-#ifndef ROOT_MessageTypes
 #include "MessageTypes.h"
-#endif
-#ifndef ROOT_TBits
 #include "TBits.h"
-#endif
 
 class TList;
 class TVirtualStreamerInfo;
@@ -87,13 +81,12 @@ public:
    Int_t    GetCompressionLevel() const;
    Int_t    GetCompressionSettings() const;
    void     SetCompressionAlgorithm(Int_t algorithm=0);
-   void     SetCompressionLevel(Int_t level=1);
-   void     SetCompressionSettings(Int_t settings=1);
+   void     SetCompressionLevel(Int_t level=4);
+   void     SetCompressionSettings(Int_t settings=4);
    Int_t    Compress();
    Int_t    Uncompress();
    char    *CompBuffer() const { return fBufComp; }
    Int_t    CompLength() const { return (Int_t)(fBufCompCur - fBufComp); }
-   void     WriteObject(const TObject *obj);
    UShort_t WriteProcessID(TProcessID *pid);
 
    static void   EnableSchemaEvolutionForAll(Bool_t enable = kTRUE);

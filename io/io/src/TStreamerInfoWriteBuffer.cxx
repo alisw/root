@@ -169,9 +169,9 @@ Int_t TStreamerInfo::WriteBufferAux(TBuffer &b, const T &arr,
             // next element (the one for the rule itself).
             if (aElement->TestBit(TStreamerElement::kRepeat)) continue;
             ioffset = eoffset+compinfo[i]->fOffset;
+            continue;
          }
       }
-
 
       if (gDebug > 1) {
          printf("WriteBuffer, class:%s, name=%s, fType[%d]=%d, %s, "
@@ -397,16 +397,8 @@ Int_t TStreamerInfo::WriteBufferAux(TBuffer &b, const T &arr,
 
          // char*
          case TStreamerInfo::kCharStar: { DOLOOP {
-            Int_t nch = 0;
             char **f = (char**)(arr[k]+ioffset);
-            char *af = *f;
-            if (af) {
-               nch = strlen(af);
-               b  << nch;
-               b.WriteFastArray(af,nch);
-            } else {
-               b << nch;
-            }
+            b.WriteCharStar(*f);
          }
          continue; }
 

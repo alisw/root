@@ -18,7 +18,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include "RConfigure.h"
-#include "RConfig.h"
+#include <ROOT/RConfig.h>
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -2031,7 +2031,7 @@ int RpdCheckAuthAllow(int Sec, const char *Host)
                   }
                   struct passwd *pw = getpwnam(usr);
                   if (pw != 0)
-                     SPrintf(gUserAllow[mth[jm]], gUserIgnLen[mth[jm]], "%s %d",
+                     SPrintf(gUserAllow[mth[jm]], gUserAlwLen[mth[jm]], "%s %d",
                              gUserAllow[mth[jm]], (int)pw->pw_uid);
                }
                pd = pd2;
@@ -3933,7 +3933,7 @@ int RpdGlobusAuth(const char *sstr)
    int GlbTokenStatus = 0;
    char *GlbClientName;
    FILE *FILE_SockFd;
-   char *gridmap_default = "/etc/grid-security/grid-mapfile";
+   const char *gridmap_default = "/etc/grid-security/grid-mapfile";
    EMessageTypes kind;
    int lSubj, offset = -1;
    char *user = 0;
@@ -5200,7 +5200,7 @@ int RpdSecureSend(char *str)
    int nsen = -1;
 
    if (gRSAKey == 1) {
-      strncpy(buftmp, str, slen);
+      strncpy(buftmp, str, std::min( slen, kMAXSECBUF));
       buftmp[slen] = 0;
       ttmp = rsa_encode(buftmp, slen, gRSA_n, gRSA_d);
    } else if (gRSAKey == 2) {

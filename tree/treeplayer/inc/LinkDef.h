@@ -26,8 +26,9 @@
 #pragma link C++ class TTreePerfStats+;
 #pragma link C++ class TTreeReader+;
 #pragma link C++ class TTreeTableInterface;
-
-#pragma link C++ namespace ROOT;
+#pragma link C++ class TSimpleAnalysis+;
+#pragma link C++ class TMPWorkerTree+;
+#pragma link C++ class ROOT::TTreeProcessorMT-;
 
 #pragma link C++ class ROOT::Internal::TBranchProxyDirector+;
 #pragma link C++ class ROOT::Detail::TBranchProxy+;
@@ -102,4 +103,5 @@
 #pragma link C++ class ROOT::Internal::TNamedBranchProxy+;
 
 #endif
+
 

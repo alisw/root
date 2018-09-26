@@ -14,6 +14,7 @@
 #include "TStyle.h"
 #include "TLatex.h"
 #include "TLine.h"
+#include "TPolyLine.h"
 #include "TBox.h"
 #include "TMarker.h"
 #include "TLegend.h"
@@ -24,9 +25,10 @@
 #include "TLegendEntry.h"
 #include "Riostream.h"
 #include "TMultiGraph.h"
+#include "TGraph.h"
 #include "THStack.h"
 
-ClassImp(TLegend)
+ClassImp(TLegend);
 
 /** \class TLegend
 \ingroup BasicGraphics
@@ -51,16 +53,16 @@ name is found, the corresponding object is added in the legend using its pointer
 
 Begin_Macro(source)
 {
-   TCanvas *c1 = new TCanvas("c1","c1",600,500);
+   auto c1 = new TCanvas("c1","c1",600,500);
    gStyle->SetOptStat(0);
 
-   TH1F *h1 = new TH1F("h1","TLegend Example",200,-10,10);
+   auto h1 = new TH1F("h1","TLegend Example",200,-10,10);
    h1->FillRandom("gaus",30000);
    h1->SetFillColor(kGreen);
    h1->SetFillStyle(3003);
    h1->Draw();
 
-   TF1 *f1=new TF1("f1","1000*TMath::Abs(sin(x)/x)",-10,10);
+   auto f1=new TF1("f1","1000*TMath::Abs(sin(x)/x)",-10,10);
    f1->SetLineColor(kBlue);
    f1->SetLineWidth(4);
    f1->Draw("same");
@@ -74,7 +76,7 @@ Begin_Macro(source)
       ex[i] = 1.0;
       ey[i] = 10.*i;
    }
-   TGraphErrors *gr = new TGraphErrors(n,x,y,ex,ey);
+   auto gr = new TGraphErrors(n,x,y,ex,ey);
    gr->SetName("gr");
    gr->SetLineColor(kRed);
    gr->SetLineWidth(2);
@@ -83,14 +85,12 @@ Begin_Macro(source)
    gr->SetMarkerColor(7);
    gr->Draw("P");
 
-   leg = new TLegend(0.1,0.7,0.48,0.9);
-   leg->SetHeader("The Legend Title");
-   leg->AddEntry(h1,"Histogram filled with random numbers","f");
-   leg->AddEntry("f1","Function abs(#frac{sin(x)}{x})","l");
-   leg->AddEntry("gr","Graph with error bars","lep");
-   leg->Draw();
-
-   return c1;
+   auto legend = new TLegend(0.1,0.7,0.48,0.9);
+   legend->SetHeader("The Legend Title","C"); // option "C" allows to center the header
+   legend->AddEntry(h1,"Histogram filled with random numbers","f");
+   legend->AddEntry("f1","Function abs(#frac{sin(x)}{x})","l");
+   legend->AddEntry("gr","Graph with error bars","lep");
+   legend->Draw();
 }
 End_Macro
 
@@ -102,11 +102,11 @@ text attributes on each line.
 In particular it can be interesting to change the text alignement that way. In
 order to have a base-line vertical alignment instead of a centered one simply do:
 ~~~ {.cpp}
-   leg->SetTextAlign(13);
+   legend->SetTextAlign(13);
 ~~~
 or
 ~~~ {.cpp}
-   leg->SetTextAlign(11);
+   legend->SetTextAlign(11);
 ~~~
 The default value of some `TLegend` attributes can be changed using
 `gStyle`. The default settings are:
@@ -142,19 +142,18 @@ legend.
 
 Begin_Macro(source)
 {
-   TCanvas *c2 = new TCanvas("c2","c2",500,300);
+   auto c2 = new TCanvas("c2","c2",500,300);
 
-   TLegend* leg = new TLegend(0.2, 0.2, .8, .8);
-   TH1* h = new TH1F("", "", 1, 0, 1);
+   auto* legend = new TLegend(0.2, 0.2, .8, .8);
+   auto h = new TH1F("", "", 1, 0, 1);
 
-   leg->AddEntry(h, "Histogram \"h\"", "l");
-   leg->AddEntry((TObject*)0, "", "");
-   leg->AddEntry((TObject*)0, "Some text", "");
-   leg->AddEntry((TObject*)0, "", "");
-   leg->AddEntry(h, "Histogram \"h\" again", "l");
+   legend->AddEntry(h, "Histogram \"h\"", "l");
+   legend->AddEntry((TObject*)0, "", "");
+   legend->AddEntry((TObject*)0, "Some text", "");
+   legend->AddEntry((TObject*)0, "", "");
+   legend->AddEntry(h, "Histogram \"h\" again", "l");
 
-   leg->Draw();
-   return c2;
+   legend->Draw();
 }
 End_Macro
 
@@ -163,28 +162,43 @@ the method `SetNColumns()` like in the following example.
 
 Begin_Macro(source)
 {
-   TCanvas *c3 = new TCanvas("c2","c2",500,300);
+   auto c3 = new TCanvas("c2","c2",500,300);
 
-   TLegend* leg = new TLegend(0.2, 0.2, .8, .8);
-   TH1* h = new TH1F("", "", 1, 0, 1);
+   auto legend = new TLegend(0.2, 0.2, .8, .8);
+   auto h = new TH1F("", "", 1, 0, 1);
 
-   leg-> SetNColumns(2);
+   legend->SetNColumns(2);
 
-   leg->AddEntry(h, "Column 1 line 1", "l");
-   leg->AddEntry(h, "Column 2 line 1", "l");
-   leg->AddEntry(h, "Column 1 line 2", "l");
-   leg->AddEntry(h, "Column 2 line 2", "l");
+   legend->AddEntry(h, "Column 1 line 1", "l");
+   legend->AddEntry(h, "Column 2 line 1", "l");
+   legend->AddEntry(h, "Column 1 line 2", "l");
+   legend->AddEntry(h, "Column 2 line 2", "l");
 
-   leg->Draw();
-   return c3;
+   legend->Draw();
 }
 End_Macro
+
+\since **ROOT version 6.09/03**
+
+The legend can be placed automatically in the current pad in an empty space
+found at painting time.
+
+The following example illustrate this facility. Only the width and height of the
+legend is specified in percentage of the pad size.
+
+Begin_Macro(source)
+../../../tutorials/hist/legendautoplaced.C
+End_Macro
+
 */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
+/// This constructor allows to place automatically the legend with a default
+/// width(0.3) and a default height (0.15) in normalize coordinates.
 
-TLegend::TLegend(): TPave(), TAttText(12,0,1,gStyle->GetLegendFont(),0)
+TLegend::TLegend(): TPave(0.3,0.15,0.3,0.15,4,"brNDC"),
+                    TAttText(12,0,1,gStyle->GetLegendFont(),0)
 {
    fPrimitives = 0;
    SetDefaults();
@@ -196,16 +210,52 @@ TLegend::TLegend(): TPave(), TAttText(12,0,1,gStyle->GetLegendFont(),0)
 /// Normal constructor.
 ///
 /// A TLegend is a Pave with several TLegendEntry(s).
+///
 /// x1,y1,x2,y2 are the coordinates of the Legend in the current pad
 /// (in normalised coordinates by default)
-/// "header" is the title that will be displayed at the top of the legend
-/// it is treated like a regular entry and supports TLatex. The default
+///
+/// `header` is the title displayed at the top of the legend
+/// it is a TLatex string treated like a regular entry. The default
 /// is no header (header = 0).
-/// The options are the same as for TPave Default = "brNDC"
+///
+/// The options are the same as for TPave.
 
 TLegend::TLegend( Double_t x1, Double_t y1,Double_t x2, Double_t y2,
                   const char *header, Option_t *option)
         :TPave(x1,y1,x2,y2,4,option), TAttText(12,0,1,gStyle->GetLegendFont(),0)
+{
+   fPrimitives = new TList;
+   if ( header && strlen(header) > 0) {
+      TLegendEntry *headerEntry = new TLegendEntry( 0, header, "h" );
+      headerEntry->SetTextAlign(0);
+      headerEntry->SetTextAngle(0);
+      headerEntry->SetTextColor(0);
+      headerEntry->SetTextFont(gStyle->GetLegendFont());
+      headerEntry->SetTextSize(0);
+      fPrimitives->AddFirst(headerEntry);
+   }
+   SetDefaults();
+   SetBorderSize(gStyle->GetLegendBorderSize());
+   SetFillColor(gStyle->GetLegendFillColor());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Constructor with automatic placement.
+///
+/// A TLegend is a Pave with several TLegendEntry(s).
+///
+/// This constructor doesn't define the legend position. `w` and `h` are the
+/// width and height of the legend in percentage of the current pad size.
+/// The position will be automatically defined at painting time.
+///
+/// `header` is the title displayed at the top of the legend
+/// it is a TLatex string treated like a regular entry. The default
+/// is no header (header = 0).
+///
+/// The options are the same as for TPave.
+
+TLegend::TLegend( Double_t w, Double_t h, const char *header, Option_t *option)
+        :TPave(w,h,w,h,4,option), TAttText(12,0,1,gStyle->GetLegendFont(),0)
 {
    fPrimitives = new TList;
    if ( header && strlen(header) > 0) {
@@ -507,6 +557,21 @@ void TLegend::InsertEntry( const char* objectName, const char* label, Option_t* 
 
 void TLegend::Paint( Option_t* option )
 {
+   // The legend need to be placed automatically in some empty space
+   if (fX1 == fX2 && fY1 == fY2) {
+      if (gPad->PlaceBox(this, fX1, fY1, fX1, fY1)) {
+         fY2 = fY2+fY1;
+         fX2 = fX2+fX1;
+      } else {
+         Warning("Paint", "Legend to large to be automatically placed. A default position is used");
+         fX1 = 0.5;
+         fY1 = 0.67;
+         fX2 = 0.88;
+         fY2 = 0.88;
+      }
+   }
+
+   // Paint the Legend
    TPave::ConvertNDCtoPad();
    TPave::PaintPave(fX1,fY1,fX2,fY2,GetBorderSize(),option);
    PaintPrimitives();
@@ -738,6 +803,21 @@ void TLegend::PaintPrimitives()
 
       TObject *eobj = entry->GetObject();
 
+      // depending on the object drawing option, the endcaps for error
+      // bar are drawn differently.
+      Int_t endcaps  = 0; // no endcaps.
+      if (eobj) { // eobj == nullptr for the legend header
+         TString eobjopt = eobj->GetDrawOption();
+         eobjopt.ToLower();
+         if (eobjopt.Contains("e1") && eobj->InheritsFrom(TH1::Class())) endcaps = 1; // a bar
+         if (eobj->InheritsFrom(TGraph::Class())) {
+            endcaps = 1; // a bar, default for TGraph
+            if (eobjopt.Contains("z"))  endcaps = 0; // no endcaps.
+            if (eobjopt.Contains(">"))  endcaps = 2; // empty arrow.
+            if (eobjopt.Contains("|>")) endcaps = 3; // filled arrow.
+         }
+      }
+
       // Draw fill pattern (in a box)
 
       if ( opt.Contains("f")) {
@@ -763,6 +843,20 @@ void TLegend::PaintPrimitives()
          gPad->PaintFillArea(4,xf,yf);
       }
 
+      // Get Polymarker size
+
+      Double_t symbolsize = 0.;
+      TMarker entrymarker( xsym, ysym, 0 );
+
+      if ( opt.Contains("p")) {
+         if (eobj && eobj->InheritsFrom(TAttMarker::Class())) {
+            dynamic_cast<TAttMarker*>(eobj)->Copy(*entry);
+         }
+         entrymarker.SetNDC();
+         entry->TAttMarker::Copy(entrymarker);
+         if (entrymarker.GetMarkerStyle() != 1 ) symbolsize = entrymarker.GetMarkerSize();
+      }
+
       // Draw line
 
       if ( opt.Contains("l") || opt.Contains("f")) {
@@ -782,18 +876,72 @@ void TLegend::PaintPrimitives()
             if ( boxwidth > margin ) boxwidth = margin;
 
             entryline.PaintLineNDC( xsym - boxw, ysym + yspace*0.35,
-                                 xsym + boxw, ysym + yspace*0.35);
+                                    xsym + boxw, ysym + yspace*0.35);
             entryline.PaintLineNDC( xsym - boxw, ysym - yspace*0.35,
-                                 xsym + boxw, ysym - yspace*0.35);
+                                    xsym + boxw, ysym - yspace*0.35);
             entryline.PaintLineNDC( xsym + boxw, ysym - yspace*0.35,
-                                 xsym + boxw, ysym + yspace*0.35);
+                                    xsym + boxw, ysym + yspace*0.35);
             entryline.PaintLineNDC( xsym - boxw, ysym - yspace*0.35,
-                                 xsym - boxw, ysym + yspace*0.35);
+                                    xsym - boxw, ysym + yspace*0.35);
          } else {
             entryline.Paint();
             if (opt.Contains("e")) {
-               entryline.PaintLineNDC( xsym, ysym - yspace*0.30,
-                                       xsym, ysym + yspace*0.30);
+               if ( !opt.Contains("p")) {
+                  entryline.PaintLineNDC( xsym, ysym - yspace*0.30,
+                                          xsym, ysym + yspace*0.30);
+               } else {
+                  Double_t sy  = (fY2NDC-fY1NDC)*((0.5*(gPad->PixeltoY(0) - gPad->PixeltoY(Int_t(symbolsize*8.))))/(fY2-fY1));
+                  TLine entryline1(xsym, ysym + sy, xsym, ysym + yspace*0.30);
+                  entryline1.SetBit(TLine::kLineNDC);
+                  entry->TAttLine::Copy(entryline1);
+                  entryline1.Paint();
+                  TLine entryline2(xsym, ysym - sy, xsym, ysym - yspace*0.30);
+                  entryline2.SetBit(TLine::kLineNDC);
+                  entry->TAttLine::Copy(entryline2);
+                  entryline2.Paint();
+               }
+               Double_t barw = boxw*0.1*gStyle->GetEndErrorSize();
+               if (endcaps == 1) {
+                  TLine entrytop1(xsym-barw, ysym + yspace*0.30, xsym+barw, ysym + yspace*0.30);
+                  entrytop1.SetBit(TLine::kLineNDC);
+                  entry->TAttLine::Copy(entrytop1);
+                  entrytop1.Paint();
+                  TLine entrytop2(xsym-barw, ysym - yspace*0.30, xsym+barw, ysym - yspace*0.30);
+                  entrytop2.SetBit(TLine::kLineNDC);
+                  entry->TAttLine::Copy(entrytop2);
+                  entrytop2.Paint();
+               } else if (endcaps == 2) {
+                  Double_t xe1[3] = {xsym-barw, xsym ,xsym+barw};
+                  Double_t ye1[3] = {ysym+yspace*0.20, ysym + yspace*0.30 ,ysym+yspace*0.20};
+                  TPolyLine ple1(3,xe1,ye1);
+                  ple1.SetBit(TLine::kLineNDC);
+                  entry->TAttLine::Copy(ple1);
+                  ple1.Paint();
+                  Double_t xe2[3] = {xsym-barw, xsym ,xsym+barw};
+                  Double_t ye2[3] = {ysym-yspace*0.20, ysym - yspace*0.30 ,ysym-yspace*0.20};
+                  TPolyLine ple2(3,xe2,ye2);
+                  ple2.SetBit(TLine::kLineNDC);
+                  entry->TAttLine::Copy(ple2);
+               } else if (endcaps == 3) {
+                  Double_t xe1[3] = {xsym-barw, xsym ,xsym+barw};
+                  Double_t ye1[3] = {ysym+yspace*0.20, ysym + yspace*0.30 ,ysym+yspace*0.20};
+                  Double_t xe2[3] = {xsym-barw, xsym ,xsym+barw};
+                  Double_t ye2[3] = {ysym-yspace*0.20, ysym - yspace*0.30 ,ysym-yspace*0.20};
+                  for (Int_t i=0;i<3;i++) {
+                     xe1[i] = gPad->GetX1() + xe1[i]*(gPad->GetX2()-gPad->GetX1());
+                     ye1[i] = gPad->GetY1() + ye1[i]*(gPad->GetY2()-gPad->GetY1());
+                     xe2[i] = gPad->GetX1() + xe2[i]*(gPad->GetX2()-gPad->GetX1());
+                     ye2[i] = gPad->GetY1() + ye2[i]*(gPad->GetY2()-gPad->GetY1());
+                  }
+                  TPolyLine ple1(3,xe1,ye1);
+                  ple1.SetFillColor(entry->GetLineColor());
+                  ple1.SetFillStyle(1001);
+                  ple1.Paint("f");
+                  TPolyLine ple2(3,xe2,ye2);
+                  ple2.SetFillColor(entry->GetLineColor());
+                  ple2.SetFillStyle(1001);
+                  ple2.Paint("f");
+               }
             }
          }
       }
@@ -804,27 +952,71 @@ void TLegend::PaintPrimitives()
          if (eobj && eobj->InheritsFrom(TAttLine::Class())) {
             dynamic_cast<TAttLine*>(eobj)->Copy(*entry);
          }
-         TLine entryline(xsym, ysym - yspace*0.30,
-                         xsym, ysym + yspace*0.30);
-         entryline.SetBit(TLine::kLineNDC);
-         entry->TAttLine::Copy(entryline);
-         entryline.Paint();
+         if ( !opt.Contains("p")) {
+            TLine entryline(xsym, ysym - yspace*0.30,
+                            xsym, ysym + yspace*0.30);
+            entryline.SetBit(TLine::kLineNDC);
+            entry->TAttLine::Copy(entryline);
+            entryline.Paint();
+         } else {
+            Double_t sy  = (fY2NDC-fY1NDC)*((0.5*(gPad->PixeltoY(0) - gPad->PixeltoY(Int_t(symbolsize*8.))))/(fY2-fY1));
+            TLine entryline1(xsym, ysym + sy, xsym, ysym + yspace*0.30);
+            entryline1.SetBit(TLine::kLineNDC);
+            entry->TAttLine::Copy(entryline1);
+            entryline1.Paint();
+            TLine entryline2(xsym, ysym - sy, xsym, ysym - yspace*0.30);
+            entryline2.SetBit(TLine::kLineNDC);
+            entry->TAttLine::Copy(entryline2);
+            entryline2.Paint();
+         }
+         Double_t barw = boxw*0.1*gStyle->GetEndErrorSize();
+         if (endcaps == 1) {
+            TLine entrytop1(xsym-barw, ysym + yspace*0.30, xsym+barw, ysym + yspace*0.30);
+            entrytop1.SetBit(TLine::kLineNDC);
+            entry->TAttLine::Copy(entrytop1);
+            entrytop1.Paint();
+            TLine entrytop2(xsym-barw, ysym - yspace*0.30, xsym+barw, ysym - yspace*0.30);
+            entrytop2.SetBit(TLine::kLineNDC);
+            entry->TAttLine::Copy(entrytop2);
+            entrytop2.Paint();
+         } else if (endcaps == 2) {
+            Double_t xe1[3] = {xsym-barw, xsym ,xsym+barw};
+            Double_t ye1[3] = {ysym+yspace*0.20, ysym + yspace*0.30 ,ysym+yspace*0.20};
+            TPolyLine ple1(3,xe1,ye1);
+            ple1.SetBit(TLine::kLineNDC);
+            entry->TAttLine::Copy(ple1);
+            ple1.Paint();
+            Double_t xe2[3] = {xsym-barw, xsym ,xsym+barw};
+            Double_t ye2[3] = {ysym-yspace*0.20, ysym - yspace*0.30 ,ysym-yspace*0.20};
+            TPolyLine ple2(3,xe2,ye2);
+            ple2.SetBit(TLine::kLineNDC);
+            entry->TAttLine::Copy(ple2);
+            ple2.Paint();
+         } else if (endcaps == 3) {
+            Double_t xe1[3] = {xsym-barw, xsym ,xsym+barw};
+            Double_t ye1[3] = {ysym+yspace*0.20, ysym + yspace*0.30 ,ysym+yspace*0.20};
+            Double_t xe2[3] = {xsym-barw, xsym ,xsym+barw};
+            Double_t ye2[3] = {ysym-yspace*0.20, ysym - yspace*0.30 ,ysym-yspace*0.20};
+            for (Int_t i=0;i<3;i++) {
+               xe1[i] = gPad->GetX1() + xe1[i]*(gPad->GetX2()-gPad->GetX1());
+               ye1[i] = gPad->GetY1() + ye1[i]*(gPad->GetY2()-gPad->GetY1());
+               xe2[i] = gPad->GetX1() + xe2[i]*(gPad->GetX2()-gPad->GetX1());
+               ye2[i] = gPad->GetY1() + ye2[i]*(gPad->GetY2()-gPad->GetY1());
+            }
+            TPolyLine ple1(3,xe1,ye1);
+            ple1.SetFillColor(entry->GetLineColor());
+            ple1.SetFillStyle(1001);
+            ple1.Paint("f");
+            TPolyLine ple2(3,xe2,ye2);
+            ple2.SetFillColor(entry->GetLineColor());
+            ple2.SetFillStyle(1001);
+            ple2.Paint("f");
+         }
       }
 
       // Draw Polymarker
-
-      if ( opt.Contains("p")) {
-
-         if (eobj && eobj->InheritsFrom(TAttMarker::Class())) {
-            dynamic_cast<TAttMarker*>(eobj)->Copy(*entry);
-         }
-         TMarker entrymarker( xsym, ysym, 0 );
-         entrymarker.SetNDC();
-         entry->TAttMarker::Copy(entrymarker);
-         entrymarker.Paint();
-      }
+      if ( opt.Contains("p"))  entrymarker.Paint();
    }
-
    SetTextSize(save_textsize);
    delete [] columnWidths;
 }
@@ -902,22 +1094,32 @@ void TLegend::SetEntryOption( Option_t* option )
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Sets the header, which is the "title" that appears at the top of the legend.
+/// If `option` contains `C`, the title will be centered.
 
-void TLegend::SetHeader( const char *header )
+void TLegend::SetHeader( const char *header, Option_t* option )
 {
+   TString opt;
+
    if ( !fPrimitives ) fPrimitives = new TList;
    TIter next(fPrimitives);
    TLegendEntry *first;   // header is always the first entry
    if ((  first = (TLegendEntry*)next() )) {
-      TString opt = first->GetOption();
+      opt = first->GetOption();
       opt.ToLower();
       if ( opt.Contains("h") ) {
          first->SetLabel(header);
+         opt = option;
+         opt.ToLower();
+         if ( opt.Contains("c") ) first->SetTextAlign(22);
+         else                     first->SetTextAlign(0);
          return;
       }
    }
    first = new TLegendEntry( 0, header, "h" );
-   first->SetTextAlign(0);
+   opt = option;
+   opt.ToLower();
+   if ( opt.Contains("c") ) first->SetTextAlign(22);
+   else                     first->SetTextAlign(0);
    first->SetTextAngle(0);
    first->SetTextColor(0);
    first->SetTextFont(GetTextFont()); // default font is TLegend font for the header

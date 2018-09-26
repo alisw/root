@@ -21,7 +21,7 @@
 #include "TRandom.h"
 #include "TBuffer.h"
 
-ClassImp(TKDTreeBinning)
+ClassImp(TKDTreeBinning);
 
 /**
 \class TKDTreeBinning
@@ -84,11 +84,36 @@ fIsSorted(kFALSE), fIsSortedAsc(kFALSE), fBinsContent(std::vector<UInt_t>()) {
          this->Warning("TKDTreeBinning", "Data is nil. Nothing is built.");
    }
 }
+/// Class's constructor taking the size of the data points, dimension, a data vector and the number
+/// of bins (default = 100). It is reccomended to have the number of bins as an exact divider of
+/// the data size.
+/// The data array must be organized with a stride=1 for the points and = N (the dataSize) for the dimension.
+///
+/// Thus data[] = x1,x2,x3,......xN, y1,y2,y3......yN, z1,z2,...........zN,....
+///
+/// Note that the passed data vector may contains a larger size, in case extra coordinates are associated but not used
+/// in building the kdtree
+/// The size of thedata vector must be at least  dataDim*dataSize
+///
+TKDTreeBinning::TKDTreeBinning(UInt_t dataSize, UInt_t dataDim, const std::vector<double> &data, UInt_t nBins, bool adjustBinEdges)
+: fData(0), fBinMinEdges(std::vector<Double_t>()), fBinMaxEdges(std::vector<Double_t>()), fDataBins((TKDTreeID*)0), fNBins (nBins), fDim(dataDim),
+fDataSize(dataSize), fDataThresholds(std::vector<std::pair<Double_t, Double_t> >(fDim, std::make_pair(0., 0.))),
+fIsSorted(kFALSE), fIsSortedAsc(kFALSE), fBinsContent(std::vector<UInt_t>()) {
+   if (adjustBinEdges) SetBit(kAdjustBinEdges);
+   if (!data.empty()) {
+      SetData(data);
+      SetNBins(nBins);
+   } else {
+      if (fData.empty())
+         this->Warning("TKDTreeBinning", "Data is nil. Nothing is built.");
+   }
+}
 
 /// Default constructor (for I/O) 
 TKDTreeBinning::TKDTreeBinning() :
 //   fData(nullptr),
    fDataBins(nullptr),
+   fNBins (0),
    fDim(0),
    fDataSize(0),
    fIsSorted(kFALSE), fIsSortedAsc(kFALSE) 
@@ -196,6 +221,17 @@ void TKDTreeBinning::SetData(Double_t* data) {
       first = end; 
    }
 }
+void TKDTreeBinning::SetData(const std::vector<double>& data) {
+   // Sets the data and finds minimum and maximum by dimensional coordinate
+   fData = data; 
+   auto first = fData.begin();
+   // find min/max
+   for (UInt_t i = 0; i < fDim; ++i) {
+      auto end = first+fDataSize; 
+      fDataThresholds[i] = std::make_pair(*std::min_element(first, end), *std::max_element(first,end));
+      first = end; 
+   }
+}
 
 void TKDTreeBinning::SetTreeData() {
    // Sets the data for constructing the kD-tree
@@ -205,7 +241,7 @@ void TKDTreeBinning::SetTreeData() {
 
 void TKDTreeBinning::SetBinsContent() {
    // Sets the bins' content
-   fBinsContent.reserve(fNBins);
+   fBinsContent.resize(fNBins);
    for (UInt_t i = 0; i < fNBins; ++i)
       fBinsContent[i] = fDataBins->GetBucketSize();
    if ( fDataSize % fNBins != 0 )

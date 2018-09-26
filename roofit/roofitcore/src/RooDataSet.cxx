@@ -60,7 +60,7 @@ char* operator+( streampos&, char* );
 
 using namespace std;
 
-ClassImp(RooDataSet)
+ClassImp(RooDataSet);
 ;
 
 
@@ -85,7 +85,7 @@ void RooDataSet::cleanup()
   while(iter!=_memPoolList.end()) {
     free(iter->_base) ;
     iter->_base=0 ;
-    iter++ ;
+    ++iter ;
   }
   _memPoolList.clear() ;
 }
@@ -102,49 +102,52 @@ void RooDataSet::cleanup()
 
 void* RooDataSet::operator new (size_t bytes)
 {
-  //cout << " RooDataSet::operator new(" << bytes << ")" << endl ;
+  // cout << " RooDataSet::operator new(" << bytes << ")" << endl ;
 
-  if (!_poolBegin || _poolCur+(sizeof(RooDataSet)) >= _poolEnd) {
+  if (!_poolBegin || _poolCur + (sizeof(RooDataSet)) >= _poolEnd) {
 
-    if (_poolBegin!=0) {
-      oocxcoutD((TObject*)0,Caching) << "RooDataSet::operator new(), starting new 1MB memory pool" << endl ;
-    }
+     if (_poolBegin != 0) {
+        oocxcoutD((TObject *)0, Caching) << "RooDataSet::operator new(), starting new 1MB memory pool" << endl;
+     }
 
-    // Start pruning empty memory pools if number exceeds 3
-    if (_memPoolList.size()>3) {
-      
-      void* toFree(0) ;
+     // Start pruning empty memory pools if number exceeds 3
+     if (_memPoolList.size() > 3) {
 
-      for (std::list<POOLDATA>::iterator poolIter =  _memPoolList.begin() ; poolIter!=_memPoolList.end() ; ++poolIter) {
+        void *toFree(0);
 
-	// If pool is empty, delete it and remove it from list
-	if ((*(Int_t*)(poolIter->_base))==0) {
-	  oocxcoutD((TObject*)0,Caching) << "RooDataSet::operator new(), pruning empty memory pool " << (void*)(poolIter->_base) << endl ;
+        for (std::list<POOLDATA>::iterator poolIter = _memPoolList.begin(); poolIter != _memPoolList.end();
+             ++poolIter) {
 
-	  toFree = poolIter->_base ;
-	  _memPoolList.erase(poolIter) ;
-	  break ;
-	}
-      }      
+           // If pool is empty, delete it and remove it from list
+           if ((*(Int_t *)(poolIter->_base)) == 0) {
+              oocxcoutD((TObject *)0, Caching)
+                 << "RooDataSet::operator new(), pruning empty memory pool " << (void *)(poolIter->_base) << endl;
 
-      free(toFree) ;      
-    }
-    
-    void* mem = malloc(POOLSIZE) ;
+              toFree = poolIter->_base;
+              _memPoolList.erase(poolIter);
+              break;
+           }
+        }
 
-    _poolBegin = (char*)mem ;
-    // Reserve space for pool counter at head of pool
-    _poolCur = _poolBegin+sizeof(Int_t) ;
-    _poolEnd = _poolBegin+(POOLSIZE) ;
+        free(toFree);
+     }
 
-    // Clear pool counter
-    *((Int_t*)_poolBegin)=0 ;
-    
-    POOLDATA p ;
-    p._base=mem ;
-    _memPoolList.push_back(p) ;
+     void *mem = malloc(POOLSIZE);
+     memset(mem, TStorage::kObjectAllocMemValue, POOLSIZE);
 
-    RooSentinel::activate() ;
+     _poolBegin = (char *)mem;
+     // Reserve space for pool counter at head of pool
+     _poolCur = _poolBegin + sizeof(Int_t);
+     _poolEnd = _poolBegin + (POOLSIZE);
+
+     // Clear pool counter
+     *((Int_t *)_poolBegin) = 0;
+
+     POOLDATA p;
+     p._base = mem;
+     _memPoolList.push_back(p);
+
+     RooSentinel::activate();
   }
 
   char* ptr = _poolCur ;
@@ -307,13 +310,13 @@ RooDataSet::RooDataSet(const char* name, const char* title, const RooArgSet& var
     // Make import mapping if index category is specified
     map<string,RooAbsData*> hmap ;  
     if (indexCat) {
-      char tmp[10240] ;
-      strlcpy(tmp,lnkSliceNames,10240) ;      
-      char* token = strtok(tmp,",") ;
-      TIterator* hiter = lnkSliceData.MakeIterator() ;
-      while(token) {
-	hmap[token] = (RooAbsData*) hiter->Next() ;
-	token = strtok(0,",") ;
+       char tmp[64000];
+       strlcpy(tmp, lnkSliceNames, 64000);
+       char *token = strtok(tmp, ",");
+       TIterator *hiter = lnkSliceData.MakeIterator();
+       while (token) {
+          hmap[token] = (RooAbsData *)hiter->Next();
+          token = strtok(0, ",");
       }
       delete hiter ;
     }
@@ -516,7 +519,7 @@ RooDataSet::RooDataSet(const char* name, const char* title, const RooArgSet& var
 	  tstore->loadValues(t,&cutVarTmp,cutRange);      	
 	} else {
 	  RooTreeDataStore tmpstore(name,title,_vars,wgtVarName) ;
-	  tmpstore.loadValues(impTree,&cutVarTmp,cutRange) ;
+	  tmpstore.loadValues(t,&cutVarTmp,cutRange) ;
 	  _dstore->append(tmpstore) ;
 	}
 	f->Close() ;
@@ -573,7 +576,7 @@ RooDataSet::RooDataSet(const char* name, const char* title, const RooArgSet& var
 	  tstore->loadValues(t,cutVar,cutRange);      	
 	} else {
 	  RooTreeDataStore tmpstore(name,title,_vars,wgtVarName) ;
-	  tmpstore.loadValues(impTree,cutVar,cutRange) ;
+	  tmpstore.loadValues(t,cutVar,cutRange) ;
 	  _dstore->append(tmpstore) ;
 	}
 
@@ -629,7 +632,7 @@ RooDataSet::RooDataSet(const char* name, const char* title, const RooArgSet& var
 	  tstore->loadValues(t,0,cutRange);      	
 	} else {
 	  RooTreeDataStore tmpstore(name,title,_vars,wgtVarName) ;
-	  tmpstore.loadValues(impTree,0,cutRange) ;
+	  tmpstore.loadValues(t,0,cutRange) ;
 	  _dstore->append(tmpstore) ;
 	}
 	f->Close() ;
@@ -843,15 +846,23 @@ RooDataSet::RooDataSet(const char *name, const char *title, RooDataSet *dset,
 		       Int_t nStart, Int_t nStop, Bool_t copyCache, const char* wgtVarName) :
   RooAbsData(name,title,vars)
 {
-  _dstore = (defaultStorageType==Tree) ? 
-    ((RooAbsDataStore*) new RooTreeDataStore(name,title,*dset->_dstore,_vars,cutVar,cutRange,nStart,nStop,copyCache,wgtVarName)) :
-    ((RooAbsDataStore*) new RooVectorDataStore(name,title,*dset->_dstore,_vars,cutVar,cutRange,nStart,nStop,copyCache,wgtVarName)) ;
+   _dstore =
+      (defaultStorageType == Tree)
+         ? ((RooAbsDataStore *)new RooTreeDataStore(name, title, *dset->_dstore, _vars, cutVar, cutRange, nStart, nStop,
+                                                    copyCache, wgtVarName))
+         : (
+              //     ( dset->_dstore->IsA()==RooCompositeDataStore::Class() )?
+              //      ((RooAbsDataStore*) new
+              //      RooCompositeDataStore(name,title,(RooCompositeDataStore&)(*dset->_dstore),_vars,cutVar,cutRange,nStart,nStop,copyCache,wgtVarName))
+              //      :
+              ((RooAbsDataStore *)new RooVectorDataStore(name, title, *dset->_dstore, _vars, cutVar, cutRange, nStart,
+                                                         nStop, copyCache, wgtVarName)));
 
-  _cachedVars.add(_dstore->cachedVars()) ;
+   _cachedVars.add(_dstore->cachedVars());
 
-  appendToDir(this,kTRUE) ;
-  initialize(dset->_wgtVar?dset->_wgtVar->GetName():0) ;
-  TRACE_CREATE
+   appendToDir(this, kTRUE);
+   initialize(dset->_wgtVar ? dset->_wgtVar->GetName() : 0);
+   TRACE_CREATE
 }
 
 
@@ -948,17 +959,19 @@ RooAbsData* RooDataSet::reduceEng(const RooArgSet& varSubset, const RooFormulaVa
 {
   checkInit() ;
 
+  //cout << "reduceEng varSubset = " << varSubset << " _wgtVar = " << (_wgtVar ? _wgtVar->GetName() : "") << endl;
+
   RooArgSet tmp(varSubset) ;
   if (_wgtVar) {
     tmp.add(*_wgtVar) ;
   }
   RooDataSet* ret =  new RooDataSet(GetName(), GetTitle(), this, tmp, cutVar, cutRange, nStart, nStop, copyCache,_wgtVar?_wgtVar->GetName():0) ;
-  
+
   // WVE - propagate optional weight variable
   //       check behaviour in plotting.
-//   if (_wgtVar) {
-//     ret->setWeightVar(_wgtVar->GetName()) ;
-//   }
+  // if (_wgtVar) {
+  //   ret->setWeightVar(_wgtVar->GetName()) ;
+  // }
   return ret ;
 }
 
@@ -1247,7 +1260,7 @@ Bool_t RooDataSet::merge(list<RooDataSet*>dsetList)
 
   checkInit() ;
   // Sanity checks: data sets must have the same size
-  for (list<RooDataSet*>::iterator iter = dsetList.begin() ; iter != dsetList.end() ; iter++) {
+  for (list<RooDataSet*>::iterator iter = dsetList.begin() ; iter != dsetList.end() ; ++iter) {
     if (numEntries()!=(*iter)->numEntries()) {
       coutE(InputArguments) << "RooDataSet::merge(" << GetName() << ") ERROR: datasets have different size" << endl ;
       return kTRUE ;    
@@ -1256,7 +1269,7 @@ Bool_t RooDataSet::merge(list<RooDataSet*>dsetList)
 
   // Extend vars with elements of other dataset
   list<RooAbsDataStore*> dstoreList ;
-  for (list<RooDataSet*>::iterator iter = dsetList.begin() ; iter != dsetList.end() ; iter++) {
+  for (list<RooDataSet*>::iterator iter = dsetList.begin() ; iter != dsetList.end() ; ++iter) {
     _vars.addClone((*iter)->_vars,kTRUE) ;
     dstoreList.push_back((*iter)->store()) ;
   }
@@ -1693,10 +1706,10 @@ RooDataSet *RooDataSet::read(const char *fileList, const RooArgList &varList,
 
   Int_t outOfRange(0) ;
 
-  // Make local copy of file list for tokenizing 
-  char fileList2[10240] ;
-  strlcpy(fileList2,fileList,10240) ;
-  
+  // Make local copy of file list for tokenizing
+  char fileList2[64000];
+  strlcpy(fileList2, fileList, 64000);
+
   // Loop over all names in comma separated list
   char *filename = strtok(fileList2,", ") ;
   Int_t fileSeqNum(0) ;

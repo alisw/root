@@ -25,22 +25,30 @@ namespace cling {
     return getConstant() != 0;
   }
 
-  static unsigned int pow10[10] = { 1, 10, 100, 1000, 10000,
-                                    100000, 1000000, 10000000, ~0U};
+  const static unsigned int kPow10[10] = { 1, 10, 100, 1000, 10000,
+                                           100000, 1000000, 10000000, ~0U };
+
   unsigned Token::getConstant() const {
     assert(kind == tok::constant && "Not a constant");
     if (value == ~0U) {
       value = 0;
       //calculate the value
       for (size_t i = 0, e = length; i < e; ++i)
-        value += (*(bufStart+i) -'0') * pow10[length - i - 1];
+        value += (*(bufStart+i) -'0') * kPow10[length - i - 1];
     }
     return value;
   }
 
-  MetaLexer::MetaLexer(llvm::StringRef line)
-    : bufferStart(line.data()), curPos(line.data())
-  { }
+  MetaLexer::MetaLexer(llvm::StringRef line, bool skipWhite)
+    : bufferStart(line.data()), curPos(line.data()) {
+    if (skipWhite)
+      SkipWhitespace();
+  }
+
+  void MetaLexer::reset(llvm::StringRef line) {
+    bufferStart = line.data();
+    curPos = line.data();
+  }
 
   void MetaLexer::Lex(Token& Tok) {
     Tok.startToken(curPos);
@@ -50,19 +58,18 @@ namespace cling {
       return LexQuotedStringAndAdvance(curPos, Tok);
     case '[': case ']': case '(': case ')': case '{': case '}':
     case '\\': case ',': case '.': case '!': case '?': case '>':
-    case '&': case '#': case '@':
+    case '&': case '#': case '@': case '*': case ';':
       // INTENTIONAL FALL THROUGHs
       return LexPunctuator(curPos - 1, Tok);
 
     case '/':
-      if (*curPos != '/')
-        return LexPunctuator(curPos - 1, Tok);
-      else {
+      if (*curPos == '/') {
         ++curPos;
         Tok.setKind(tok::comment);
         Tok.setLength(2);
         return;
       }
+      return LexPunctuator(curPos - 1, Tok);
 
     case '0': case '1': case '2': case '3': case '4':
     case '5': case '6': case '7': case '8': case '9':
@@ -121,17 +128,17 @@ namespace cling {
     case '@' : Tok.setKind(tok::at); break;
     case '&'  : Tok.setKind(tok::ampersand); break;
     case '#'  : Tok.setKind(tok::hash); break;
+    case '*'  : Tok.setKind(tok::asterik); break;
+    case ';'  : Tok.setKind(tok::semicolon); break;
     case '\0' : Tok.setKind(tok::eof); Tok.setLength(0); break;// if static call
     default: Tok.setLength(0); break;
     }
   }
 
-  void MetaLexer::LexPunctuatorAndAdvance(const char*& curPos, Token& Tok) {
+  bool MetaLexer::LexPunctuatorAndAdvance(const char*& curPos, Token& Tok) {
     Tok.startToken(curPos);
+    bool nextWasPunct = true;
     while (true) {
-
-      if(*curPos == '\\')
-        curPos += 2;
       // On comment skip until the eof token.
       if (curPos[0] == '/' && curPos[1] == '/') {
         while (*curPos != '\0' && *curPos != '\r' && *curPos != '\n')
@@ -140,12 +147,13 @@ namespace cling {
           Tok.setBufStart(curPos);
           Tok.setKind(tok::eof);
           Tok.setLength(0);
-          return;
+          return nextWasPunct;
         }
       }
       MetaLexer::LexPunctuator(curPos++, Tok);
       if (Tok.isNot(tok::unknown))
-        return;
+        return nextWasPunct;
+      nextWasPunct = false;
     }
   }
 
@@ -218,11 +226,15 @@ namespace cling {
     }
   }
 
-  void MetaLexer::LexWhitespace(char C, Token& Tok) {
+  void MetaLexer::SkipWhitespace() {
+    char C = *curPos;
     while((C == ' ' || C == '\t') && C != '\0')
-      C = *curPos++;
+      C = *(++curPos);
+  }
 
-    --curPos; // Back up over the non whitespace char.
+  void MetaLexer::LexWhitespace(char C, Token& Tok) {
+    SkipWhitespace();
+
     Tok.setLength(curPos - Tok.getBufStart());
     Tok.setKind(tok::space);
   }

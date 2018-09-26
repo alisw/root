@@ -39,12 +39,7 @@
 //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
-#ifndef ROOT_Riosfwd
-#include "Riosfwd.h"
-#endif
 
 #include <ctime>
 

@@ -12,17 +12,11 @@
 #ifndef ROOSTATS_RooStatsUtils
 #define ROOSTATS_RooStatsUtils
 
-#ifndef ROOT_TMath
 #include "TMath.h"
-#endif
 
-#ifndef ROOT_TTree
 #include "TTree.h"
-#endif
 
-#ifndef ROOT_Math_DistFuncMathCore
-#include"Math/DistFuncMathCore.h"
-#endif
+#include "Math/DistFuncMathCore.h"
 
 #include "RooArgSet.h"
 #include "RooRealVar.h"
@@ -33,100 +27,95 @@
 #include "RooDataSet.h"
 
 
-/**
+/** \namespace RooStats
+    \ingroup Roostats
 
-\defgroup Roostats RooStats 
+Namespace for the RooStats classes
 
-%RooStats is a package containing statistical tools built on top of %RooFit. 
-See the %RooStats (Twiki Page)[https://twiki.cern.ch/twiki/bin/view/RooStats/WebHome] for more information. 
-*/
-
-/**
-
-\namespace RooStats Namespace for the RooStats classes
-
-All the classes of the %RooStats package are in the RooStats namespace. 
+All the classes of the %RooStats package are in the RooStats namespace.
 In addition the namespace contain a set of utility functions.
 
-\ingroup Roostats
-
- */
+*/
 
 namespace RooStats {
 
 
-  // returns one-sided significance corresponding to a p-value
-  inline Double_t PValueToSignificance(Double_t pvalue){
-     return ::ROOT::Math::normal_quantile_c(pvalue,1); 
-  }
+   /// returns one-sided significance corresponding to a p-value
+   inline Double_t PValueToSignificance(Double_t pvalue){
+      return ::ROOT::Math::normal_quantile_c(pvalue,1);
+   }
 
-  // returns p-value corresponding to a 1-sided significance
-  inline Double_t SignificanceToPValue(Double_t Z){
-    return ::ROOT::Math::normal_cdf_c(Z);
-  }
+   /// returns p-value corresponding to a 1-sided significance
+   inline Double_t SignificanceToPValue(Double_t Z){
+      return ::ROOT::Math::normal_cdf_c(Z);
+   }
 
+   /// Compute the Asimov Median significance for a Poisson process
+   /// with s = expected number of signal events, b = expected numner of background events
+   /// and optionally sigma_b = expected uncertainty of backgorund events   
+   Double_t AsimovSignificance(Double_t s, Double_t b, Double_t sigma_b = 0.0 ); 
 
-  inline void SetParameters(const RooArgSet* desiredVals, RooArgSet* paramsToChange){
-    *paramsToChange=*desiredVals ;
-  }
+   inline void SetParameters(const RooArgSet* desiredVals, RooArgSet* paramsToChange){
+      *paramsToChange=*desiredVals ;
+   }
 
-  inline void RemoveConstantParameters(RooArgSet* set){
-    RooArgSet constSet;
-    RooLinkedListIter it = set->iterator();
-    RooRealVar *myarg; 
-    while ((myarg = (RooRealVar *)it.Next())) { 
-      if(myarg->isConstant()) constSet.add(*myarg);
-    }
-    set->remove(constSet);
-  }
+   inline void RemoveConstantParameters(RooArgSet* set){
+      RooArgSet constSet;
+      RooLinkedListIter it = set->iterator();
+      RooRealVar *myarg;
+      while ((myarg = (RooRealVar *)it.Next())) {
+         if(myarg->isConstant()) constSet.add(*myarg);
+      }
+      set->remove(constSet);
+   }
 
-  inline void RemoveConstantParameters(RooArgList& set){
-    RooArgSet constSet;
-    RooLinkedListIter it = set.iterator();
-    RooRealVar *myarg; 
-    while ((myarg = (RooRealVar *)it.Next())) { 
-      if(myarg->isConstant()) constSet.add(*myarg);
-    }
-    set.remove(constSet);
-  }
+   inline void RemoveConstantParameters(RooArgList& set){
+      RooArgSet constSet;
+      RooLinkedListIter it = set.iterator();
+      RooRealVar *myarg;
+      while ((myarg = (RooRealVar *)it.Next())) {
+         if(myarg->isConstant()) constSet.add(*myarg);
+      }
+      set.remove(constSet);
+   }
 
-  inline bool SetAllConstant(const RooAbsCollection &coll, bool constant = true) {
-       // utility function to set all variable constant in a collection
-       // (from G. Petrucciani)
-       bool changed = false;
-       RooLinkedListIter iter = coll.iterator();
-       for (RooAbsArg *a = (RooAbsArg *) iter.Next(); a != 0; a = (RooAbsArg *) iter.Next()) {
-          RooRealVar *v = dynamic_cast<RooRealVar *>(a);
-          if (v && (v->isConstant() != constant)) {
-             changed = true;
-             v->setConstant(constant);
-          }
-       }
-       return changed;
+   inline bool SetAllConstant(const RooAbsCollection &coll, bool constant = true) {
+      // utility function to set all variable constant in a collection
+      // (from G. Petrucciani)
+      bool changed = false;
+      RooLinkedListIter iter = coll.iterator();
+      for (RooAbsArg *a = (RooAbsArg *) iter.Next(); a != 0; a = (RooAbsArg *) iter.Next()) {
+         RooRealVar *v = dynamic_cast<RooRealVar *>(a);
+         if (v && (v->isConstant() != constant)) {
+            changed = true;
+            v->setConstant(constant);
+         }
+      }
+      return changed;
    }
 
 
-  // assuming all values in set are RooRealVars, randomize their values
-  inline void RandomizeCollection(RooAbsCollection& set,
-                                  Bool_t randomizeConstants = kTRUE)
-  {
-    RooLinkedListIter it = set.iterator();
-    RooRealVar* var;
+   // assuming all values in set are RooRealVars, randomize their values
+   inline void RandomizeCollection(RooAbsCollection& set,
+                                   Bool_t randomizeConstants = kTRUE)
+   {
+      RooLinkedListIter it = set.iterator();
+      RooRealVar* var;
 
-    // repeat loop tpo avoid calling isConstant for nothing 
-    if (randomizeConstants) { 
-       while ((var = (RooRealVar*)it.Next()) != NULL)
-         var->randomize();
-    }
-    else {
-       // exclude constants variables
-      while ((var = (RooRealVar*)it.Next()) != NULL)
-      if (!var->isConstant() )
-         var->randomize();
-    }
+      // repeat loop to avoid calling isConstant for nothing
+      if (randomizeConstants) {
+         while ((var = (RooRealVar*)it.Next()) != NULL)
+            var->randomize();
+      }
+      else {
+         // exclude constants variables
+         while ((var = (RooRealVar*)it.Next()) != NULL)
+            if (!var->isConstant() )
+               var->randomize();
+      }
 
 
-  }
+   }
 
    void FactorizePdf(const RooArgSet &observables, RooAbsPdf &pdf, RooArgList &obsTerms, RooArgList &constraints);
 
@@ -138,11 +127,11 @@ namespace RooStats {
    // remove constraints from pdf and return the unconstrained pdf
    RooAbsPdf * MakeUnconstrainedPdf(RooAbsPdf &pdf, const RooArgSet &observables, const char *name = NULL);
    RooAbsPdf * MakeUnconstrainedPdf(const RooStats::ModelConfig &model, const char *name = NULL);
-   
+
    // Create a TTree with the given name and description. All RooRealVars in the RooDataSet are represented as branches that contain values of type Double_t.
    TTree* GetAsTTree(TString name, TString desc, const RooDataSet& data);
 
-   // useful function to print in one line the content of a set with their values 
+   // useful function to print in one line the content of a set with their values
    void PrintListContent(const RooArgList & l, std::ostream & os = std::cout);
 
    // function to set a global flag in RooStats to use NLL offset when performing nll computations
@@ -151,7 +140,7 @@ namespace RooStats {
 
    // function returning if the flag to check if the flag to use  NLLOffset is set
    bool IsNLLOffset();
-   
+
 
 
 }

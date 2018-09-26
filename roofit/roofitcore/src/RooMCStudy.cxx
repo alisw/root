@@ -65,7 +65,7 @@ These study modules should derive from classs RooAbsMCStudyModel
 
 using namespace std ;
 
-ClassImp(RooMCStudy)
+ClassImp(RooMCStudy);
   ;
 
 
@@ -1014,7 +1014,7 @@ const RooFitResult* RooMCStudy::fitResult(Int_t sampleNum) const
 /// Return the given generated dataset. This method will only return datasets
 /// if during the run cycle it was indicated that generator data should be saved.
 
-const RooAbsData* RooMCStudy::genData(Int_t sampleNum) const 
+RooAbsData* RooMCStudy::genData(Int_t sampleNum) const 
 {
   // Check that generated data was saved
   if (_genDataList.GetSize()==0) {
@@ -1359,4 +1359,21 @@ RooPlot* RooMCStudy::plotPull(const RooRealVar& param, Double_t lo, Double_t hi,
 }
 
 
+////////////////////////////////////////////////////////////////////////////////
+/// If one of the TObject we have a referenced to is deleted, remove the
+/// reference.
+
+void RooMCStudy::RecursiveRemove(TObject *obj)
+{
+   _fitResList.RecursiveRemove(obj);
+   _genDataList.RecursiveRemove(obj);
+   _fitOptList.RecursiveRemove(obj);
+   if (_ngenVar == obj) _ngenVar = nullptr;
+
+   if (_fitParData) _fitParData->RecursiveRemove(obj);
+   if (_fitParData == obj) _fitParData = nullptr;
+
+   if (_genParData) _genParData->RecursiveRemove(obj);
+   if (_genParData == obj) _genParData = nullptr;
+}
 

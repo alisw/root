@@ -14,45 +14,45 @@
 
 /**
 \class TMapFile
-\ingroup IO 
+\ingroup IO
 
-This class implements a shared memory region mapped to a file.     
-Objects can be placed into this shared memory area using the Add() 
-member function. To actually place a copy of the object is shared  
-memory call Update() also whenever the mapped object(s) change(s)  
-call Update() to put a fresh copy in the shared memory. This extra 
-step is necessary since it is not possible to share objects with   
-virtual pointers between processes (the vtbl ptr points to the     
-originators unique address space and can not be used by the        
+This class implements a shared memory region mapped to a file.
+Objects can be placed into this shared memory area using the Add()
+member function. To actually place a copy of the object is shared
+memory call Update() also whenever the mapped object(s) change(s)
+call Update() to put a fresh copy in the shared memory. This extra
+step is necessary since it is not possible to share objects with
+virtual pointers between processes (the vtbl ptr points to the
+originators unique address space and can not be used by the
 consumer process(es)). Consumer processes can map the memory region
-from this file and access the objects stored in it via the Get()   
-method (which returns a copy of the object stored in the shared    
-memory with correct vtbl ptr set). Only objects of classes with a  
-Streamer() member function defined can be shared.                  
-                                                                   
+from this file and access the objects stored in it via the Get()
+method (which returns a copy of the object stored in the shared
+memory with correct vtbl ptr set). Only objects of classes with a
+Streamer() member function defined can be shared.
+
 I know the current implementation is not ideal (you need to copy to
-and from the shared memory file) but the main problem is with the  
+and from the shared memory file) but the main problem is with the
 class' virtual_table pointer. This pointer points to a table unique
-for every process. Therefore, different options are:               
-  -# One could allocate an object directly in shared memory in the 
-     producer, but the consumer still has to copy the object from  
-     shared memory into a local object which has the correct vtbl  
+for every process. Therefore, different options are:
+  -# One could allocate an object directly in shared memory in the
+     producer, but the consumer still has to copy the object from
+     shared memory into a local object which has the correct vtbl
      pointer for that process (copy ctor's can be used for creating
-     the local copy).                                              
-  -# Another possibility is to only allow objects without virtual  
-     functions in shared memory (like simple C structs), or to     
-     forbid (how?) the consumer from calling any virtual functions 
-     of the objects in shared memory.                              
+     the local copy).
+  -# Another possibility is to only allow objects without virtual
+     functions in shared memory (like simple C structs), or to
+     forbid (how?) the consumer from calling any virtual functions
+     of the objects in shared memory.
   -# A last option is to copy the object internals to shared memory
-     and copy them again from there. This is what is done in the   
+     and copy them again from there. This is what is done in the
      TMapFile (using the object Streamer() to make a deep copy).
 
 Option 1) saves one copy, but requires solid copy ctor's (along the
 full inheritance chain) to rebuild the object in the consumer. Most
 classes don't provide these copy ctor's, especially not when objects
-contain collections, etc. 2) is too limiting or dangerous (calling 
-accidentally a virtual function will segv). So since we have a     
-robust Streamer mechanism I opted for 3).                          
+contain collections, etc. 2) is too limiting or dangerous (calling
+accidentally a virtual function will segv). So since we have a
+robust Streamer mechanism I opted for 3).
 **/
 
 
@@ -91,11 +91,14 @@ robust Streamer mechanism I opted for 3).
 #include "TKeyMapFile.h"
 #include "TDirectoryFile.h"
 #include "TBrowser.h"
+#include "TStorage.h"
 #include "TString.h"
 #include "TSystem.h"
 #include "TClass.h"
 #include "TBufferFile.h"
 #include "TVirtualMutex.h"
+#include "mmprivate.h"
+
 #include <cmath>
 
 #if defined(R__UNIX) && !defined(R__MACOSX) && !defined(R__WINGCC)
@@ -122,8 +125,34 @@ union semun {
 Long_t TMapFile::fgMapAddress = 0;
 void  *TMapFile::fgMmallocDesc = 0;
 
-//void *gMmallocDesc = 0; //is initialized in TClass.cxx
+//void *ROOT::Internal::gMmallocDesc = 0; //is initialized in TStorage.cxx
 
+
+namespace {
+////////////////////////////////////////////////////////////////////////////////
+/// Delete memory and return true if memory belongs to a TMapFile.
+   static bool FreeIfTMapFile(void* ptr) {
+      if (TMapFile *mf = TMapFile::WhichMapFile(ptr)) {
+         if (mf->IsWritable())
+            ::mfree(mf->GetMmallocDesc(), ptr);
+         return true;
+      }
+      return false;
+   }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set ROOT::Internal::gFreeIfTMapFile on library load.
+
+struct SetFreeIfTMapFile_t {
+   SetFreeIfTMapFile_t() {
+      ROOT::Internal::gFreeIfTMapFile = FreeIfTMapFile;
+   }
+   ~SetFreeIfTMapFile_t() {
+      ROOT::Internal::gFreeIfTMapFile = nullptr;
+   }
+} gSetFreeIfTMapFile;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -149,9 +178,9 @@ TMapRec::~TMapRec()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// This method returns a pointer to the original object. 
+/// This method returns a pointer to the original object.
 
-/// NOTE: this pointer is only valid in the process that produces the shared 
+/// NOTE: this pointer is only valid in the process that produces the shared
 /// memory file. In a consumer process this pointer is illegal! Be careful.
 
 TObject *TMapRec::GetObject() const
@@ -162,7 +191,7 @@ TObject *TMapRec::GetObject() const
 
 
 
-ClassImp(TMapFile)
+ClassImp(TMapFile);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor. Does not much except setting some basic values.
@@ -192,7 +221,7 @@ TMapFile::TMapFile()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create a memory mapped file. 
+/// Create a memory mapped file.
 ///
 /// This opens a file (to which the
 /// memory will be mapped) and attaches a memory region to it.
@@ -392,7 +421,7 @@ TMapFile::TMapFile(const char *name, const char *title, Option_t *option,
       if (fWritable) {
          // create new TMapFile object in mapped heap to get correct vtbl ptr
          CreateSemaphore();
-         gMmallocDesc = fMmallocDesc;
+         ROOT::Internal::gMmallocDesc = fMmallocDesc;
          TMapFile *mf = new TMapFile(*mapfil);
          mf->fFd        = fFd;
          mf->fWritable  = kTRUE;
@@ -403,10 +432,10 @@ TMapFile::TMapFile(const char *name, const char *title, Option_t *option,
          mf->CreateSemaphore(fSemaphore);
 #endif
          mmalloc_setkey(fMmallocDesc, 0, mf);
-         gMmallocDesc = 0;
+         ROOT::Internal::gMmallocDesc = 0;
          mapfil = mf;
       } else {
-         gMmallocDesc = 0;    // make sure we are in sbrk heap
+         ROOT::Internal::gMmallocDesc = 0;    // make sure we are in sbrk heap
          fOffset      = ((struct mdesc *) fMmallocDesc)->offset;
          TMapFile *mf = new TMapFile(*mapfil, fOffset);
          delete [] mf->fOption;
@@ -420,7 +449,7 @@ TMapFile::TMapFile(const char *name, const char *title, Option_t *option,
       // store shadow mapfile (it contains the real fFd in case map
       // is not writable)
       fVersion  = -1;   // make this the shadow map file
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfMappedFiles()->AddLast(this);
 
    } else {
@@ -444,23 +473,23 @@ TMapFile::TMapFile(const char *name, const char *title, Option_t *option,
 
       CreateSemaphore();
 
-      gMmallocDesc = fMmallocDesc;
+      ROOT::Internal::gMmallocDesc = fMmallocDesc;
 
       mapfil = new TMapFile(*this);
       mmalloc_setkey(fMmallocDesc, 0, mapfil);
 
-      gMmallocDesc = 0;
+      ROOT::Internal::gMmallocDesc = 0;
 
       // store shadow mapfile
       fVersion  = -1;   // make this the shadow map file
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfMappedFiles()->AddLast(this);
 
    }
 
    mapfil->InitDirectory();
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfMappedFiles()->AddFirst(mapfil);
    }
 
@@ -474,7 +503,7 @@ zombie:
    // error in file opening occured, make this object a zombie
    MakeZombie();
    newMapFile   = this;
-   gMmallocDesc = 0;
+   ROOT::Internal::gMmallocDesc = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -567,7 +596,7 @@ void TMapFile::Add(const TObject *obj, const char *name)
    if (lock)
       AcquireSemaphore();
 
-   gMmallocDesc = fMmallocDesc;
+   ROOT::Internal::gMmallocDesc = fMmallocDesc;
 
    const char *n;
    if (name && *name)
@@ -588,7 +617,7 @@ void TMapFile::Add(const TObject *obj, const char *name)
       fLast        = mr;
    }
 
-   gMmallocDesc = 0;
+   ROOT::Internal::gMmallocDesc = 0;
 
    if (lock)
       ReleaseSemaphore();
@@ -603,7 +632,7 @@ void TMapFile::Update(TObject *obj)
 
    AcquireSemaphore();
 
-   gMmallocDesc = fMmallocDesc;
+   ROOT::Internal::gMmallocDesc = fMmallocDesc;
 
    Bool_t all = (obj == 0) ? kTRUE : kFALSE;
 
@@ -627,7 +656,7 @@ void TMapFile::Update(TObject *obj)
       mr = mr->fNext;
    }
 
-   gMmallocDesc = 0;
+   ROOT::Internal::gMmallocDesc = 0;
 
    ReleaseSemaphore();
 }
@@ -910,7 +939,7 @@ Int_t TMapFile::ReleaseSemaphore()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Close a mapped file.
-/// 
+///
 /// First detach mapped memory then close file.
 /// No member functions of a TMapFile that was opened in write mode
 /// may be called after Close() (this includes, of course, "delete" which
@@ -928,7 +957,7 @@ void TMapFile::Close(Option_t *option)
    }
 
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfMappedFiles()->Remove(shadow);
       gROOT->GetListOfMappedFiles()->Remove(this);
    }
@@ -964,7 +993,7 @@ void TMapFile::Close(Option_t *option)
 
 TMapFile *TMapFile::FindShadowMapFile()
 {
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
    TObjLink *lnk = ((TList *)gROOT->GetListOfMappedFiles())->LastLink();
    while (lnk) {
       TMapFile *mf = (TMapFile*)lnk->GetObject();
@@ -1088,6 +1117,15 @@ Int_t TMapFile::GetBestBuffer()
    return (Int_t)(mean + std::sqrt(rms2));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Return the current location in the memory region for this malloc heap which
+/// represents the end of memory in use. Returns 0 if map file was closed.
+
+void *TMapFile::GetBreakval() const
+{
+   if (!fMmallocDesc) return 0;
+   return (void *)((struct mdesc *)fMmallocDesc)->breakval;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a memory mapped file.
@@ -1111,7 +1149,7 @@ TMapFile *TMapFile::Create(const char *name, Option_t *option, Int_t size,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set preferred map address. 
+/// Set preferred map address.
 ///
 /// Find out preferred map address as follows:
 ///   -# Run consumer program to find the preferred map address. Remember begin of mapped region, i.e. 0x40b4c000
@@ -1183,3 +1221,22 @@ void TMapFile::operator delete(void *ptr)
 
    TObject::operator delete(ptr);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TMapFile *TMapFile::WhichMapFile(void *addr)
+{
+   if (!gROOT || !gROOT->GetListOfMappedFiles()) return 0;
+
+   TObjLink *lnk = ((TList *)gROOT->GetListOfMappedFiles())->LastLink();
+   while (lnk) {
+      TMapFile *mf = (TMapFile*)lnk->GetObject();
+      if (!mf) return 0;
+      if ((ULong_t)addr >= mf->fBaseAddr + mf->fOffset &&
+          (ULong_t)addr <  (ULong_t)mf->GetBreakval() + mf->fOffset)
+         return mf;
+      lnk = lnk->Prev();
+   }
+   return 0;
+}
+

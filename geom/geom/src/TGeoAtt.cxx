@@ -18,10 +18,12 @@ The TGeoAtt class is an utility for volume/node visibility and tracking
 activity. By default the attributes are set to visible/active
 */
 
-#include "TGeoManager.h"
 #include "TGeoAtt.h"
 
-ClassImp(TGeoAtt)
+#include "TGeoManager.h"
+#include "Rtypes.h"
+
+ClassImp(TGeoAtt);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor

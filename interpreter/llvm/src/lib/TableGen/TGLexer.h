@@ -45,9 +45,9 @@ namespace tgtok {
     // Keywords.
     Bit, Bits, Class, Code, Dag, Def, Foreach, Defm, Field, In, Int, Let, List,
     MultiClass, String,
-    
+
     // !keywords.
-    XConcat, XADD, XAND, XSRA, XSRL, XSHL, XListConcat, XStrConcat, XCast,
+    XConcat, XADD, XAND, XOR, XSRA, XSRL, XSHL, XListConcat, XStrConcat, XCast,
     XSubst, XForEach, XHead, XTail, XEmpty, XIf, XEq,
 
     // Integer value.
@@ -87,8 +87,7 @@ private:
 
 public:
   TGLexer(SourceMgr &SrcMgr);
-  ~TGLexer() {}
-  
+
   tgtok::TokKind Lex() {
     return CurCode = LexToken();
   }

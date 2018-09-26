@@ -20,8 +20,9 @@
 #include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
+class BPFSubtarget;
 namespace BPFISD {
-enum {
+enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   RET_FLAG,
   CALL,
@@ -33,7 +34,7 @@ enum {
 
 class BPFTargetLowering : public TargetLowering {
 public:
-  explicit BPFTargetLowering(const TargetMachine &TM);
+  explicit BPFTargetLowering(const TargetMachine &TM, const BPFSubtarget &STI);
 
   // Provide custom lowering hooks for some operations.
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
@@ -41,8 +42,12 @@ public:
   // This method returns the name of a target specific DAG node.
   const char *getTargetNodeName(unsigned Opcode) const override;
 
+  // This method decides whether folding a constant offset
+  // with the given GlobalAddress is legal.
+  bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
+
   MachineBasicBlock *
-  EmitInstrWithCustomInserter(MachineInstr *MI,
+  EmitInstrWithCustomInserter(MachineInstr &MI,
                               MachineBasicBlock *BB) const override;
 
 private:
@@ -53,9 +58,12 @@ private:
   // Lower the result values of a call, copying them out of physregs into vregs
   SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
                           CallingConv::ID CallConv, bool IsVarArg,
-                          const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc DL,
-                          SelectionDAG &DAG,
+                          const SmallVectorImpl<ISD::InputArg> &Ins,
+                          const SDLoc &DL, SelectionDAG &DAG,
                           SmallVectorImpl<SDValue> &InVals) const;
+
+  // Maximum number of arguments to a call
+  static const unsigned MaxArgs;
 
   // Lower a call into CALLSEQ_START - BPFISD:CALL - CALLSEQ_END chain
   SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
@@ -65,12 +73,12 @@ private:
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
                                bool IsVarArg,
                                const SmallVectorImpl<ISD::InputArg> &Ins,
-                               SDLoc DL, SelectionDAG &DAG,
+                               const SDLoc &DL, SelectionDAG &DAG,
                                SmallVectorImpl<SDValue> &InVals) const override;
 
   SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &Outs,
-                      const SmallVectorImpl<SDValue> &OutVals, SDLoc DL,
+                      const SmallVectorImpl<SDValue> &OutVals, const SDLoc &DL,
                       SelectionDAG &DAG) const override;
 
   EVT getOptimalMemOpType(uint64_t Size, unsigned DstAlign, unsigned SrcAlign,

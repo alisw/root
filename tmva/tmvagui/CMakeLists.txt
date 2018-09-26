@@ -5,14 +5,8 @@
 #---The following is needed becuase client codes of TMVA (in ROOT itself) assumes to find header files under /TVMA
 #execute_process(COMMAND cmake -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/inc ${CMAKE_CURRENT_SOURCE_DIR}/inc/TMVA)
 
-if(NOT CMAKE_PROJECT_NAME STREQUAL ROOT)
-  cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
-  project(TMVA)
-  include(${ROOTSYS}/cmake/modules/StandaloneBuild.cmake)
-endif()
-
 set(headers1 annconvergencetest.h  deviations.h mvaeffs.h PlotFoams.h  TMVAGui.h
-	 BDTControlPlots.h  correlationscatters.h efficiencies.h  mvas.h probas.h 
+	 BDTControlPlots.h  correlationscatters.h efficiencies.h efficienciesMulticlass.h mvas.h probas.h 
 	 BDT.h   correlationscattersMultiClass.h  likelihoodrefs.h  mvasMulticlass.h  regression_averagedevs.h  TMVAMultiClassGui.h
 	 BDT_Reg.h  correlations.h   mvaweights.h rulevisCorr.h  TMVARegGui.h
 	 BoostControlPlots.h correlationsMultiClass.h network.h rulevis.h   variables.h
@@ -26,16 +20,10 @@ foreach(hs headers1)
   endforeach()
 endforeach()
 
-ROOT_GENERATE_DICTIONARY(G__TMVAGui ${theaders1}   MODULE TMVAGui LINKDEF LinkDef.h OPTIONS "-writeEmptyRootPCM")
-
-ROOT_LINKER_LIBRARY(TMVAGui *.cxx G__TMVAGui.cxx LIBRARIES Core
-                    DEPENDENCIES RIO Hist Tree TreeViewer  MLP Minuit XMLIO TMVA Gui)
-
-install(DIRECTORY inc/TMVA/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/TMVA
-                            COMPONENT headers
-                            PATTERN ".svn" EXCLUDE
-                            REGEX "LinkDef" EXCLUDE )
-set_property(GLOBAL APPEND PROPERTY ROOT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/inc)
+ROOT_STANDARD_LIBRARY_PACKAGE(TMVAGui
+                              HEADERS ${theaders1}
+                              DICTIONARY_OPTIONS "-writeEmptyRootPCM"
+                              DEPENDENCIES RIO Hist Tree TreeViewer MLP Minuit XMLIO TMVA Gui Core)
 
 if(NOT gnuinstall)
   install(DIRECTORY test DESTINATION tmva 

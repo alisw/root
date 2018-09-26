@@ -1519,7 +1519,7 @@ TXSockBuf *TXSocket::PopUpSpare(Int_t size)
    Int_t maxsz = 0;
    if (fgSQue.size() > 0) {
       list<TXSockBuf *>::iterator i;
-      for (i = fgSQue.begin(); i != fgSQue.end(); i++) {
+      for (i = fgSQue.begin(); i != fgSQue.end(); ++i) {
          maxsz = ((*i)->fSiz > maxsz) ? (*i)->fSiz : maxsz;
          if ((*i) && (*i)->fSiz >= size) {
             buf = *i;
@@ -2135,7 +2135,7 @@ Int_t TXSocket::Reconnect()
    if (gDebug > 0) {
       Info("Reconnect", "%p (c:%p, v:%d): trying to reconnect to %s (logid: %d)",
                         this, fConn, (fConn ? fConn->IsValid() : 0),
-                        fUrl.Data(), fConn->GetLogConnID());
+                        fUrl.Data(), (fConn ? fConn->GetLogConnID() : -1));
    }
 
    Int_t tryreconnect = gEnv->GetValue("TXSocket.Reconnect", 0);

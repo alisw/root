@@ -87,7 +87,13 @@
 #include "TMemStatMng.h"
 #include "TMemStatHelpers.h"
 
-ClassImp(TMemStat)
+#if defined(__GNUC__) && !defined(__clang__)
+#if __GNUC__ > 5
+#pragma GCC diagnostic ignored "-Wframe-address"
+#endif
+#endif
+
+ClassImp(TMemStat);
 
 using namespace std;
 using namespace Memstat;

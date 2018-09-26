@@ -22,19 +22,10 @@
 //
 ///////////////////////////////////////////////////////////////////////
 
-#ifndef __CINT__
-#include "qapplication.h"
-#include "qobject.h"
-#include "qtimer.h"
-#endif
-
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
+#include "TQtGSIIncludes.h"
 
 class TTimer;
-class QApplication;
-class QTimer;
 
 class TQRootApplication : public QApplication {
 #ifndef __CINT__
@@ -49,7 +40,7 @@ protected:
 public:
    static Bool_t fgDebug, fgWarning;   // debug and warning flags
 
-   TQRootApplication(int &argc, char **argv,int poll=0);
+   TQRootApplication(int &myargc, char **myargv, int poll = 0);
    ~TQRootApplication();
    void SetDebugOn(){ fgDebug=kTRUE; }
    void SetWarningOn(){ fgWarning=kTRUE;}

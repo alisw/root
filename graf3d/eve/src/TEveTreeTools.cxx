@@ -24,7 +24,7 @@ TSelector that stores entry numbers of matching TTree entries into
 an event-list.
 */
 
-ClassImp(TEveSelectorToEventList)
+ClassImp(TEveSelectorToEventList);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
@@ -59,8 +59,8 @@ TEvePointSelectorConsumer is a virtual base for classes that can be
 filled from TTree data via the TEvePointSelector class.
 */
 
-ClassImp(TEvePointSelector)
-ClassImp(TEvePointSelectorConsumer)
+ClassImp(TEvePointSelector);
+ClassImp(TEvePointSelectorConsumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
@@ -106,9 +106,8 @@ Long64_t TEvePointSelector::Select(const char* selection)
    if (fConsumer)
       fConsumer->InitFill(fSubIdNum);
 
-   // 'para' option -> hack allowing arbitrary dimensions.
-   if(fTree)
-      fTree->Process(this, "goff para");
+   if (fTree)
+      fTree->Process(this, "goff");
 
    return fSelectedRows;
 }

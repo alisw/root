@@ -9,10 +9,11 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
+#include "TGLOutput.h"
+
 #include "Riostream.h"
 #include "TVirtualPad.h"
 #include "TVirtualPS.h"
-#include "TGLOutput.h"
 #include "TGLViewer.h"
 #include "TSystem.h" // For gSystem
 #include "gl2ps.h"
@@ -24,7 +25,7 @@
 Wrapper class for GL capture & output routines
 */
 
-ClassImp(TGLOutput)
+ClassImp(TGLOutput);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Capture viewer to file. Arguments are:

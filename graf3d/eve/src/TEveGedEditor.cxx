@@ -90,28 +90,13 @@ void TEveGedEditor::CloseWindow()
 
    fgExtraEditors->Remove(this);
 
-   DeleteWindow();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// This is exact clone of TGFrame::DeleteWindow().
-/// Needs to be overriden together with CloseWindow() otherwise CINT
-/// goes kaboom in timer execution.
-
-void TEveGedEditor::DeleteWindow()
-{
-   if (gDebug > 0)
-      Info("TEveGedEditor::DeleteWindow", "%p shooting timer.", this);
-
    DisplayElement(0);
 
    if (gDNDManager) {
       if (gDNDManager->GetMainFrame() == this)
          gDNDManager->SetMainFrame(0);
    }
-   if (!TestBit(kDeleteWindowCalled))
-      TTimer::SingleShot(150, IsA()->GetName(), this, "ReallyDelete()");
-   SetBit(kDeleteWindowCalled);
+   DeleteWindow();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,7 +124,7 @@ void TEveGedEditor::DisplayElement(TEveElement* re)
 
    fElement = re;
    fObject  = fElement ? fElement->GetEditorObject(eh) : 0;
-   TGedEditor::SetModel(fPad, fObject, kButton1Down);
+   TGedEditor::SetModel(fPad, fObject, kButton1Down, kTRUE);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -149,17 +134,17 @@ void TEveGedEditor::DisplayObject(TObject* obj)
 {
    fElement = dynamic_cast<TEveElement*>(obj);
    fObject  = obj;
-   TGedEditor::SetModel(fPad, obj, kButton1Down);
+   TGedEditor::SetModel(fPad, obj, kButton1Down, kTRUE);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Set model object.
 
-void TEveGedEditor::SetModel(TVirtualPad* pad, TObject* obj, Int_t event)
+void TEveGedEditor::SetModel(TVirtualPad* pad, TObject* obj, Int_t event, Bool_t force)
 {
    fElement = dynamic_cast<TEveElement*>(obj);
    fObject  = obj;
-   TGedEditor::SetModel(pad, obj, event);
+   TGedEditor::SetModel(pad, obj, event, force);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

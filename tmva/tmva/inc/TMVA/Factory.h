@@ -53,25 +53,19 @@
 #include <string>
 #include <vector>
 #include <map>
-#ifndef ROOT_TCut
 #include "TCut.h"
-#endif
 
-#ifndef ROOT_TMVA_Configurable
 #include "TMVA/Configurable.h"
-#endif
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
-#ifndef ROOT_TMVA_DataSet
 #include "TMVA/DataSet.h"
-#endif
 
-class TFile;
-class TTree;
-class TDirectory;
 class TCanvas;
+class TDirectory;
+class TFile;
+class TGraph;
 class TH1F;
+class TMultiGraph;
+class TTree;
 namespace TMVA {
 
    class IMethod;
@@ -80,10 +74,12 @@ namespace TMVA {
    class DataSetInfo;
    class DataSetManager;
    class DataLoader;
+   class ROCCurve;
    class VariableTransformBase;
    
 
    class Factory : public Configurable {
+      friend class CrossValidation;
    public:
 
       typedef std::vector<IMethod*> MVector;
@@ -91,6 +87,9 @@ namespace TMVA {
 
       // no default  constructor
       Factory( TString theJobName, TFile* theTargetFile, TString theOption = "" );
+
+      // contructor to work without file
+      Factory( TString theJobName, TString theOption = "" );
 
       // default destructor
       virtual ~Factory();
@@ -107,7 +106,7 @@ namespace TMVA {
                               TString /*compositeOption = ""*/ ) { return 0; } 
 
       // optimize all booked methods (well, if desired by the method)
-      void OptimizeAllMethods                 (TString fomType="ROCIntegral", TString fitType="FitGA");
+      std::map<TString,Double_t> OptimizeAllMethods                 (TString fomType="ROCIntegral", TString fitType="FitGA");
       void OptimizeAllMethodsForClassification(TString fomType="ROCIntegral", TString fitType="FitGA") { OptimizeAllMethods(fomType,fitType); }
       void OptimizeAllMethodsForRegression    (TString fomType="ROCIntegral", TString fitType="FitGA") { OptimizeAllMethods(fomType,fitType); }
 
@@ -129,7 +128,8 @@ namespace TMVA {
       void DeleteAllMethods( void );
 
       // accessors
-      IMethod* GetMethod( const TString& datasetname, const TString& title )const;
+      IMethod* GetMethod( const TString& datasetname, const TString& title ) const;
+      Bool_t   HasMethod( const TString& datasetname, const TString& title ) const;
 
       Bool_t Verbose( void ) const { return fVerbose; }
       void SetVerbose( Bool_t v=kTRUE );
@@ -146,12 +146,27 @@ namespace TMVA {
       // classifiers are printed
       void PrintHelpMessage(const TString& datasetname , const TString& methodTitle = "" ) const;
 
-      static TDirectory* RootBaseDir() { return (TDirectory*)fgTargetFile; }
+      TDirectory* RootBaseDir() { return (TDirectory*)fgTargetFile; }
 
-      static Bool_t IsSilentFile();
+      Bool_t IsSilentFile();
+      Bool_t IsModelPersistence();
+
+      Double_t GetROCIntegral(DataLoader *loader, TString theMethodName, UInt_t iClass = 0);
+      Double_t GetROCIntegral(TString datasetname, TString theMethodName, UInt_t iClass = 0);
+
+      // Methods to get a TGraph for an indicated method in dataset.
+      // Optional title and axis added with fLegend=kTRUE.
+      // Argument iClass used in multiclass settings, otherwise ignored.
+      TGraph* GetROCCurve(DataLoader *loader, TString theMethodName, Bool_t setTitles=kTRUE, UInt_t iClass=0);
+      TGraph* GetROCCurve(TString datasetname, TString theMethodName, Bool_t setTitles=kTRUE, UInt_t iClass=0);
+
+      // Methods to get a TMultiGraph for a given class and all methods in dataset.
+      TMultiGraph* GetROCCurveAsMultiGraph(DataLoader *loader, UInt_t iClass);
+      TMultiGraph* GetROCCurveAsMultiGraph(TString datasetname, UInt_t iClass);
       
-      Double_t GetROCIntegral(DataLoader *loader,TString theMethodName);
-      Double_t GetROCIntegral(TString  datasetname,TString theMethodName);
+      // Draw all ROC curves of a given class for all methods in the dataset.
+      TCanvas* GetROCCurve(DataLoader *loader, UInt_t iClass=0);
+      TCanvas* GetROCCurve(TString datasetname, UInt_t iClass=0);
 
    private:
 
@@ -166,50 +181,46 @@ namespace TMVA {
       TH1F* EvaluateImportanceRandom( DataLoader *loader,UInt_t nseeds, Types::EMVA theMethod,  TString methodTitle, const char *theOption = "" );
       
       TH1F* GetImportance(const int nbits,std::vector<Double_t> importances,std::vector<TString> varNames);
-      
-      //method to do a copy of TTrees in subseeds in Variable Importance
-      void VIDataLoaderCopy(DataLoader *des,DataLoader *src);
-      
+
+      // Helpers for public facing ROC methods
+      ROCCurve *GetROC(DataLoader *loader, TString theMethodName, UInt_t iClass = 0,
+                       Types::ETreeType type = Types::kTesting);
+      ROCCurve *GetROC(TString datasetname, TString theMethodName, UInt_t iClass = 0,
+                       Types::ETreeType type = Types::kTesting);
+
       void WriteDataInformation(DataSetInfo&     fDataSetInfo);
 
       void SetInputTreesFromEventAssignTrees();
+
+      MethodBase* BookMethodWeightfile(DataLoader *dataloader, TMVA::Types::EMVA methodType, const TString &weightfile);
 
    private:
 
       // data members
 
-      static TFile*                             fgTargetFile;     //! ROOT output file
+      TFile*                             fgTargetFile;     //! ROOT output file
 
 
       std::vector<TMVA::VariableTransformBase*> fDefaultTrfs;     //! list of transformations on default DataSet
 
       // cd to local directory
       TString                                   fOptions;         //! option string given by construction (presently only "V")
-      TString                                   fTransformations; //! List of transformations to test
+      TString                                   fTransformations; //! list of transformations to test
       Bool_t                                    fVerbose;         //! verbose mode
-      Bool_t					fCorrelations;    //! enable to calculate corelations
-      Bool_t					fROC;             //! enable to calculate ROC values
-      static Bool_t				fSilentFile;      //! enable to reduce the output file
+      TString                                   fVerboseLevel;    //! verbosity level, controls granularity of logging
+      Bool_t                                    fCorrelations;    //! enable to calculate corelations
+      Bool_t                                    fROC;             //! enable to calculate ROC values
+      Bool_t                                    fSilentFile;      //! used in contructor wihtout file 
 
       TString                                   fJobName;         //! jobname, used as extension in weight file names
 
-      // flag determining the way training and test data are assigned to Factory
-      enum DataAssignType { kUndefined = 0, 
-                            kAssignTrees,
-                            kAssignEvents };
-      DataAssignType                            fDataAssignType;  //! flags for data assigning
-      std::vector<TTree*>                       fTrainAssignTree; //! for each class: tmp tree if user wants to assign the events directly
-      std::vector<TTree*>                       fTestAssignTree;  //! for each class: tmp tree if user wants to assign the events directly
-
-      Int_t                                     fATreeType;          // type of event (=classIndex)
-      Float_t                                   fATreeWeight;        // weight of the event
-      Float_t*                                  fATreeEvent;         // event variables
-
       Types::EAnalysisType                      fAnalysisType;    //! the training type
-
+      Bool_t                                    fModelPersistence;//! option to save the trained model in xml file or using serialization
+      
+      
    protected:
 
-      ClassDef(Factory,0)  // The factory creates all MVA methods, and performs their training and testing
+      ClassDef(Factory,0);  // The factory creates all MVA methods, and performs their training and testing
    };
 
 } // namespace TMVA

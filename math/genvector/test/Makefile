@@ -37,11 +37,6 @@ endif
 ifneq ($(USE_REFLEX),)
 GCCXML=yes
 CXXFLAGS += -DUSE_REFLEX
-ifeq ($(PLATFORM),win32)
-EXTRAIOLIBS = "$(ROOTSYS)/lib/libReflex.lib"  "$(ROOTSYS)/lib/libCintex.lib"  
-else
-EXTRAIOLIBS = -lReflex -lCintex
-endif
 endif
 
 
@@ -180,16 +175,7 @@ ifeq ($(ARCH),aix5)
 		/usr/vacpp/bin/makeC++SharedLib $(OutPutOpt) $@ $(GLIBS) -p 0 $^
 else
 ifeq ($(PLATFORM),macosx)
-# We need to make both the .dylib and the .so
 		$(LD) $(SOFLAGS) $^ $(OutPutOpt) $@
-ifneq ($(subst $(MACOSX_MINOR),,1234),1234)
-ifeq ($(MACOSX_MINOR),4)
-		ln -sf $@ $(subst .$(DllSuf),.so,$@)
-else
-		$(LD) -bundle -undefined $(UNDEFOPT) $(LDFLAGS) $^ \
-	 	   $(OutPutOpt) $(subst .$(DllSuf),.so,$@)
-endif
-endif
 else
 ifeq ($(PLATFORM),win32)
 		bindexplib libTrackDict $^ > libTrackDict.def

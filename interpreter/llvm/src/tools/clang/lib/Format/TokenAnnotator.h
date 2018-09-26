@@ -18,7 +18,6 @@
 
 #include "UnwrappedLineParser.h"
 #include "clang/Format/Format.h"
-#include <string>
 
 namespace clang {
 class SourceManager;
@@ -40,10 +39,11 @@ class AnnotatedLine {
 public:
   AnnotatedLine(const UnwrappedLine &Line)
       : First(Line.Tokens.front().Tok), Level(Line.Level),
+        MatchingOpeningBlockLineIndex(Line.MatchingOpeningBlockLineIndex),
         InPPDirective(Line.InPPDirective),
         MustBeDeclaration(Line.MustBeDeclaration), MightBeFunctionDecl(false),
-        Affected(false), LeadingEmptyLinesAffected(false),
-        ChildrenAffected(false) {
+        IsMultiVariableDeclStmt(false), Affected(false),
+        LeadingEmptyLinesAffected(false), ChildrenAffected(false) {
     assert(!Line.Tokens.empty());
 
     // Calculate Next and Previous for all tokens. Note that we must overwrite
@@ -59,7 +59,7 @@ public:
       I->Tok->Previous = Current;
       Current = Current->Next;
       Current->Children.clear();
-      for (const auto& Child : Node.Children) {
+      for (const auto &Child : Node.Children) {
         Children.push_back(new AnnotatedLine(Child));
         Current->Children.push_back(Children.back());
       }
@@ -80,6 +80,29 @@ public:
     }
   }
 
+  /// \c true if this line starts with the given tokens in order, ignoring
+  /// comments.
+  template <typename... Ts> bool startsWith(Ts... Tokens) const {
+    return First && First->startsSequence(Tokens...);
+  }
+
+  /// \c true if this line ends with the given tokens in reversed order,
+  /// ignoring comments.
+  /// For example, given tokens [T1, T2, T3, ...], the function returns true if
+  /// this line is like "... T3 T2 T1".
+  template <typename... Ts> bool endsWith(Ts... Tokens) const {
+    return Last && Last->endsSequence(Tokens...);
+  }
+
+  /// \c true if this line looks like a function definition instead of a
+  /// function declaration. Asserts MightBeFunctionDecl.
+  bool mightBeFunctionDefinition() const {
+    assert(MightBeFunctionDecl);
+    // FIXME: Line.Last points to other characters than tok::semi
+    // and tok::lbrace.
+    return !Last->isOneOf(tok::semi, tok::comment);
+  }
+
   FormatToken *First;
   FormatToken *Last;
 
@@ -87,9 +110,11 @@ public:
 
   LineType Type;
   unsigned Level;
+  size_t MatchingOpeningBlockLineIndex;
   bool InPPDirective;
   bool MustBeDeclaration;
   bool MightBeFunctionDecl;
+  bool IsMultiVariableDeclStmt;
 
   /// \c True if this line should be formatted, i.e. intersects directly or
   /// indirectly with one of the input ranges.
@@ -99,13 +124,13 @@ public:
   /// input ranges.
   bool LeadingEmptyLinesAffected;
 
-  /// \c True if a one of this line's children intersects with an input range.
+  /// \c True if one of this line's children intersects with an input range.
   bool ChildrenAffected;
 
 private:
   // Disallow copying.
-  AnnotatedLine(const AnnotatedLine &) LLVM_DELETED_FUNCTION;
-  void operator=(const AnnotatedLine &) LLVM_DELETED_FUNCTION;
+  AnnotatedLine(const AnnotatedLine &) = delete;
+  void operator=(const AnnotatedLine &) = delete;
 };
 
 /// \brief Determines extra information about the tokens comprising an
@@ -136,6 +161,8 @@ private:
   bool mustBreakBefore(const AnnotatedLine &Line, const FormatToken &Right);
 
   bool canBreakBefore(const AnnotatedLine &Line, const FormatToken &Right);
+
+  bool mustBreakForReturnType(const AnnotatedLine &Line) const;
 
   void printDebugInfo(const AnnotatedLine &Line);
 

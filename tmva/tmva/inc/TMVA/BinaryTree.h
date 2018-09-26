@@ -30,9 +30,7 @@
 #ifndef ROOT_TMVA_BinaryTree
 #define ROOT_TMVA_BinaryTree
 
-#ifndef ROOT_TMVA_Version
 #include "TMVA/Version.h"
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 //                                                                      //
@@ -43,13 +41,9 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include <iosfwd>
-#ifndef ROOT_TROOT
 #include "TROOT.h"
-#endif
 
-#ifndef ROOT_TMVA_Node
 #include "TMVA/Node.h"
-#endif
 
 // -----------------------------------------------------------------------------
 
@@ -125,7 +119,7 @@ namespace TMVA {
 
       MsgLogger& Log() const;
 
-      ClassDef(BinaryTree,0) // Base class for BinarySearch and Decision Trees
+      ClassDef(BinaryTree,0); // Base class for BinarySearch and Decision Trees
    };  
 
 } // namespace TMVA

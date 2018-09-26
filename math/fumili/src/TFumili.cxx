@@ -97,17 +97,17 @@ function argument.
 //______________________________________________________________________________
 
 
-
-#include "TROOT.h"
 #include "TFumili.h"
-#include "TMath.h"
+
+#include "Riostream.h"
+#include "TGraphAsymmErrors.h"
 #include "TF1.h"
 #include "TF2.h"
 #include "TF3.h"
 #include "TH1.h"
-#include "TGraphAsymmErrors.h"
-
-#include "Riostream.h"
+#include "TMath.h"
+#include "TROOT.h"
+#include "TVirtualFitter.h"
 
 
 extern void H1FitChisquareFumili(Int_t &npar, Double_t *gin, Double_t &f, Double_t *u, Int_t flag);
@@ -211,7 +211,8 @@ void TFumili::BuildArrays(){
 
 TFumili::~TFumili() {
    DeleteArrays();
-   gROOT->GetListOfSpecials()->Remove(this);
+   if (gROOT && !gROOT->TestBit(TObject::kInvalidObject))
+      gROOT->GetListOfSpecials()->Remove(this);
    if (gFumili == this) gFumili = 0;
 }
 
@@ -1070,7 +1071,7 @@ void TFumili::InvertZ(Int_t n)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///return kTRUE if parameter ipar is fixed, kFALSE othersise)
+/// Return kTRUE if parameter ipar is fixed, kFALSE othersise)
 
 Bool_t TFumili::IsFixed(Int_t ipar) const
 {
@@ -1759,7 +1760,7 @@ Int_t TFumili::SGZ()
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///  Minimization function for H1s using a Chisquare method
+///  Minimization function for H1s using a Chisquare method.
 ///  Default method (function evaluated at center of bin)
 ///  for each point the cache contains the following info
 ///    -1D : bc,e,xc  (bin content, error, x of center of bin)
@@ -1831,7 +1832,7 @@ void TFumili::FitChisquare(Int_t &npar, Double_t *gin, Double_t &f, Double_t *u,
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///  Minimization function for H1s using a Chisquare method
+///  Minimization function for H1s using a Chisquare method.
 ///  The "I"ntegral method is used
 ///  for each point the cache contains the following info
 ///    -1D : bc,e,xc,xw  (bin content, error, x of center of bin, x bin width of bin)
@@ -1902,7 +1903,7 @@ void TFumili::FitChisquareI(Int_t &npar, Double_t *gin, Double_t &f, Double_t *u
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///  Minimization function for H1s using a Likelihood method*-*-*-*-*-*
+///  Minimization function for H1s using a Likelihood method.
 ///     Basically, it forms the likelihood by determining the Poisson
 ///     probability that given a number of entries in a particular bin,
 ///     the fit would predict it's value.  This is then done for each bin,
@@ -1990,7 +1991,7 @@ void TFumili::FitLikelihood(Int_t &npar, Double_t *gin, Double_t &f, Double_t *u
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///  Minimization function for H1s using a Likelihood method*-*-*-*-*-*
+///  Minimization function for H1s using a Likelihood method.
 ///     Basically, it forms the likelihood by determining the Poisson
 ///     probability that given a number of entries in a particular bin,
 ///     the fit would predict it's value.  This is then done for each bin,
@@ -2085,8 +2086,7 @@ void TFumili::FitLikelihoodI(Int_t &npar, Double_t *gin, Double_t &f, Double_t *
 //______________________________________________________________________________
 
 ////////////////////////////////////////////////////////////////////////////////
-///           Minimization function for H1s using a Chisquare method
-///           ======================================================
+/// Minimization function for H1s using a Chisquare method.
 
 void H1FitChisquareFumili(Int_t &npar, Double_t *gin, Double_t &f, Double_t *u, Int_t flag)
 {
@@ -2095,8 +2095,7 @@ void H1FitChisquareFumili(Int_t &npar, Double_t *gin, Double_t &f, Double_t *u, 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///   -*-*-*-*Minimization function for H1s using a Likelihood method*-*-*-*-*-*
-///           =======================================================
+/// Minimization function for H1s using a Likelihood method.
 ///     Basically, it forms the likelihood by determining the Poisson
 ///     probability that given a number of entries in a particular bin,
 ///     the fit would predict it's value.  This is then done for each bin,
@@ -2117,9 +2116,7 @@ void H1FitLikelihoodFumili(Int_t &npar, Double_t *gin, Double_t &f, Double_t *u,
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*Minimization function for Graphs using a Chisquare method*-*-*-*-*
-///*-*        =========================================================
-///
+/// Minimization function for Graphs using a Chisquare method.
 /// In case of a TGraphErrors object, ex, the error along x,  is projected
 /// along the y-direction by calculating the function at the points x-exlow and
 /// x+exhigh.

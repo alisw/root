@@ -13,13 +13,9 @@
 #ifndef ROOT_TGeoCache
 #define ROOT_TGeoCache
 
-#ifndef ROOT_TGeoNode
 #include "TGeoNode.h"
-#endif
 
-#ifndef ROOT_TGeoStateInfo
 #include "TGeoStateInfo.h"
-#endif
 
 // forward declarations
 class TGeoManager;
@@ -62,7 +58,7 @@ private:
    Int_t                 fGeoInfoStackSize; // maximum size of the stack of info states
    Int_t                 fLevel;            // level in the current branch
    Int_t                 fStackLevel;       // current level in the stack
-   Int_t                 fInfoLevel;       // current level in the stack
+   Int_t                 fInfoLevel;        // current level in the stack
    Int_t                 fCurrentID;        // unique ID of current node
    Int_t                 fIndex;            // index in array of ID's
    Int_t                 fIdBranch[100];    // current branch of indices

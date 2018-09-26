@@ -12,17 +12,11 @@
 #ifndef ROOT_TKey
 #define ROOT_TKey
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TDatime
 #include "TDatime.h"
-#endif
-#ifndef ROOT_TBuffer
 #include "TBuffer.h"
-#endif
+#include "TClass.h"
 
-class TClass;
 class TBrowser;
 class TDirectory;
 class TFile;
@@ -90,7 +84,6 @@ protected:
            Int_t       GetVersion() const  {return fVersion;}
    virtual Long64_t    GetSeekKey() const  {return fSeekKey;}
    virtual Long64_t    GetSeekPdir() const {return fSeekPdir;}
-   virtual ULong_t     Hash() const;
    virtual void        IncrementPidOffset(UShort_t offset);
            Bool_t      IsFolder() const;
    virtual void        Keep();
@@ -99,6 +92,12 @@ protected:
    virtual Int_t       Read(TObject *obj);
    virtual TObject    *ReadObj();
    virtual TObject    *ReadObjWithBuffer(char *bufferRead);
+   /// To read an object (non deriving from TObject) from the file.
+   /// This is more user friendly version of TKey::ReadObjectAny.
+   /// See TKey::ReadObjectAny for more details.
+   template <typename T> T *ReadObject() {
+      return reinterpret_cast<T*>(ReadObjectAny(TClass::GetClass(typeid(T))));
+   }
    virtual void       *ReadObjectAny(const TClass *expectedClass);
    virtual void        ReadBuffer(char *&buffer);
            void        ReadKeyBuffer(char *&buffer);

@@ -6,13 +6,9 @@
 include_directories(${XROOTD_INCLUDE_DIRS})
 add_definitions(${XROOTD_CFLAGS})
 
-ROOT_GENERATE_DICTIONARY(G__NetxNG *.h MODULE NetxNG LINKDEF LinkDef.h)
-
 ROOT_ADD_CXX_FLAG(CMAKE_CXX_FLAGS -Wno-shadow)
-ROOT_LINKER_LIBRARY(NetxNG *.cxx G__NetxNG.cxx LIBRARIES ${XROOTD_LIBRARIES} DEPENDENCIES Net RIO Thread)
 
-ROOT_INSTALL_HEADERS()
-
-if(builtin_xrootd)
-  add_dependencies(NetxNG XROOTD)
-endif()
+ROOT_STANDARD_LIBRARY_PACKAGE(NetxNG
+                              LIBRARIES ${XROOTD_LIBRARIES}
+                              DEPENDENCIES Net RIO Thread
+                              BUILTINS XROOTD)

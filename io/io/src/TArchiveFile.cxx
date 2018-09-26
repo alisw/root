@@ -14,7 +14,7 @@
 \class TArchiveFile
 \ingroup IO
 
-Class describing an archive file containing multiple sub-files, like a ZIP 
+Class describing an archive file containing multiple sub-files, like a ZIP
 or TAR archive.
 */
 
@@ -28,7 +28,7 @@ or TAR archive.
 #include <stdlib.h>
 
 
-ClassImp(TArchiveFile)
+ClassImp(TArchiveFile);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Specify the archive name and member name.
@@ -203,7 +203,7 @@ Bool_t TArchiveFile::ParseUrl(const char *url, TString &archive, TString &member
 }
 
 
-ClassImp(TArchiveMember)
+ClassImp(TArchiveMember);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.

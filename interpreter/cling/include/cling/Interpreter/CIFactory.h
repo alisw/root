@@ -21,30 +21,25 @@ namespace llvm {
 
 namespace clang {
   class DiagnosticsEngine;
+  class ASTConsumer;
 }
 
 namespace cling {
-  class CIFactory {
-  public:
+  class InvocationOptions;
+
+  namespace CIFactory {
     typedef std::unique_ptr<llvm::MemoryBuffer> MemBufPtr_t;
+
     // TODO: Add overload that takes file not MemoryBuffer
-    static clang::CompilerInstance* createCI(llvm::StringRef code,
-                                             int argc,
-                                             const char* const *argv,
-                                             const char* llvmdir);
 
-    static clang::CompilerInstance* createCI(MemBufPtr_t buffer,
-                                             int argc,
-                                             const char* const *argv,
-                                             const char* llvmdir,
-                                             bool OnlyLex = false);
+    clang::CompilerInstance*
+    createCI(llvm::StringRef Code, const InvocationOptions& Opts,
+             const char* LLVMDir, std::unique_ptr<clang::ASTConsumer> consumer);
 
-  private:
-    //---------------------------------------------------------------------
-    //! Constructor
-    //---------------------------------------------------------------------
-    CIFactory() = delete;
-    ~CIFactory() = delete;
-  };
+    clang::CompilerInstance*
+    createCI(MemBufPtr_t Buffer, int Argc, const char* const* Argv,
+             const char* LLVMDir, std::unique_ptr<clang::ASTConsumer> consumer,
+             bool OnlyLex = false);
+  } // namespace CIFactory
 } // namespace cling
 #endif // CLING_CIFACTORY_H

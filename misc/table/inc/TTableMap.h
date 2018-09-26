@@ -16,9 +16,7 @@
 #include "assert.h"
 #include <vector>
 
-#ifndef ROOT_TTable
 #include "TTable.h"
-#endif
 
 //////////////////////////////////////////////////////
 //
@@ -46,7 +44,7 @@ public:
       , std::vector<Long_t>(map)
 #endif
     , fTable(map.fTable) {;}
-   virtual ~TTableMap(){;}
+   virtual ~TTableMap();
    Bool_t  IsValid() const;
    Bool_t  IsFolder() const;
    void Push_back(Long_t next); // workaround for Cint

@@ -22,25 +22,15 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TAttPad
 #include "TAttPad.h"
-#endif
 
-#ifndef ROOT_TVirtualX
 #include "TVirtualX.h"
-#endif
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
-#ifndef ROOT_Buttons
 #include "Buttons.h"
-#endif
 
-#ifndef ROOT_TQObject
 #include "TQObject.h"
-#endif
 
 // forward declarations
 class TAxis;
@@ -74,9 +64,10 @@ public:
    virtual Double_t AbsPixeltoX(Int_t px) = 0;
    virtual Double_t AbsPixeltoY(Int_t py) = 0;
    virtual void     AddExec(const char *name, const char *command) = 0;
-   virtual TLegend *BuildLegend(Double_t x1=0.5, Double_t y1=0.67, Double_t x2=0.88, Double_t y2=0.88, const char *title="") = 0;
+   virtual TLegend *BuildLegend(Double_t x1=0.3, Double_t y1=0.21, Double_t x2=0.3, Double_t y2=0.21, const char *title="", Option_t *option = "") = 0;
    virtual TVirtualPad* cd(Int_t subpadnumber=0) = 0;
    virtual void     Clear(Option_t *option="") = 0;
+   virtual Int_t    Clip(Double_t *x, Double_t *y, Double_t xclipl, Double_t yclipb, Double_t xclipr, Double_t yclipt) = 0;
    virtual void     Close(Option_t *option="") = 0;
    virtual void     CopyPixmap() = 0;
    virtual void     CopyPixmaps() = 0;
@@ -86,6 +77,7 @@ public:
    virtual void     DrawClassObject(const TObject *obj, Option_t *option="") = 0;
    virtual TH1F    *DrawFrame(Double_t xmin, Double_t ymin, Double_t xmax, Double_t ymax, const char *title="") = 0;
    virtual void     ExecuteEventAxis(Int_t event, Int_t px, Int_t py, TAxis *axis) = 0;
+   virtual void     UnZoomed() { Emit("UnZoomed()"); } // *SIGNAL*
    virtual Short_t  GetBorderMode() const = 0;
    virtual Short_t  GetBorderSize() const = 0;
    virtual Int_t    GetCanvasID() const = 0;
@@ -164,6 +156,7 @@ public:
    virtual void     PaintBox(Double_t x1, Double_t y1, Double_t x2, Double_t y2, Option_t *option="") = 0;
    virtual void     PaintFillArea(Int_t n, Float_t *x, Float_t *y, Option_t *option="") = 0;
    virtual void     PaintFillArea(Int_t n, Double_t *x, Double_t *y, Option_t *option="") = 0;
+   virtual void     PaintFillAreaNDC(Int_t n, Double_t *x, Double_t *y, Option_t *option="") = 0;
    virtual void     PaintPadFrame(Double_t xmin, Double_t ymin, Double_t xmax, Double_t ymax) = 0;
    virtual void     PaintLine(Double_t x1, Double_t y1, Double_t x2, Double_t y2) = 0;
    virtual void     PaintLineNDC(Double_t u1, Double_t v1,Double_t u2, Double_t v2) = 0;
@@ -243,6 +236,11 @@ public:
    virtual Int_t    XtoPixel(Double_t x) const = 0;
    virtual Int_t    YtoPixel(Double_t y) const = 0;
 
+   virtual Int_t    IncrementPaletteColor(Int_t i, TString opt) = 0;
+   virtual Int_t    NextPaletteColor() = 0;
+
+   virtual Bool_t   PlaceBox(TObject *o, Double_t w, Double_t h, Double_t &xl, Double_t &yb) = 0;
+
    virtual TObject *CreateToolTip(const TBox *b, const char *text, Long_t delayms) = 0;
    virtual void     DeleteToolTip(TObject *tip) = 0;
    virtual void     ResetToolTip(TObject *tip) = 0;
@@ -265,7 +263,7 @@ public:
 
    static TVirtualPad *&Pad();
 
-   ClassDef(TVirtualPad,2)  //Abstract base class for Pads and Canvases
+   ClassDef(TVirtualPad,3)  //Abstract base class for Pads and Canvases
 };
 
 //

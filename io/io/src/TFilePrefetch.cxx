@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <cassert>
 
 static const int kMAX_READ_SIZE    = 2;   //maximum size of the read list of blocks
 
@@ -27,7 +28,7 @@ inline int xtod(char c) { return (c>='0' && c<='9') ? c-'0' : ((c>='A' && c<='F'
 
 using namespace std;
 
-ClassImp(TFilePrefetch)
+ClassImp(TFilePrefetch);
 
 /**
 \class TFilePrefetch
@@ -311,26 +312,31 @@ TThread* TFilePrefetch::GetThread() const
 ///  - clear all blocks from prefetching and read list
 ///  - reset the file pointer
 
-void TFilePrefetch::SetFile(TFile *file)
+void TFilePrefetch::SetFile(TFile *file, TFile::ECacheAction action)
 {
-   if (!fThreadJoined) {
-     fSemChangeFile->Wait();
-   }
+   if (action == TFile::kDisconnect) {
+      if (!fThreadJoined) {
+        fSemChangeFile->Wait();
+      }
 
-   if (fFile) {
-     // Remove all pending and read blocks
-     fMutexPendingList.lock();
-     fPendingBlocks->Clear();
-     fMutexPendingList.unlock();
+      if (fFile) {
+        // Remove all pending and read blocks
+        fMutexPendingList.lock();
+        fPendingBlocks->Clear();
+        fMutexPendingList.unlock();
 
-     fMutexReadList.lock();
-     fReadBlocks->Clear();
-     fMutexReadList.unlock();
-   }
+        fMutexReadList.lock();
+        fReadBlocks->Clear();
+        fMutexReadList.unlock();
+      }
 
-   fFile = file;
-   if (!fThreadJoined) {
-     fSemChangeFile->Post();
+      fFile = file;
+      if (!fThreadJoined) {
+        fSemChangeFile->Post();
+      }
+   } else {
+      // kDoNotDisconnect must reconnect to the same file
+      assert((fFile == file) && "kDoNotDisconnect must reattach to the same file");
    }
 }
 

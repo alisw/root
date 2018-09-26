@@ -1,5 +1,5 @@
 // @(#):$Id$
-// Author: M.Gheata 
+// Author: M.Gheata
 
 /*************************************************************************
  * Copyright (C) 1995-2002, Rene Brun and Fons Rademakers.               *
@@ -12,20 +12,9 @@
 #ifndef ROOT_TGeoTranslationEditor
 #define ROOT_TGeoTranslationEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoTranslationEditor                                               //
-//                                                                      //
-//  Editor for a TGeoTranslation.                                       //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TGButton
 #include "TGWidget.h"
-#endif
-#ifndef ROOT_TGeoGedFrame
 #include "TGeoGedFrame.h"
-#endif
 
 class TGeoTranslation;
 class TGeoRotation;
@@ -76,17 +65,10 @@ public:
    void           DoApply();
    void           DoCancel();
    void           DoUndo();
-   
+
    ClassDef(TGeoTranslationEditor,0)   // TGeoTranslation editor
-};   
-  
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoRotationEditor                                                  //
-//                                                                      //
-//  Editor for a TGeoRotation.                                          //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+};
+
 
 class TGeoRotationEditor : public TGeoGedFrame {
 
@@ -134,17 +116,10 @@ public:
    void           DoApply();
    void           DoCancel();
    void           DoUndo();
-   
-   ClassDef(TGeoRotationEditor,0)   // TGeoRotation editor
-};   
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoCombiTransEditor                                                //
-//                                                                      //
-//  Editor for a TGeoCombiTrans.                                        //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+   ClassDef(TGeoRotationEditor,0)   // TGeoRotation editor
+};
+
 
 class TGeoCombiTransEditor : public TGeoGedFrame {
 
@@ -201,8 +176,8 @@ public:
    void           DoApply();
    void           DoCancel();
    void           DoUndo();
-   
-   ClassDef(TGeoCombiTransEditor,0)   // TGeoCombiTrans editor
-};   
 
-#endif                    
+   ClassDef(TGeoCombiTransEditor,0)   // TGeoCombiTrans editor
+};
+
+#endif

@@ -39,8 +39,8 @@
 */
 
 #include "TDecompQRH.h"
-
-ClassImp(TDecompQRH)
+#include "TError.h" // For R__ASSERT
+ClassImp(TDecompQRH);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor for (nrows x ncols) matrix

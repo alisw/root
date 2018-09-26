@@ -67,6 +67,9 @@ Regression_BDTG2 [4/4]...........................................OK
 // Author: Christoph Rosemann   Dec. 2009
 // TMVA unit tests
 
+#include "TMVA/IMethod.h"
+#include "TMVA/Types.h"
+
 #include <string>
 #include <iostream>
 #include <cassert>
@@ -260,7 +263,7 @@ namespace UnitTesting
       long getNumFailed() const;
       const std::ostream* getStream() const;
       void setStream(std::ostream* osptr);
-      void addTest(UnitTest* t) throw (UnitTestSuiteError);
+      void addTest(UnitTest* t);
       void addSuite(const UnitTestSuite&);
       void run();  // Calls Test::run() repeatedly
       void intro() const;
@@ -306,7 +309,7 @@ namespace UnitTesting
 using namespace std;
 using namespace UnitTesting;
 
-void UnitTestSuite::addTest(UnitTest* t) throw(UnitTestSuiteError)
+void UnitTestSuite::addTest(UnitTest* t)
 {
    // Verify test is valid and has a stream:
    if (t == 0)
@@ -820,9 +823,7 @@ void utDataSet::testMethods()
 
 #include <vector>
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
 
 
@@ -1582,8 +1583,10 @@ bool utFactory::addEventsToFactoryByHand(const char* factoryname, const char* op
    factory->TrainAllMethods();
    factory->TestAllMethods();
    factory->EvaluateAllMethods();
-   MethodBase* theMethod = dynamic_cast<TMVA::MethodBase*> (factory->GetMethod(dataloader->GetName(), _methodTitle));
-   double ROCValue = theMethod->GetROCIntegral();
+   double ROCValue(0.);
+   if (auto theMethod = dynamic_cast<TMVA::MethodBase *>(factory->GetMethod(dataloader->GetName(), _methodTitle))) {
+      ROCValue = theMethod->GetROCIntegral();
+   }
    //cout << "ROC="<<ROCValue<<endl;
    delete dataloader; 
    delete factory;
@@ -1642,8 +1645,10 @@ bool utFactory::operateSingleFactory(const char* factoryname, const char* opt)
    factory->TrainAllMethods();
    factory->TestAllMethods();
    factory->EvaluateAllMethods();
-   MethodBase* theMethod = dynamic_cast<TMVA::MethodBase*> (factory->GetMethod(dataloader->GetName(), _methodTitle));
-   double ROCValue = theMethod->GetROCIntegral();
+   double ROCValue(0.);
+   if (auto theMethod = dynamic_cast<TMVA::MethodBase *>(factory->GetMethod(dataloader->GetName(), _methodTitle))) {
+      ROCValue = theMethod->GetROCIntegral();
+   }
    delete tree;
    delete dataloader; 
    delete factory;
@@ -1780,6 +1785,9 @@ utVariableInfo::utVariableInfo() :
 
    mean       = 42.;
    rms        = 47.11;
+   _varinfoC1 = nullptr;
+   _varinfoC2 = nullptr;
+   _varinfoC3 = nullptr;
 }
 
 
@@ -1821,7 +1829,7 @@ void utVariableInfo::_testConstructor2()
    test_(_varinfoC2->GetExpression()  == "");
    //  test_(_varinfoC2->GetInternalName() == );
    //  test_(_varinfoC2->GetLabel()
-   test_(_varinfoC2->GetTitle()   == "");
+   test_(_varinfoC2->GetTitle()   == TString(""));
    test_(_varinfoC2->GetUnit()    == "");
    test_(_varinfoC2->GetVarType() == '\0');
 
@@ -1966,10 +1974,12 @@ using namespace std;
 using namespace UnitTesting;
 using namespace TMVA;
 
-MethodUnitTestWithROCLimits::MethodUnitTestWithROCLimits(const Types::EMVA& theMethod, const TString& methodTitle, const TString& theOption,
-                                                         double lowLimit, double upLimit,
-                                                         const std::string & /* xname */ ,const std::string & /* filename */ , std::ostream* /* sptr */ ) :
-   UnitTest((string)methodTitle, __FILE__), _methodType(theMethod) , _methodTitle(methodTitle), _methodOption(theOption), _upROCLimit(upLimit), _lowROCLimit(lowLimit), _VariableNames(0), _TreeVariableNames(0)
+MethodUnitTestWithROCLimits::MethodUnitTestWithROCLimits(const Types::EMVA &theMethod, const TString &methodTitle,
+                                                         const TString &theOption, double lowLimit, double upLimit,
+                                                         const std::string & /* xname */,
+                                                         const std::string & /* filename */, std::ostream * /* sptr */)
+   : UnitTest(string(methodTitle.Data()), __FILE__), _methodType(theMethod), _methodTitle(methodTitle),
+     _methodOption(theOption), _upROCLimit(upLimit), _lowROCLimit(lowLimit), _VariableNames(0), _TreeVariableNames(0)
 {
    _VariableNames  = new std::vector<TString>(0);
    _TreeVariableNames = new std::vector<TString>(0);
@@ -2017,21 +2027,15 @@ void MethodUnitTestWithROCLimits::run()
   dataloader->AddVariable( _VariableNames->at(3),                "Variable 4", "units", 'F' );
 
   TFile* input(0);
-
   FileStat_t stat;
 
-  TString fname = "../tmva/test/data/toy_sigbkg.root"; //tmva_example.root";
-  const char *fcname = gSystem->ExpandPathName("$ROOTSYS/tmva/test/data/toy_sigbkg.root");
+  TString fname = "./tmva_class_example.root";
   if(!gSystem->GetPathInfo(fname,stat)) {
      input = TFile::Open( fname );
-  } else if(!gSystem->GetPathInfo("../"+fname,stat)) {
-     input = TFile::Open( "../"+fname );
-  } else if(fcname && !gSystem->GetPathInfo(fcname,stat)) {
-     input = TFile::Open( fcname );
   } else {
-     input = TFile::Open( "http://root.cern.ch/files/tmva_class_example.root" );
+     TFile::SetCacheFileDir(".");
+     input = TFile::Open("http://root.cern.ch/files/tmva_class_example.root", "CACHEREAD");
   }
-  delete [] fcname;
   if (input == NULL) {
      cerr << "broken/inaccessible input file" << endl;
   }
@@ -2405,11 +2409,14 @@ using namespace std;
 using namespace UnitTesting;
 using namespace TMVA;
 
-RegressionUnitTestWithDeviation::RegressionUnitTestWithDeviation(const Types::EMVA& theMethod, const TString& methodTitle, const TString& theOption,
-                                                                 double lowFullLimit, double upFullLimit,double low90PercentLimit, double up90PercentLimit,
-                                                                 const std::string & /* xname */ ,const std::string & /* filename */ , std::ostream* /* sptr */)
-   : UnitTest(string("Regression_")+(string)methodTitle, __FILE__), _methodType(theMethod) , _methodTitle(methodTitle), _methodOption(theOption),
-                                                                                                                                  _lowerFullDeviationLimit(lowFullLimit),  _upperFullDeviationLimit(upFullLimit), _lower90PercentDeviationLimit(low90PercentLimit), _upper90PercentDeviationLimit(up90PercentLimit)
+RegressionUnitTestWithDeviation::RegressionUnitTestWithDeviation(
+   const Types::EMVA &theMethod, const TString &methodTitle, const TString &theOption, double lowFullLimit,
+   double upFullLimit, double low90PercentLimit, double up90PercentLimit, const std::string & /* xname */,
+   const std::string & /* filename */, std::ostream * /* sptr */)
+   : UnitTest(string("Regression_") + string(methodTitle.Data()), __FILE__), _methodType(theMethod),
+     _methodTitle(methodTitle), _methodOption(theOption), _lowerFullDeviationLimit(lowFullLimit),
+     _upperFullDeviationLimit(upFullLimit), _lower90PercentDeviationLimit(low90PercentLimit),
+     _upper90PercentDeviationLimit(up90PercentLimit)
 {
 }
 
@@ -2448,14 +2455,12 @@ void RegressionUnitTestWithDeviation::run()
    TFile* input(0);
    FileStat_t stat;
 
-   // FIXME:: give the filename of the sample somewhere else?
-   TString fname = "../tmva/test/tmva_reg_example.root";
+   TString fname = "./tmva_reg_example.root";
    if(!gSystem->GetPathInfo(fname,stat)) {
       input = TFile::Open( fname );
-   } else if(!gSystem->GetPathInfo("../"+fname,stat)) {
-      input = TFile::Open( "../"+fname );
    } else {
-      input = TFile::Open( "http://root.cern.ch/files/tmva_reg_example.root" );
+      TFile::SetCacheFileDir(".");
+      input = TFile::Open("http://root.cern.ch/files/tmva_reg_example.root", "CACHEREAD");
    }
    if (input == NULL) {
       cerr << "broken/inaccessible input file" << endl;
@@ -2649,11 +2654,20 @@ using namespace std;
 using namespace UnitTesting;
 using namespace TMVA;
 
-MethodUnitTestWithComplexData::MethodUnitTestWithComplexData(const TString& treestring, const TString& preparestring, const Types::EMVA& theMethod, const TString& methodTitle, const TString& theOption,
-                                                             double lowLimit, double upLimit,
-                                                             const std::string & /* xname */ ,const std::string & /* filename */ , std::ostream* /* sptr */) :
-   UnitTest(string("ComplexData_")+(string)methodTitle+(string)treestring, __FILE__),  _methodType(theMethod) , _treeString(treestring), _prepareString(preparestring), _methodTitle(methodTitle), _methodOption(theOption), _upROCLimit(upLimit), _lowROCLimit(lowLimit)
+MethodUnitTestWithComplexData::MethodUnitTestWithComplexData(const TString &treestring, const TString &preparestring,
+                                                             const Types::EMVA &theMethod, const TString &methodTitle,
+                                                             const TString &theOption, double lowLimit, double upLimit,
+                                                             const std::string & /* xname */,
+                                                             const std::string & /* filename */,
+                                                             std::ostream * /* sptr */)
+   : UnitTest(string("ComplexData_") + string(methodTitle.Data()) + string(treestring.Data()), __FILE__),
+     _methodType(theMethod), _treeString(treestring), _prepareString(preparestring), _methodTitle(methodTitle),
+     _methodOption(theOption), _upROCLimit(upLimit), _lowROCLimit(lowLimit)
 {
+    theTree = nullptr;
+    _theMethod = nullptr;
+    _factory = nullptr;
+    _ROCValue = 0.;
 }
 
 
@@ -2827,6 +2841,105 @@ bool MethodUnitTestWithComplexData::create_data(const char* filename, int nmax)
    dataFile->Close();
    return true;
 }
+
+
+
+//Author: Attila Bagoly <battila93@gmail.com>
+
+#ifndef UTIPythonInteractive_H
+#define UTIPythonInteractive_H
+
+#include <vector>
+#include "TMVA/MethodBase.h"
+
+/**
+Unit test for TMVA::IPythonInteractive located in TMVA/MethodBase.h
+*/
+class utIPythonInteractive : public UnitTesting::UnitTest{
+public:
+  utIPythonInteractive();
+  void run();
+private:
+  void testInit();
+  void testMethods();
+  
+  TMVA::IPythonInteractive * ipyi;
+  std::vector<TString> titles;
+  std::vector<Double_t> xvec;
+  std::vector<Double_t> y1vec, y2vec;
+  int N;
+};
+
+#endif
+
+
+#include <random>
+#include "TGraph.h"
+#include "TMultiGraph.h"
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///// Standard constructor
+utIPythonInteractive::utIPythonInteractive() : UnitTesting::UnitTest("IPythonInteractive", __FILE__)
+{
+  ipyi = nullptr;
+  N = 1000;
+  titles.push_back("Training Error");
+  titles.push_back("Testing Error");
+  std::uniform_real_distribution<double> unif(0, 1);
+  std::default_random_engine re;
+  for(int i=0;i<N;i++){
+    xvec.push_back(i);
+    y1vec.push_back(unif(re));
+    y2vec.push_back(unif(re));
+  }
+  
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///// Run tests
+void utIPythonInteractive::run()
+{
+  testInit();
+  testMethods();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///// Testing creating IPythonInteractive object and initialization.
+void utIPythonInteractive::testInit()
+{
+  ipyi = new TMVA::IPythonInteractive();
+  test_(ipyi->Get() != NULL);
+  
+  ipyi->Init(titles);
+  test_(!ipyi->NotInitialized());
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+///// Adding datas to IPythonInteractive and testing if it got all of them correctly.
+void utIPythonInteractive::testMethods()
+{
+  for(int i=0;i<N;i++){
+    ipyi->AddPoint(xvec[i], y1vec[i], y2vec[i]);
+    TList * graphs = ipyi->Get()->GetListOfFunctions();
+    TIter next(graphs);
+    int j=0;
+  	TObject *obj;
+    while ((obj = (TObject*)next())){
+      TGraph * gr = dynamic_cast<TGraph*>(obj);
+      test_(gr!=nullptr);
+      if (gr==nullptr) continue;
+      test_(gr->GetN()==(i+1));
+      Double_t x, y;
+      test_(gr->GetPoint(i, x, y)!=-1);
+      test_(x==xvec[i]);
+      test_(j==0 ? y==y1vec[i] : y==y2vec[i]);
+      j++;
+	  }
+  }
+}
+
+
+
 // including file stressTMVA.cxx
 // Authors: Christoph Rosemann, Eckhard von Toerne   July 2010
 // TMVA unit tests
@@ -2912,7 +3025,7 @@ void addClassificationTests( UnitTestSuite& TMVA_test, bool full=true)
    if (full) TMVA_test.addTest(new MethodUnitTestWithROCLimits( TMVA::Types::kTMlpANN, "TMlpANN", "!H:!V:NCycles=200:HiddenLayers=N+1,N:LearningMethod=BFGS:ValidationFraction=0.3"  , 0.7, 0.98) ); // n_cycles:#nodes:#nodes:...
    TMVA_test.addTest(new MethodUnitTestWithROCLimits( TMVA::Types::kSVM, "SVM", "Gamma=0.25:Tol=0.001:VarTransform=Norm" , 0.88, 0.98) );
    TMVA_test.addTest(new MethodUnitTestWithROCLimits( TMVA::Types::kBDT, "BDTG",
-                                                      "!H:!V:NTrees=400:BoostType=Grad:Shrinkage=0.30:UseBaggedBoost:GradBaggingFraction=0.6:SeparationType=GiniIndex:nCuts=20:MaxDepth=2" , 0.88, 0.98) );
+                                                      "!H:!V:NTrees=400:BoostType=Grad:Shrinkage=0.10:UseBaggedBoost:GradBaggingFraction=0.6:SeparationType=GiniIndex:nCuts=20:MaxDepth=2" , 0.88, 0.98) );
    TMVA_test.addTest(new MethodUnitTestWithROCLimits( TMVA::Types::kBDT, "BDT",
                                                       "!H:!V:NTrees=400:nEventsMin=100:MaxDepth=3:BoostType=AdaBoost:SeparationType=GiniIndex:nCuts=10:PruneMethod=NoPruning" , 0.88, 0.98) );
    if (full) TMVA_test.addTest(new MethodUnitTestWithROCLimits( TMVA::Types::kBDT, "BDTB",
@@ -2921,6 +3034,31 @@ void addClassificationTests( UnitTestSuite& TMVA_test, bool full=true)
                                                                 "!H:!V:NTrees=400:nEventsMin=200:MaxDepth=3:BoostType=AdaBoost:SeparationType=GiniIndex:nCuts=10:PruneMethod=NoPruning:VarTransform=Decorrelate" , 0.88, 0.98) );
    if (full) TMVA_test.addTest(new MethodUnitTestWithROCLimits( TMVA::Types::kRuleFit, "RuleFit",
                                                                 "H:!V:RuleFitModule=RFTMVA:Model=ModRuleLinear:MinImp=0.001:RuleMinDist=0.001:NTrees=20:fEventsMin=0.01:fEventsMax=0.5:GDTau=-1.0:GDTauPrec=0.01:GDStep=0.01:GDNSteps=10000:GDErrScale=1.02" , 0.88, 0.98) );
+
+   TString config = "!H:V:VarTransform=N:ErrorStrategy=CROSSENTROPY"
+      ":WeightInitialization=XAVIER"
+      ":Layout=LINEAR|64,LINEAR|64,LINEAR|64,LINEAR"
+      ":TrainingStrategy=LearningRate=0.1,Momentum=0.9, ConvergenceSteps=20,"
+      "BatchSize=256,Regularization=None,TestRepetitions=5, Multithreading=True"
+      "|LearningRate=0.01,Momentum=0.5,ConvergenceSteps=20,BatchSize=256,"
+      "Regularization=None,TestRepetitions=5, Multithreading=True"
+      "|LearningRate=0.003,Momentum=0.5,ConvergenceSteps=20,BatchSize=256,"
+      "Regularization=None,TestRepetitions=5, Multithreading=True"
+      "|LearningRate=0.001,Momentum=0.0,ConvergenceSteps=20,BatchSize=256,"
+      "Regularization=None,TestRepetitions=5, Multithreading=True";
+   TString configCpu      = "Architecture=CPU:" + config;
+   TString configGpu      = "Architecture=GPU:" + config;
+
+#ifdef R__HAS_TMVACPU
+   TMVA_test.addTest(new MethodUnitTestWithROCLimits(
+                         TMVA::Types::kDNN, "DNN CPU", configCpu, 0.85, 0.98)
+                     );
+#endif
+#ifdef R__HAS_TMVAGPU
+   TMVA_test.addTest(new MethodUnitTestWithROCLimits(
+                         TMVA::Types::kDNN, "DNN GPU", configGpu, 0.85, 0.98)
+                     );
+#endif
 }
 
 void addRegressionTests( UnitTestSuite& TMVA_test, bool full=true)
@@ -3023,6 +3161,8 @@ int main(int argc, char **argv)
    addRegressionTests(TMVA_test, full);
    addDataInputTests(TMVA_test, full);
    addComplexClassificationTests(TMVA_test, full);
+   
+   TMVA_test.addTest(new utIPythonInteractive);
 
    // run all
    ROOT::EnableThreadSafety();

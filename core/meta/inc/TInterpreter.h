@@ -22,18 +22,12 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TDictionary
 #include "TDictionary.h"
-#endif
 
-#ifndef ROOT_TVirtualMutex
-#include "TVirtualMutex.h"
-#endif
+#include "TVirtualRWMutex.h"
 
-#ifndef ROOT_Rtypeinfo
-#include "Rtypeinfo.h"
-#endif
-
+#include <map>
+#include <typeinfo>
 #include <vector>
 
 class TClass;
@@ -47,6 +41,22 @@ class TListOfEnums;
 
 R__EXTERN TVirtualMutex *gInterpreterMutex;
 
+#if defined (_REENTRANT) || defined (WIN32)
+# define R__LOCKGUARD_CLING(mutex)  ::ROOT::Internal::InterpreterMutexRegistrationRAII _R__UNIQUE_(R__guard)(mutex); { }
+#else
+# define R__LOCKGUARD_CLING(mutex)  (void)(mutex); { }
+#endif
+
+namespace ROOT {
+namespace Internal {
+struct InterpreterMutexRegistrationRAII {
+   TLockGuard fLockGuard;
+   InterpreterMutexRegistrationRAII(TVirtualMutex* mutex);
+   ~InterpreterMutexRegistrationRAII();
+};
+}
+}
+
 class TInterpreter : public TNamed {
 
 protected:
@@ -56,6 +66,9 @@ protected:
    friend class SuspendAutoParsing;
 
 public:
+   // See as in TSchemaType.h.
+   typedef class std::map<std::string, std::string> MembersMap_t;
+
    enum EErrorCode {
       kNoError     = 0,
       kRecoverable = 1,
@@ -139,6 +152,7 @@ public:
    virtual void     Initialize() = 0;
    virtual void     InspectMembers(TMemberInspector&, const void* obj, const TClass* cl, Bool_t isTransient) = 0;
    virtual Bool_t   IsLoaded(const char *filename) const = 0;
+   virtual Bool_t   IsLibraryLoaded(const char *libname) const = 0;
    virtual Int_t    Load(const char *filenam, Bool_t system = kFALSE) = 0;
    virtual void     LoadMacro(const char *filename, EErrorCode *error = 0) = 0;
    virtual Int_t    LoadLibraryMap(const char *rootmapfile = 0) = 0;
@@ -156,7 +170,9 @@ public:
                                    const char* /*fwdDeclsCode*/,
                                    void (* /*triggerFunc*/)(),
                                    const FwdDeclArgsToKeepCollection_t& fwdDeclArgsToKeep,
-                                   const char** classesHeaders) = 0;
+                                   const char** classesHeaders,
+                                   Bool_t lateRegistration = false,
+                                   Bool_t hasCxxModule = false) = 0;
    virtual void     RegisterTClassUpdate(TClass *oldcl,DictFuncPtr_t dict) = 0;
    virtual void     UnRegisterTClassUpdate(const TClass *oldcl) = 0;
    virtual Int_t    SetClassSharedLibs(const char *cls, const char *libs) = 0;
@@ -175,7 +191,14 @@ public:
    virtual void     UpdateListOfGlobalFunctions() = 0;
    virtual void     UpdateListOfTypes() = 0;
    virtual void     SetClassInfo(TClass *cl, Bool_t reload = kFALSE) = 0;
-   virtual Bool_t   CheckClassInfo(const char *name, Bool_t autoload, Bool_t isClassOrNamespaceOnly = kFALSE) = 0;
+
+   enum ECheckClassInfo {
+      kUnknown = 0, // backward compatible with false
+      kKnown = 1,
+      kWithClassDefInline = 2
+   };
+   virtual ECheckClassInfo CheckClassInfo(const char *name, Bool_t autoload, Bool_t isClassOrNamespaceOnly = kFALSE) = 0;
+
    virtual Bool_t   CheckClassTemplate(const char *name) = 0;
    virtual Long_t   Calc(const char *line, EErrorCode* error = 0) = 0;
    virtual void     CreateListOfBaseClasses(TClass *cl) const = 0;
@@ -199,6 +222,9 @@ public:
    virtual void     SetProcessLineLock(Bool_t lock = kTRUE) = 0;
    virtual const char *TypeName(const char *s) = 0;
 
+   virtual void     SnapshotMutexState(ROOT::TVirtualRWMutex* mtx) = 0;
+   virtual void     ForgetMutexState() = 0;
+
    // All the functions below must be virtual with a dummy implementation
    // These functions are redefined in TCling.
    //The dummy implementation avoids an implementation in TGWin32InterpreterProxy
@@ -209,8 +235,6 @@ public:
    virtual void  *FindSym(const char * /* entry */) const {return 0;}
    virtual void   GenericError(const char * /* error */) const {;}
    virtual Long_t GetExecByteCode() const {return 0;}
-   virtual Long_t Getgvp() const {return 0;}
-   virtual const char *Getp2f2funcname(void * /* receiver */) const {return 0;}
    virtual const char *GetTopLevelMacroName() const {return 0;};
    virtual const char *GetCurrentMacroName()  const {return 0;};
    virtual int    GetSecurityError() const{return 0;}
@@ -222,17 +246,17 @@ public:
    virtual int    SetClassAutoloading(int) const {return 0;}
    virtual int    SetClassAutoparsing(int) {return 0;};
    virtual void   SetErrmsgcallback(void * /* p */) const {;}
-   virtual void   Setgvp(Long_t) const {;}
-   virtual void   SetRTLD_NOW() const {;}
-   virtual void   SetRTLD_LAZY() const {;}
    virtual void   SetTempLevel(int /* val */) const {;}
    virtual int    UnloadFile(const char * /* path */) const {return 0;}
    virtual TInterpreterValue *CreateTemporary() { return 0; }
+   virtual void   CodeComplete(const std::string&, size_t&,
+                               std::vector<std::string>&) {;}
+   virtual int Evaluate(const char*, TInterpreterValue&) {return 0;}
 
    // core/meta helper functions.
    virtual EReturnType MethodCallReturnType(TFunction *func) const = 0;
    virtual ULong64_t GetInterpreterStateMarker() const = 0;
-   virtual void DiagnoseIfInterpreterException(std::exception &e) const = 0;
+   virtual bool DiagnoseIfInterpreterException(const std::exception &e) const = 0;
 
    typedef TDictionary::DeclId_t DeclId_t;
    virtual DeclId_t GetDeclId(CallFunc_t *info) const = 0;
@@ -327,7 +351,7 @@ public:
    template <typename... T>
    void CallFunc_SetArguments(CallFunc_t *func, const T&... args)
    {
-      R__LOCKGUARD2(gInterpreterMutex);
+      R__LOCKGUARD(gInterpreterMutex);
 
       CallFunc_ResetArg(func);
       CallFunc_SetArgImpl(func,args...);
@@ -341,6 +365,7 @@ public:
    virtual void   CallFunc_SetFuncProto(CallFunc_t* func, ClassInfo_t* info, const char* method, const std::vector<TypeInfo_t*> &proto, Long_t* Offset, ROOT::EFunctionMatchMode mode = ROOT::kConversionMatch) const = 0;
    virtual void   CallFunc_SetFuncProto(CallFunc_t* func, ClassInfo_t* info, const char* method, const std::vector<TypeInfo_t*> &proto, bool objectIsConst, Long_t* Offset, ROOT::EFunctionMatchMode mode = ROOT::kConversionMatch) const = 0;
 
+   virtual std::string CallFunc_GetWrapperCode(CallFunc_t *func) const = 0;
 
    // ClassInfo interface
    virtual Bool_t ClassInfo_Contains(ClassInfo_t *info, DeclId_t decl) const = 0;
@@ -496,7 +521,7 @@ public:
 };
 
 
-typedef TInterpreter *CreateInterpreter_t(void* shlibHandle);
+typedef TInterpreter *CreateInterpreter_t(void* shlibHandle, const char* argv[]);
 typedef void *DestroyInterpreter_t(TInterpreter*);
 
 #ifndef __CINT__
@@ -504,5 +529,17 @@ typedef void *DestroyInterpreter_t(TInterpreter*);
 R__EXTERN TInterpreter* (*gPtr2Interpreter)();
 R__EXTERN TInterpreter* gCling;
 #endif
+
+inline ROOT::Internal::InterpreterMutexRegistrationRAII::InterpreterMutexRegistrationRAII(TVirtualMutex* mutex):
+   fLockGuard(mutex)
+{
+   if (gCoreMutex)
+      ::gCling->SnapshotMutexState(gCoreMutex);
+}
+inline ROOT::Internal::InterpreterMutexRegistrationRAII::~InterpreterMutexRegistrationRAII()
+{
+   if (gCoreMutex)
+      ::gCling->ForgetMutexState();
+}
 
 #endif

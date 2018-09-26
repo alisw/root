@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TProcessUUID
+\ingroup Base
+
 This class is a specialized TProcessID managing the list of UUIDs.
 In addition to TProcessID, this object has the following members:
 
@@ -46,7 +48,7 @@ The TRef uniqueID is directly the UUIDNumber=slot number.
 #include "TObjString.h"
 #include "TUUID.h"
 
-ClassImp(TProcessUUID)
+ClassImp(TProcessUUID);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
@@ -146,7 +148,7 @@ void TProcessUUID::RemoveUUID(UInt_t number)
       if (obj->GetUniqueID() == number) {
          fUUIDs->Remove(lnk);
          delete obj;
-         fActive->ResetBit(number);
+         fActive->ResetBitNumber(number);
          fObjects->AddAt(0,number);
          return;
       }

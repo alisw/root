@@ -44,7 +44,6 @@ automatic PDF optimization.
 #include "TClass.h"
 
 #include <fstream>
-#include <iomanip>
 
 #include "TH1.h"
 #include "TH2.h"
@@ -77,7 +76,7 @@ char* operator+( streampos&, char* );
 
 using namespace std;
 
-ClassImp(RooMinimizer)
+ClassImp(RooMinimizer);
 ;
 
 ROOT::Fit::Fitter *RooMinimizer::_theFitter = 0 ;

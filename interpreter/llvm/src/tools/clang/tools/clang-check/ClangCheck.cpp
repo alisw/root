@@ -17,6 +17,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTConsumer.h"
+#include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
 #include "clang/Driver/Options.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -29,6 +30,7 @@
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
+#include "llvm/Support/TargetSelect.h"
 
 using namespace clang::driver;
 using namespace clang::tooling;
@@ -122,8 +124,7 @@ public:
 /// \c FixItRewriter.
 class FixItAction : public clang::FixItAction {
 public:
-  bool BeginSourceFileAction(clang::CompilerInstance& CI,
-                             StringRef Filename) override {
+  bool BeginSourceFileAction(clang::CompilerInstance& CI) override {
     FixItOpts.reset(new FixItOptions);
     Rewriter.reset(new FixItRewriter(CI.getDiagnostics(), CI.getSourceManager(),
                                      CI.getLangOpts(), FixItOpts.get()));
@@ -138,9 +139,10 @@ public:
       return clang::CreateASTDeclNodeLister();
     if (ASTDump)
       return clang::CreateASTDumper(ASTDumpFilter, /*DumpDecls=*/true,
+                                    /*Deserialize=*/false,
                                     /*DumpLookups=*/false);
     if (ASTPrint)
-      return clang::CreateASTPrinter(&llvm::outs(), ASTDumpFilter);
+      return clang::CreateASTPrinter(nullptr, ASTDumpFilter);
     return llvm::make_unique<clang::ASTConsumer>();
   }
 };
@@ -148,7 +150,14 @@ public:
 } // namespace
 
 int main(int argc, const char **argv) {
-  llvm::sys::PrintStackTraceOnErrorSignal();
+  llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
+
+  // Initialize targets for clang module support.
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmPrinters();
+  llvm::InitializeAllAsmParsers();
+
   CommonOptionsParser OptionsParser(argc, argv, ClangCheckCategory);
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());

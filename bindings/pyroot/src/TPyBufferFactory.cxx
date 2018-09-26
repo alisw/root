@@ -37,6 +37,7 @@ namespace {
       PyObject*  fBase;            // b_base in python
       void*      fPtr;             // b_ptr in python
       Py_ssize_t fSize;            // b_size in python
+      Py_ssize_t fItemSize;        // b_itemsize in python
    };
 
 // callable cache
@@ -49,6 +50,8 @@ namespace {
    PyMappingMethods  Py##name##Buffer_MapMethods;
 
    PYROOT_PREPARE_PYBUFFER_TYPE( Bool )
+   PYROOT_PREPARE_PYBUFFER_TYPE( Char )
+   PYROOT_PREPARE_PYBUFFER_TYPE( UChar )
    PYROOT_PREPARE_PYBUFFER_TYPE( Short )
    PYROOT_PREPARE_PYBUFFER_TYPE( UShort )
    PYROOT_PREPARE_PYBUFFER_TYPE( Int )
@@ -63,14 +66,15 @@ namespace {
    {
    // Retrieve the (type-strided) size of the the buffer; may be a guess.
 #if PY_VERSION_HEX < 0x03000000
-      Py_ssize_t nlen = (*(PyBuffer_Type.tp_as_sequence->sq_length))(self);
+      Py_ssize_t nlen = ((PyBufferTop_t*)self)->fSize;
+      Py_ssize_t item = ((PyBufferTop_t*)self)->fItemSize;
 #else
-      Py_buffer bufinfo;
-      (*(Py_TYPE(self)->tp_as_buffer->bf_getbuffer))( self, &bufinfo, PyBUF_SIMPLE );
-      Py_ssize_t nlen = bufinfo.len;
+      Py_buffer* bufinfo = PyMemoryView_GET_BUFFER(self);
+      Py_ssize_t nlen = bufinfo->len;
+      Py_ssize_t item = bufinfo->itemsize;
 #endif
       if ( nlen != INT_MAX )  // INT_MAX is the default, i.e. unknown actual length
-         return nlen;
+         return nlen/item;
 
       std::map< PyObject*, PyObject* >::iterator iscbp = gSizeCallbacks.find( self );
       if ( iscbp != gSizeCallbacks.end() ) {
@@ -108,6 +112,8 @@ namespace {
       Py_buffer bufinfo;
       (*(PyBuffer_Type.tp_as_buffer->bf_getbuffer))( self, &bufinfo, PyBUF_SIMPLE );
       buf = (char*)bufinfo.buf;
+      (*(PyBuffer_Type.tp_as_buffer->bf_releasebuffer))(self, &bufinfo);
+      Py_DECREF(bufinfo.obj);
 #endif
 
       if ( ! buf )
@@ -156,6 +162,8 @@ namespace {
    }
 
    PYROOT_IMPLEMENT_PYBUFFER_METHODS( Bool,   Bool_t,   Long_t,   PyBool_FromLong, PyInt_AsLong )
+   PYROOT_IMPLEMENT_PYBUFFER_METHODS( Char,   Char_t,   Long_t,   PyInt_FromLong, PyInt_AsLong )
+   PYROOT_IMPLEMENT_PYBUFFER_METHODS( UChar,  UChar_t,  Long_t,   PyInt_FromLong, PyInt_AsLong )
    PYROOT_IMPLEMENT_PYBUFFER_METHODS( Short,  Short_t,  Long_t,   PyInt_FromLong, PyInt_AsLong )
    PYROOT_IMPLEMENT_PYBUFFER_METHODS( UShort, UShort_t, Long_t,   PyInt_FromLong, PyInt_AsLong )
    PYROOT_IMPLEMENT_PYBUFFER_METHODS( Int,    Int_t,    Long_t,   PyInt_FromLong, PyInt_AsLong )
@@ -189,10 +197,10 @@ namespace {
          return 0;
 
 #if PY_VERSION_HEX < 0x03000000
-      ((PyBufferTop_t*)self)->fSize = nlen;
+      ((PyBufferTop_t*)self)->fSize = nlen * ((PyBufferTop_t*)self)->fItemSize;
 #else
-      PyMemoryView_GET_BUFFER(self)->len = nlen;
-#endif
+      PyMemoryView_GET_BUFFER(self)->len = nlen * PyMemoryView_GET_BUFFER(self)->itemsize;
+#endif 
 
       Py_INCREF( Py_None );
       return Py_None;
@@ -205,6 +213,10 @@ namespace {
    {
       if ( PyObject_TypeCheck( pyobject, &PyBoolBuffer_Type ) )
          return PyROOT_PyUnicode_FromString( (char*)"b" );
+      else if ( PyObject_TypeCheck( pyobject, &PyCharBuffer_Type ) )
+         return PyROOT_PyUnicode_FromString( (char*)"b" );
+      else if ( PyObject_TypeCheck( pyobject, &PyUCharBuffer_Type ) )
+         return PyROOT_PyUnicode_FromString( (char*)"B" );
       else if ( PyObject_TypeCheck( pyobject, &PyShortBuffer_Type ) )
          return PyROOT_PyUnicode_FromString( (char*)"h" );
       else if ( PyObject_TypeCheck( pyobject, &PyUShortBuffer_Type ) )
@@ -276,6 +288,8 @@ PyROOT::TPyBufferFactory::TPyBufferFactory()
 {
 // construct python buffer types
    PYROOT_INSTALL_PYBUFFER_METHODS( Bool,   Bool_t )
+   PYROOT_INSTALL_PYBUFFER_METHODS( Char,   Char_t )
+   PYROOT_INSTALL_PYBUFFER_METHODS( UChar,  UChar_t )
    PYROOT_INSTALL_PYBUFFER_METHODS( Short,  Short_t )
    PYROOT_INSTALL_PYBUFFER_METHODS( UShort, UShort_t )
    PYROOT_INSTALL_PYBUFFER_METHODS( Int,    Int_t )
@@ -292,6 +306,25 @@ PyROOT::TPyBufferFactory::~TPyBufferFactory()
 {
 }
 
+const char* getBoolFormat()   { return "b";}
+const char* getCharFormat()   { return "b";}
+const char* getUCharFormat()  { return "B";}
+const char* getShortFormat()  { return "h";}
+const char* getUShortFormat() { return "H";}
+const char* getIntFormat()    { return "i";}
+const char* getUIntFormat()   { return "I";}
+const char* getLongFormat()   { return "l";}
+const char* getULongFormat()  { return "L";}
+const char* getFloatFormat()  { return "f";}
+const char* getDoubleFormat() { return "d";}
+
+#if PY_VERSION_HEX < 0x03000000
+   #define PYBUFFER_SETITEMSIZE(buf,type) ((PyBufferTop_t*)buf)->fItemSize = Py_ssize_t(sizeof(type))
+   #define PYBUFFER_SETFORMAT(buf,name) 
+#else
+   #define PYBUFFER_SETITEMSIZE(buf,type) PyMemoryView_GET_BUFFER(buf)->itemsize = Py_ssize_t(sizeof(type))
+   #define PYBUFFER_SETFORMAT(buf,name) PyMemoryView_GET_BUFFER(buf)->format = (char *)get##name##Format() 
+#endif
 
 //- public members --------------------------------------------------------------
 #define PYROOT_IMPLEMENT_PYBUFFER_FROM_MEMORY( name, type )                     \
@@ -302,6 +335,8 @@ PyObject* PyROOT::TPyBufferFactory::PyBuffer_FromMemory( type* address, Py_ssize
    if ( buf ) {                                                                 \
       Py_INCREF( (PyObject*)(void*)&Py##name##Buffer_Type );                    \
       buf->ob_type = &Py##name##Buffer_Type;                                    \
+      PYBUFFER_SETITEMSIZE(buf,type);                                           \
+      PYBUFFER_SETFORMAT(buf, name);                                            \
    }                                                                            \
    return buf;                                                                  \
 }                                                                               \
@@ -317,6 +352,8 @@ PyObject* PyROOT::TPyBufferFactory::PyBuffer_FromMemory( type* address, PyObject
 }
 
 PYROOT_IMPLEMENT_PYBUFFER_FROM_MEMORY( Bool,   Bool_t )
+PYROOT_IMPLEMENT_PYBUFFER_FROM_MEMORY( Char,   Char_t )
+PYROOT_IMPLEMENT_PYBUFFER_FROM_MEMORY( UChar,  UChar_t )
 PYROOT_IMPLEMENT_PYBUFFER_FROM_MEMORY( Short,  Short_t )
 PYROOT_IMPLEMENT_PYBUFFER_FROM_MEMORY( UShort, UShort_t )
 PYROOT_IMPLEMENT_PYBUFFER_FROM_MEMORY( Int,    Int_t )

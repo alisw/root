@@ -1,8 +1,14 @@
-void PhaseSpace() {
-// example of use of TGenPhaseSpace
-//Author: Valerio Filippini
+/// \file
+/// \ingroup tutorial_physics
+/// \notebook -js
+/// Example of use of TGenPhaseSpace
+///
+/// \macro_image
+/// \macro_code
+///
+/// \author Valerio Filippini
 
-   if (!gROOT->GetClass("TGenPhaseSpace")) gSystem->Load("libPhysics");
+void PhaseSpace() {
 
    TLorentzVector target(0.0, 0.0, 0.0, 0.938);
    TLorentzVector beam(0.0, 0.0, .65, .65);

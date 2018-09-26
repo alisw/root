@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TSystemFile
+\ingroup Base
+
 A TSystemFile describes an operating system file.
 The information is used by the browser (see TBrowser).
 */
@@ -20,7 +22,7 @@ The information is used by the browser (see TBrowser).
 #include "TEnv.h"
 
 
-ClassImp(TSystemFile)
+ClassImp(TSystemFile);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// TSystemFile default constructor

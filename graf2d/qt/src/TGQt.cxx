@@ -18,6 +18,12 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
+#if defined(__GNUC__) && __GNUC__ == 5
+#pragma GCC diagnostic ignored "-Wstrict-overflow"
+#endif
+
+#include "TGQt.h"
+
 #if defined(HAVE_CONFIG) || defined (R__HAVE_CONFIG)
 # include "RConfigure.h"
 #endif
@@ -59,7 +65,6 @@
 
 #include "TQtApplication.h"
 #include "TQtWidget.h"
-#include "TGQt.h"
 #include "TQtBrush.h"
 #include "TQtClientFilter.h"
 #include "TQtEventQueue.h"
@@ -394,10 +399,10 @@ protected: // singleton
 public:
 
    static TQtEventInputHandler *Instance() {
-     if (!gfQtEventInputHandler)
-       gfQtEventInputHandler =  new  TQtEventInputHandler();
-       gfQtEventInputHandler->Start(240);
-       return gfQtEventInputHandler;
+      if (!gfQtEventInputHandler)
+         gfQtEventInputHandler =  new  TQtEventInputHandler();
+      gfQtEventInputHandler->Start(240);
+      return gfQtEventInputHandler;
    }
    Bool_t Notify()     {
       Timeout();       // emit Timeout() signal
@@ -571,8 +576,8 @@ QPaintDevice *TGQt::iwid(Int_t wd)
 {
    QPaintDevice *topDevice = 0;
    if (0 <= wd && wd <= int(fWidgetArray->MaxId()) )
-     topDevice = (*fWidgetArray)[wd];
-     if (topDevice == (QPaintDevice *)(-1) ) topDevice = 0;
+      topDevice = (*fWidgetArray)[wd];
+   if (topDevice == (QPaintDevice *)(-1) ) topDevice = 0;
    else {
      assert(wd <= Int_t(fWidgetArray->MaxTotalId()));
      // this is allowed from the embedded TCanvas dtor only.
@@ -707,20 +712,13 @@ QPixmap *TGQt::MakeIcon(Int_t i)
                           GetSystemMetrics(SM_CYSMICON));
    HDC dc = tempIcon->handle();
    DrawIcon (dc, 0, 0, icon);
-#else
-# ifdef ROOTICONPATH
-   gSystem->ExpandPathName(ROOTICONPATH);
-# else
-   gSystem->ExpandPathName("$ROOTSYS/icons/");
-//   tempIcon =new QPixmap (16,16),
-# endif
 #endif
    return tempIcon;
 }
 #endif
 
 
-ClassImp(TGQt)
+ClassImp(TGQt);
 
 //____________________________________________________
 //
@@ -803,13 +801,7 @@ TQtApplication *TGQt::CreateQtApplicationImp()
    static TQtApplication *app = 0;
    if (!app) {
       //    app = new TQtApplication(gApplication->ApplicationName(),gApplication->Argc(),gApplication->Argv());
-      static TString argvString (
-#ifdef ROOTBINDIR
-             ROOTBINDIR "/root.exe"
-#else
-             "$ROOTSYS/bin/root.exe"
-#endif
-             );
+      static TString argvString (TROOT::GetBinDir() + "/root.exe");
       gSystem->ExpandPathName(argvString);
       static char *argv[] = {(char *)argvString.Data()};
       static int nArg = 1;
@@ -997,14 +989,8 @@ Bool_t TGQt::Init(void* /*display*/)
     }
 
     if (isXdfSupport && !symbolFontFound) {
-// Load the local ROOT font
-       QString fontdir =
-#ifdef TTFFONTDIR
-         TTFFONTDIR
-#else
-         "$ROOTSYS/fonts"
-#endif
-        ;
+        // Load the local ROOT font
+        QString fontdir = TROOT::GetTTFFontDir().Data();
         QString symbolFontFile = fontdir + "/" + QString(fSymbolFontFamily).toLower() + ".ttf";
         symbolFontFound = QFontDatabase::addApplicationFont(symbolFontFile);
     }
@@ -1014,12 +1000,7 @@ Bool_t TGQt::Init(void* /*display*/)
         fontFamily = fSymbolFontFamily = "Arial";
         qDebug() << " Substitute it with \""<<fontFamily <<"\"";
         qDebug() << " Make sure your local \"~/.fonts.conf\" or \"/etc/fonts/fonts.conf\" file points to \""
-                 <<
-#ifdef TTFFONTDIR
-               TTFFONTDIR
-#else
-               "$ROOTSYS/fonts"
-#endif
+                 << TROOT::GetTTFFontDir()
                  << "\" directory to get the proper support for ROOT TLatex class";
         // create a custom codec
         new QSymbolCodec();
@@ -2355,7 +2336,7 @@ void  TGQt::SetMarkerSize(Float_t markersize)
 
 void  TGQt::SetMarkerStyle(Style_t markerstyle){
    if (fMarkerStyle == markerstyle) return;
-   TPoint shape[15];
+   TPoint shape[17];
    markerstyle  = TMath::Abs(markerstyle);
    if (markerstyle%1000 >= 31) return;
    fMarkerStyle = markerstyle%1000;
@@ -2543,6 +2524,329 @@ case 31:
    //*-*--- HIGZ +&&x (kind of star)
    SetMarkerType(1,im*2,shape);
    break;
+
+case 32: {
+   // open triangle down
+   shape[0].SetX(   0);  shape[0].SetY( im);
+   shape[1].SetX(  im);  shape[1].SetY( -im);
+   shape[2].SetX( -im);  shape[2].SetY( -im);
+   shape[3].SetX(   0);  shape[3].SetY( im);
+   SetMarkerType(2,4,shape);
+   break;
+         }
+
+case 33: {
+   // full losange
+   Int_t imx = Int_t(2.66*fMarkerSize + 0.5);
+   shape[0].SetX(-imx);  shape[0].SetY( 0);
+   shape[1].SetX(   0);  shape[1].SetY( -im);
+   shape[2].SetX( imx);  shape[2].SetY( 0);
+   shape[3].SetX(   0);  shape[3].SetY( im);
+   shape[4].SetX(-imx);  shape[4].SetY( 0);
+   SetMarkerType(3,5,shape);
+   break;
+         }
+
+case 34: {
+   // full cross
+   Int_t imx = Int_t(1.33*fMarkerSize + 0.5);
+   shape[0].SetX( -im);  shape[0].SetY(-imx);
+   shape[1].SetX(-imx);  shape[1].SetY(-imx);
+   shape[2].SetX(-imx);  shape[2].SetY( -im);
+   shape[3].SetX( imx);  shape[3].SetY( -im);
+   shape[4].SetX( imx);  shape[4].SetY(-imx);
+   shape[5].SetX(  im);  shape[5].SetY(-imx);
+   shape[6].SetX(  im);  shape[6].SetY( imx);
+   shape[7].SetX( imx);  shape[7].SetY( imx);
+   shape[8].SetX( imx);  shape[8].SetY( im);
+   shape[9].SetX(-imx);  shape[9].SetY( im);
+   shape[10].SetX(-imx);  shape[10].SetY( imx);
+   shape[11].SetX( -im);  shape[11].SetY( imx);
+   shape[12].SetX( -im);  shape[12].SetY(-imx);
+   SetMarkerType(3,13,shape);
+   break;
+         }
+
+case 35: {
+   // square with diagonal cross
+   shape[0].SetX( -im);  shape[0].SetY( -im);
+   shape[1].SetX(  im);  shape[1].SetY( -im);
+   shape[2].SetX(  im);  shape[2].SetY( im);
+   shape[3].SetX( -im);  shape[3].SetY( im);
+   shape[4].SetX( -im);  shape[4].SetY( -im);
+   shape[5].SetX(  im);  shape[5].SetY( im);
+   shape[6].SetX( -im);  shape[6].SetY( im);
+   shape[7].SetX(  im);  shape[7].SetY( -im);
+   SetMarkerType(2,8,shape);
+   break;
+         }
+
+case 36: {
+   // diamond with cross
+   shape[0].SetX(-im);  shape[0].SetY( 0);
+   shape[1].SetX(  0);  shape[1].SetY( -im);
+   shape[2].SetX( im);  shape[2].SetY( 0);
+   shape[3].SetX(  0);  shape[3].SetY( im);
+   shape[4].SetX(-im);  shape[4].SetY( 0);
+   shape[5].SetX( im);  shape[5].SetY( 0);
+   shape[6].SetX(  0);  shape[6].SetY( im);
+   shape[7].SetX(  0);  shape[7].SetY(-im);
+   SetMarkerType(2,8,shape);
+   break;
+         }
+
+case 37: {
+   // open three triangles
+   Int_t im2 = Int_t(2.00*fMarkerSize + 0.5);
+   shape[0].SetX(   0);  shape[0].SetY(   0);
+   shape[1].SetX(-im2);  shape[1].SetY(  im);
+   shape[2].SetX( -im);  shape[2].SetY(   0);
+   shape[3].SetX(   0);  shape[3].SetY(   0);
+   shape[4].SetX(-im2);  shape[4].SetY( -im);
+   shape[5].SetX( im2);  shape[5].SetY( -im);
+   shape[6].SetX(   0);  shape[6].SetY(   0);
+   shape[7].SetX(  im);  shape[7].SetY(   0);
+   shape[8].SetX( im2);  shape[8].SetY(  im);
+   shape[9].SetX(   0);  shape[9].SetY(   0);
+   SetMarkerType(2,10,shape);
+   break;
+         }
+
+case 38: {
+   // + shaped marker with octagon
+   Int_t im2 = Int_t(2.00*fMarkerSize + 0.5);
+   shape[0].SetX( -im);  shape[0].SetY(0);
+   shape[1].SetX( -im);  shape[1].SetY(-im2);
+   shape[2].SetX(-im2);  shape[2].SetY(-im);
+   shape[3].SetX( im2);  shape[3].SetY( -im);
+   shape[4].SetX(  im);  shape[4].SetY(-im2);
+   shape[5].SetX(  im);  shape[5].SetY( im2);
+   shape[6].SetX( im2);  shape[6].SetY( im);
+   shape[7].SetX(-im2);  shape[7].SetY( im);
+   shape[8].SetX( -im);  shape[8].SetY( im2);
+   shape[9].SetX( -im);  shape[9].SetY( 0);
+   shape[10].SetX( im);  shape[10].SetY( 0);
+   shape[11].SetX(  0);  shape[11].SetY( 0);
+   shape[12].SetX(  0);  shape[12].SetY( -im);
+   shape[13].SetX(  0);  shape[13].SetY( im);
+   SetMarkerType(2,14,shape);
+   break;
+         }
+
+case 39: {
+   // filled three triangles
+   Int_t im2 = Int_t(2.00*fMarkerSize + 0.5);
+   shape[0].SetX(   0);  shape[0].SetY(   0);
+   shape[1].SetX(-im2);  shape[1].SetY(  im);
+   shape[2].SetX(  im);  shape[2].SetY(   0);
+   shape[3].SetX(   0);  shape[3].SetY(   0);
+   shape[4].SetX(-im2);  shape[4].SetY( -im);
+   shape[5].SetX( im2);  shape[5].SetY( -im);
+   shape[6].SetX(   0);  shape[6].SetY(   0);
+   shape[7].SetX(  im);  shape[7].SetY(   0);
+   shape[8].SetX( im2);  shape[8].SetY(  im);
+   SetMarkerType(3,9,shape);
+   break;
+         }
+
+case 40: {
+   // four open triangles X
+   Int_t im2 = Int_t(2.00*fMarkerSize + 0.5);
+   shape[0].SetX(    0);  shape[0].SetY(    0);
+   shape[1].SetX(  im2);  shape[1].SetY(   im);
+   shape[2].SetX(   im);  shape[2].SetY(  im2);
+   shape[3].SetX(    0);  shape[3].SetY(    0);
+   shape[4].SetX(   im);  shape[4].SetY( -im2);
+   shape[5].SetX(  im2);  shape[5].SetY(  -im);
+   shape[6].SetX(    0);  shape[6].SetY(    0);
+   shape[7].SetX( -im2);  shape[7].SetY(  -im);
+   shape[8].SetX(  -im);  shape[8].SetY( -im2);
+   shape[9].SetX(    0);  shape[9].SetY(    0);
+   shape[10].SetX(  -im);  shape[10].SetY(  im2);
+   shape[11].SetX( -im2);  shape[11].SetY(   im);
+   shape[12].SetX(    0);  shape[12].SetY(    0);
+   SetMarkerType(2,13,shape);
+   break;
+         }
+
+case 41: {
+   // four filled triangles X
+   Int_t im2 = Int_t(2.00*fMarkerSize + 0.5);
+   shape[0].SetX(    0);  shape[0].SetY(    0);
+   shape[1].SetX(  im2);  shape[1].SetY(   im);
+   shape[2].SetX(   im);  shape[2].SetY(  im2);
+   shape[3].SetX(    0);  shape[3].SetY(    0);
+   shape[4].SetX(   im);  shape[4].SetY( -im2);
+   shape[5].SetX(  im2);  shape[5].SetY(  -im);
+   shape[6].SetX(    0);  shape[6].SetY(    0);
+   shape[7].SetX( -im2);  shape[7].SetY(  -im);
+   shape[8].SetX(  -im);  shape[8].SetY( -im2);
+   shape[9].SetX(    0);  shape[9].SetY(    0);
+   shape[10].SetX(  -im);  shape[10].SetY(  im2);
+   shape[11].SetX( -im2);  shape[11].SetY(   im);
+   shape[12].SetX(    0);  shape[12].SetY(    0);
+   SetMarkerType(3,13,shape);
+   break;
+         }
+
+case 42: {
+      // open double diamonds
+   Int_t imx = Int_t(fMarkerSize + 0.5);
+   shape[0].SetX(    0);   shape[0].SetY( im);
+   shape[1].SetX( -imx);   shape[1].SetY( imx);
+   shape[2].SetX(  -im);   shape[2].SetY( 0);
+   shape[3].SetX( -imx);   shape[3].SetY( -imx);
+   shape[4].SetX(    0);   shape[4].SetY( -im);
+   shape[5].SetX(  imx);   shape[5].SetY( -imx);
+   shape[6].SetX(   im);   shape[6].SetY( 0);
+   shape[7].SetX(  imx);   shape[7].SetY( imx);
+   shape[8].SetX(    0);   shape[8].SetY( im);
+   SetMarkerType(2,9,shape);
+   break;
+         }
+
+case 43: {
+      // filled double diamonds
+   Int_t imx = Int_t(fMarkerSize + 0.5);
+   shape[0].SetX(    0);   shape[0].SetY(   im);
+   shape[1].SetX( -imx);   shape[1].SetY(  imx);
+   shape[2].SetX(  -im);   shape[2].SetY(    0);
+   shape[3].SetX( -imx);   shape[3].SetY( -imx);
+   shape[4].SetX(    0);   shape[4].SetY(  -im);
+   shape[5].SetX(  imx);   shape[5].SetY( -imx);
+   shape[6].SetX(   im);   shape[6].SetY(    0);
+   shape[7].SetX(  imx);   shape[7].SetY(  imx);
+   shape[8].SetX(    0);   shape[8].SetY(   im);
+   SetMarkerType(3,9,shape);
+   break;
+         }
+
+case 44: {
+   // open four triangles plus
+   Int_t im2 = Int_t(2.00*fMarkerSize + 0.5);
+   shape[0].SetX(    0);  shape[0].SetY(    0);
+   shape[1].SetX(  im2);  shape[1].SetY(   im);
+   shape[2].SetX( -im2);  shape[2].SetY(   im);
+   shape[3].SetX(  im2);  shape[3].SetY(  -im);
+   shape[4].SetX( -im2);  shape[4].SetY(  -im);
+   shape[5].SetX(    0);  shape[5].SetY(    0);
+   shape[6].SetX(   im);  shape[6].SetY(  im2);
+   shape[7].SetX(   im);  shape[7].SetY( -im2);
+   shape[8].SetX(  -im);  shape[8].SetY(  im2);
+   shape[9].SetX(  -im);  shape[9].SetY( -im2);
+   shape[10].SetX(    0);  shape[10].SetY(    0);
+   SetMarkerType(2,11,shape);
+   break;
+         }
+
+case 45: {
+   // filled four triangles plus
+   Int_t im2 = Int_t(2.0*fMarkerSize + 0.5);
+   Int_t im0 = Int_t(0.4*fMarkerSize + 0.5);
+   shape[0].SetX(  im0);  shape[0].SetY(  im0);
+   shape[1].SetX(  im2);  shape[1].SetY(   im);
+   shape[2].SetX( -im2);  shape[2].SetY(   im);
+   shape[3].SetX( -im0);  shape[3].SetY(  im0);
+   shape[4].SetX(  -im);  shape[4].SetY(  im2);
+   shape[5].SetX(  -im);  shape[5].SetY( -im2);
+   shape[6].SetX( -im0);  shape[6].SetY( -im0);
+   shape[7].SetX( -im2);  shape[7].SetY(  -im);
+   shape[8].SetX(  im2);  shape[8].SetY(  -im);
+   shape[9].SetX(  im0);  shape[9].SetY( -im0);
+   shape[10].SetX(   im);  shape[10].SetY( -im2);
+   shape[11].SetX(   im);  shape[11].SetY(  im2);
+   shape[12].SetX(  im0);  shape[12].SetY(  im0);
+   SetMarkerType(3,13,shape);
+   break;
+         }
+
+case 46: {
+   // open four triangles X
+   Int_t im2 = Int_t(2.0*fMarkerSize + 0.5);
+   shape[0].SetX(    0);  shape[0].SetY(  im2);
+   shape[1].SetX( -im2);  shape[1].SetY(   im);
+   shape[2].SetX(  -im);  shape[2].SetY(  im2);
+   shape[3].SetX( -im2);  shape[3].SetY(    0);
+   shape[4].SetX(  -im);  shape[4].SetY( -im2);
+   shape[5].SetX( -im2);  shape[5].SetY(  -im);
+   shape[6].SetX(    0);  shape[6].SetY( -im2);
+   shape[7].SetX(  im2);  shape[7].SetY(  -im);
+   shape[8].SetX(   im);  shape[8].SetY( -im2);
+   shape[9].SetX(  im2);  shape[9].SetY(    0);
+   shape[10].SetX(  im);  shape[10].SetY( im2);
+   shape[11].SetX( im2);  shape[11].SetY(  im);
+   shape[12].SetX(   0);  shape[12].SetY( im2);
+   SetMarkerType(2,13,shape);
+   break;
+         }
+
+case 47: {
+   // filled four triangles X
+   Int_t im2 = Int_t(2.0*fMarkerSize + 0.5);
+   shape[0].SetX(    0);  shape[0].SetY(  im2);
+   shape[1].SetX( -im2);  shape[1].SetY(   im);
+   shape[2].SetX(  -im);  shape[2].SetY(  im2);
+   shape[3].SetX( -im2);  shape[3].SetY(    0);
+   shape[4].SetX(  -im);  shape[4].SetY( -im2);
+   shape[5].SetX( -im2);  shape[5].SetY(  -im);
+   shape[6].SetX(    0);  shape[6].SetY( -im2);
+   shape[7].SetX(  im2);  shape[7].SetY(  -im);
+   shape[8].SetX(   im);  shape[8].SetY( -im2);
+   shape[9].SetX(  im2);  shape[9].SetY(    0);
+   shape[10].SetX(  im);  shape[10].SetY( im2);
+   shape[11].SetX( im2);  shape[11].SetY(  im);
+   shape[12].SetX(   0);  shape[12].SetY( im2);
+   SetMarkerType(3,13,shape);
+   break;
+         }
+
+case 48: {
+   // four filled squares X
+   Int_t im2 = Int_t(2.0*fMarkerSize + 0.5);
+   shape[0].SetX(     0); shape[0].SetY(   im2*1.005);
+   shape[1].SetX(  -im2); shape[1].SetY(    im);
+   shape[2].SetX(    im); shape[2].SetY(   im2);
+   shape[3].SetX(  -im2); shape[3].SetY(     0);
+   shape[4].SetX(   -im); shape[4].SetY(  -im2);
+   shape[5].SetX(  -im2); shape[5].SetY(   -im);
+   shape[6].SetX(     0); shape[6].SetY(  -im2);
+   shape[7].SetX(   im2); shape[7].SetY(   -im);
+   shape[8].SetX(    im); shape[8].SetY(  -im2);
+   shape[9].SetX(   im2); shape[9].SetY(     0);
+   shape[10].SetX(   im); shape[10].SetY(  im2);
+   shape[11].SetX(  im2); shape[11].SetY(   im);
+   shape[12].SetX(    0); shape[12].SetY(  im2*0.995);
+   shape[13].SetX( im2*0.99); shape[13].SetY(  0);
+   shape[14].SetX(    0); shape[14].SetY(-im2*0.995);
+   shape[15].SetX(-im2*0.99); shape[15].SetY(   0);
+   shape[16].SetX(    0); shape[16].SetY( im2*0.995);
+   SetMarkerType(3,16,shape);
+   break;
+         }
+
+case 49: {
+   // four filled squares plus
+   Int_t imx = Int_t(1.33*fMarkerSize + 0.5);
+   shape[0].SetX( -imx); shape[0].SetY(  -imx*1.005);
+   shape[1].SetX( -imx); shape[1].SetY(   -im);
+   shape[2].SetX(  imx); shape[2].SetY(   -im);
+   shape[3].SetX(  imx); shape[3].SetY(  -imx);
+   shape[4].SetX(   im); shape[4].SetY(  -imx);
+   shape[5].SetX(   im); shape[5].SetY(   imx);
+   shape[6].SetX(  imx); shape[6].SetY(   imx);
+   shape[7].SetX(  imx); shape[7].SetY(    im);
+   shape[8].SetX( -imx); shape[8].SetY(    im);
+   shape[9].SetX( -imx); shape[9].SetY(   imx);
+   shape[10].SetX(  -im); shape[10].SetY(   imx);
+   shape[11].SetX(  -im); shape[11].SetY(  -imx);
+   shape[12].SetX( -imx); shape[12].SetY(  -imx*0.995);
+   shape[13].SetX( -imx); shape[13].SetY(   imx);
+   shape[14].SetX(  imx); shape[14].SetY(   imx);
+   shape[15].SetX(  imx); shape[15].SetY(  -imx*1.005);
+   SetMarkerType(3,16,shape);
+   break;
+         }
+
 default:
    //*-*--- single dot
    SetMarkerType(0+penWidth,0,shape);

@@ -44,18 +44,10 @@
 #include "time.h"
 #endif
 
-#ifndef ROOT_TMVA_Volume
 #include "TMVA/Volume.h"
-#endif
-#ifndef ROOT_TMVA_BinaryTree
 #include "TMVA/BinaryTree.h"
-#endif
-#ifndef ROOT_TMVA_BinarySearchTreeNode
 #include "TMVA/BinarySearchTreeNode.h"
-#endif
-#ifndef ROOT_TMVA_VariableInfo
 #include "TMVA/VariableInfo.h"
-#endif
 
 class TString;
 class TTree;
@@ -176,7 +168,7 @@ namespace TMVA {
       Bool_t                      fCanNormalize; // the tree can be normalised
       std::vector< std::pair<Double_t,const TMVA::Event*> > fNormalizeTreeTable;
       
-      ClassDef(BinarySearchTree,0) // Binary search tree including volume search method  
+      ClassDef(BinarySearchTree,0); // Binary search tree including volume search method  
    };
   
 } // namespace TMVA

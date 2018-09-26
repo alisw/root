@@ -11,10 +11,11 @@
 
 #include "TObjectSpy.h"
 #include "TROOT.h"
-
+#include "TVirtualMutex.h"
 
 /** \class TObjectRefSpy
     \class TObjectSpy
+\ingroup Base
 
 Monitors objects for deletion and reflects the deletion by reverting
 the internal pointer to zero. When this pointer is zero we know the
@@ -23,8 +24,8 @@ hack. The spied object must have the kMustCleanup bit set otherwise
 you will get an error.
 */
 
-ClassImp(TObjectSpy)
-ClassImp(TObjectRefSpy)
+ClassImp(TObjectSpy);
+ClassImp(TObjectRefSpy);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Register the object that must be spied. The object must have the
@@ -34,7 +35,10 @@ ClassImp(TObjectRefSpy)
 TObjectSpy::TObjectSpy(TObject *obj, Bool_t fixMustCleanupBit) :
    TObject(), fObj(obj), fResetMustCleanupBit(kFALSE)
 {
-   gROOT->GetListOfCleanups()->Add(this);
+   {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfCleanups()->Add(this);
+   }
    if (fObj && !fObj->TestBit(kMustCleanup)) {
       if (fixMustCleanupBit) {
          fResetMustCleanupBit = kTRUE;
@@ -52,6 +56,7 @@ TObjectSpy::~TObjectSpy()
 {
    if (fObj && fResetMustCleanupBit)
       fObj->SetBit(kMustCleanup, kFALSE);
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfCleanups()->Remove(this);
 }
 
@@ -97,7 +102,10 @@ void TObjectSpy::SetObject(TObject *obj, Bool_t fixMustCleanupBit)
 TObjectRefSpy::TObjectRefSpy(TObject *&obj, Bool_t fixMustCleanupBit) :
    fObj(obj), fResetMustCleanupBit(kFALSE)
 {
-   gROOT->GetListOfCleanups()->Add(this);
+   {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfCleanups()->Add(this);
+   }
    if (fObj && !fObj->TestBit(kMustCleanup)) {
       if (fixMustCleanupBit) {
          fResetMustCleanupBit = kTRUE;
@@ -115,6 +123,7 @@ TObjectRefSpy::~TObjectRefSpy()
 {
    if (fObj && fResetMustCleanupBit)
       fObj->SetBit(kMustCleanup, kFALSE);
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfCleanups()->Remove(this);
 }
 

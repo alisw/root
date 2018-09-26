@@ -16,14 +16,12 @@
 #include <string.h>
 #include <limits>
 
-templateClassImp(TKDTree)
+templateClassImp(TKDTree);
 
 
 /**
-
-\class TKDTree class implementing a kd-tree
-
-
+\class TKDTree
+\brief Class implementing a kd-tree
 
 Contents:
 1. What is kd-tree

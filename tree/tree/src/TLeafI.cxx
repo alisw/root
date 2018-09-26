@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TLeafI
+\ingroup tree
+
 A TLeaf for an Integer data type.
 */
 
@@ -19,7 +21,7 @@ A TLeaf for an Integer data type.
 #include "TClonesArray.h"
 #include "Riostream.h"
 
-ClassImp(TLeafI)
+ClassImp(TLeafI);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for LeafI.
@@ -106,6 +108,22 @@ Double_t TLeafI::GetValue(Int_t i) const
 {
    if (fIsUnsigned) return (UInt_t)fValue[i];
    return fValue[i];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Copy/set fMinimum and fMaximum to include/be wide than those of the parameter
+
+Bool_t TLeafI::IncludeRange(TLeaf *input)
+{
+    if (input) {
+        if (input->GetMaximum() > this->GetMaximum())
+            this->SetMaximum( input->GetMaximum() );
+        if (input->GetMinimum() < this->GetMinimum())
+            this->SetMinimum( input->GetMinimum() );
+        return kTRUE;
+    } else {
+        return kFALSE;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

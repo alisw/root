@@ -38,6 +38,7 @@
 #include <map>
 #include <list>
 #include <array>
+#include <functional>
 #include <stdlib.h>
 #include "TApplication.h"
 #include "TEntryList.h"
@@ -252,7 +253,7 @@ Bool_t Test2()
    elistsum->Subtract(elist2);
    n = elistsum->GetN();
    TEntryList *elistcheck2 = new TEntryList("elistcheck2","elistcheck2");
-   chain->Draw(">>elistcheck2", "x>0 && (y>0.1 || y<-0.1)", "entrylist");
+   chain->Draw(">>elistcheck2", cut1 && !cut2, "entrylist");
 
    wrongentries4 = 0;
    for (Int_t i=0; i<n; i++){
@@ -269,7 +270,7 @@ Bool_t Test2()
    //subtract the first list
    elistsum2->Subtract(elist1);
    elistcheck2->Reset();
-   chain->Draw(">>elistcheck2", "x<0 && y<0.1 && y>-0.1", "entrylist");
+   chain->Draw(">>elistcheck2", !cut1 && cut2, "entrylist");
    wrongentries5 = 0;
    n = elistcheck2->GetN();
    for (Int_t i=0; i<n; i++){
@@ -602,6 +603,8 @@ void CleanUp(Int_t nfiles)
 
 Int_t stressEntryList(Int_t nentries, Int_t nfiles)
 {
+   // Make sure files are not existing already.
+   CleanUp(nfiles);
 
    MakeTrees(nentries, nfiles);
    printf("**********************************************************************\n");

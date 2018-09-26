@@ -19,9 +19,7 @@
 //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TError
 #include "TError.h"
-#endif
 #include <vector>
 #include <forward_list>
 
@@ -57,7 +55,7 @@ namespace Detail {
       // Same value as TVirtualCollectionProxy.
       static const UInt_t fgIteratorArenaSize = 16; // greater than sizeof(void*) + sizeof(UInt_t)
 
-   /** @class template TCollectionProxyInfo::IteratorValue
+   /** @class ROOT::Detail::TCollectionProxyInfo::IteratorValue
     *
     * Small helper to encapsulate whether to return the value
     * pointed to by the iterator or its address.
@@ -76,7 +74,7 @@ namespace Detail {
          }
       };
 
-   /** @class template TCollectionProxyInfo::Iterators
+   /** @class ROOT::Detail::TCollectionProxyInfo::Iterators
     *
     * Small helper to implement the function to create,access and destroy
     * iterators.
@@ -204,7 +202,7 @@ namespace Detail {
          }
       };
 
-  /** @class TCollectionProxyInfo::Environ TCollectionProxyInfo.h TCollectionProxyInfo.h
+  /** @class ROOT::Detail::TCollectionProxyInfo::Environ
     *
     * Small helper to save proxy environment in the event of
     * recursive calls.
@@ -213,7 +211,6 @@ namespace Detail {
     * @version 1.0
     * @date    10/10/2004
     */
-#ifndef __CINT__
    struct EnvironBase {
    private:
       EnvironBase(const EnvironBase&); // Intentionally not implement, copy is not supported
@@ -228,7 +225,10 @@ namespace Detail {
       void*               fObject;
       void*               fStart;
       void*               fTemp;
-      Bool_t              fUseTemp;
+      union {
+         Bool_t fUseTemp;
+         Bool_t fLastValueVecBool;
+      };
       int                 fRefCount;
       size_t              fSpace;
    };
@@ -241,10 +241,6 @@ namespace Detail {
          return new Environ();
       }
    };
-#else
-   struct EnvironBase;
-   template <typename T> struct Environ;
-#endif
 
    template <class T, class Q> struct PairHolder {
       T first;
@@ -276,7 +272,7 @@ namespace Detail {
       static size_t GetContainerSize(const std::forward_list<T,ALLOCATOR>& c) {return std::distance(c.begin(),c.end());}
    };
 
-   /** @class TCollectionProxyInfo::Type TCollectionProxyInfo.h TCollectionProxyInfo.h
+   /** @class ROOT::Detail::TCollectionProxyInfo::Type
     *
     * Small helper to encapsulate basic data accesses for
     * all STL continers.
@@ -356,7 +352,7 @@ namespace Detail {
 
    };
 
-   /** @class TCollectionProxyInfo::Map TCollectionProxyInfo.h TCollectionProxyInfo.h
+   /** @class ROOT::Detail::TCollectionProxyInfo::Pushback
     *
     * Small helper to encapsulate all necessary data accesses for
     * containers like vector, list, deque
@@ -389,7 +385,7 @@ namespace Detail {
       }
    };
 
-   /** @class TCollectionProxyInfo::Pushfront TCollectionProxyInfo.h TCollectionProxyInfo.h
+   /** @class ROOT::Detail::TCollectionProxyInfo::Pushfront
     *
     * Small helper to encapsulate all necessary data accesses for
     * containers like forward_list
@@ -425,7 +421,7 @@ namespace Detail {
       }
    };
 
-   /** @class TCollectionProxyInfo::Map TCollectionProxyInfo.h TCollectionProxyInfo.h
+   /** @class ROOT::Detail::TCollectionProxyInfo::Insert
     *
     * Small helper to encapsulate all necessary data accesses for
     * containers like set, multiset etc.
@@ -457,7 +453,7 @@ namespace Detail {
       }
    };
 
-   /** @class TCollectionProxyInfo::Map TCollectionProxyInfo.h TCollectionProxyInfo.h
+   /** @class ROOT::Detail::TCollectionProxyInfo::MapInsert
     *
     * Small helper to encapsulate all necessary data accesses for
     * containers like set, multiset etc.
@@ -491,9 +487,7 @@ namespace Detail {
 
 
    public:
-#ifndef __CINT__
       const std::type_info &fInfo;
-#endif
       size_t fIterSize;
       size_t fValueDiff;
       int    fValueOffset;
@@ -681,7 +675,6 @@ namespace Detail {
       //typedef Iterators<Cont_t,fgLargeIterator> Iterators_t;
 
       struct Iterators {
-         typedef Cont_t *PCont_t;
          typedef Cont_t::iterator iterator;
 
          static void create(void *coll, void **begin_arena, void **end_arena, TVirtualCollectionProxy*) {
@@ -745,15 +738,12 @@ namespace Detail {
       }
    };
 
-#ifndef __CINT__
    // Need specialization for boolean references due to stupid STL std::vector<bool>
    template<> inline void* TCollectionProxyInfo::Address<std::vector<Bool_t>::const_reference>::address(std::vector<Bool_t>::const_reference ) {
       R__ASSERT(0);
       return 0;
    }
-#endif
 
-#ifndef __CINT__
    template <typename Bitset_t> struct TCollectionProxyInfo::Type<Internal::TStdBitsetHelper<Bitset_t> > : public TCollectionProxyInfo::Address<const Bool_t &>
    {
       typedef Bitset_t                 Cont_t;
@@ -784,14 +774,14 @@ namespace Detail {
          e->fIterator.first = 0;
          e->fIterator.second = c->size() > 0 ? c->test(e->fIterator.first) : false ;  // Iterator actually hold the value.
          e->fSize  = c->size();
-         return 0;
+         return &(e->fIterator.second);
       }
       static void* next(void* env)  {
          PEnv_t  e = PEnv_t(env);
          PCont_t c = PCont_t(e->fObject);
          for (; e->fIdx > 0 && e->fIterator.first != c->size(); ++(e->fIterator.first), --e->fIdx){ }
          e->fIterator.second = (e->fIterator.first != c->size()) ? c->test(e->fIterator.first) : false;
-         return 0;
+         return &(e->fIterator.second);
       }
       static void* construct(void*,size_t)  {
          // Nothing to construct.
@@ -812,7 +802,6 @@ namespace Detail {
       //typedef Iterators<Cont_t,fgLargeIterator> Iterators_t;
 
       struct Iterators {
-         typedef Cont_t *PCont_t;
          union PtrSize_t { size_t fIndex; void *fAddress; };
          typedef std::pair<PtrSize_t,Bool_t> iterator;
          // In the end iterator we store the bitset pointer
@@ -859,13 +848,14 @@ namespace Detail {
 
    template <typename Bitset_t>
    struct TCollectionProxyInfo::Pushback<Internal::TStdBitsetHelper<Bitset_t>  > : public TCollectionProxyInfo::Type<Internal::TStdBitsetHelper<Bitset_t> > {
-      typedef Bitset_t         Cont_t;
-      typedef bool             Iter_t;
-      typedef bool             Value_t;
-      typedef Environ<Iter_t>  Env_t;
-      typedef Env_t           *PEnv_t;
-      typedef Cont_t          *PCont_t;
-      typedef Value_t         *PValue_t;
+      using InfoBase_t = TCollectionProxyInfo::Type<Internal::TStdBitsetHelper<Bitset_t> >;
+      using typename InfoBase_t::Cont_t;
+      using typename InfoBase_t::Iter_t;
+      using typename InfoBase_t::Value_t;
+      using typename InfoBase_t::Env_t;
+      using typename InfoBase_t::PEnv_t;
+      using typename InfoBase_t::PCont_t;
+      using typename InfoBase_t::PValue_t;
 
       static void resize(void*,size_t)  {
       }
@@ -880,7 +870,6 @@ namespace Detail {
          return 0;
       }
    };
-#endif
 
 } // namespace Detail
 

@@ -31,59 +31,64 @@
 #include "TMVA/ClassifierFactory.h"
 #include "TMVA/DataSet.h"
 #include "TMVA/DataSetInfo.h"
+#include "TMVA/IMethod.h"
 #include "TMVA/MethodBase.h"
 #include "TMVA/MsgLogger.h"
-#include "TMatrix.h"
 #include "TMVA/Tools.h"
 #include "TMVA/Types.h"
 
 #include "Riostream.h"
+#include "TMatrix.h"
+#include "TVectorT.h"
+#include "TList.h"
+
 #include <algorithm>
 
 REGISTER_METHOD(HMatrix)
 
-ClassImp(TMVA::MethodHMatrix)
+ClassImp(TMVA::MethodHMatrix);
 
-//_______________________________________________________________________
-//Begin_Html
-/*
+/*! \class TMVA::MethodHMatrix
+\ingroup TMVA
+
   H-Matrix method, which is implemented as a simple comparison of
   chi-squared estimators for signal and background, taking into
   account the linear correlations between the input variables
 
-  This MVA approach is used by the D&#216; collaboration (FNAL) for the
+  This MVA approach is used by the \f$D\emptyset \f$ collaboration (FNAL) for the
   purpose of electron identification (see, eg.,
-  <a href="http://arxiv.org/abs/hep-ex/9507007">hep-ex/9507007</a>).
+  [hep-ex/9507007](http://arxiv.org/abs/hep-ex/9507007)).
   As it is implemented in TMVA, it is usually equivalent or worse than
   the Fisher-Mahalanobis discriminant, and it has only been added for
   the purpose of completeness.
-  Two &chi;<sup>2</sup> estimators are computed for an event, each one
+  Two chi^2 estimators are computed for an event, each one
   for signal and background, using the estimates for the means and
   covariance matrices obtained from the training sample:<br>
-  <center>
-  <img vspace=6 src="gif/tmva_chi2.gif" align="bottom" >
-  </center>
-  TMVA then uses as normalised analyser for event (<i>i</i>) the ratio:
-  (<i>&chi;<sub>S</sub>(i)<sup>2</sup> &minus; &chi;<sub>B</sub><sup>2</sup>(i)</i>)
-  (<i>&chi;<sub>S</sub><sup>2</sup>(i) + &chi;<sub>B</sub><sup>2</sup>(i)</i>).
+
+\f[
+\chi^2_\eta = (x_\eta(i) - \bar{x}_\eta)^T C_\eta^{-1} (x_\eta(i) - \bar{x}_\eta), \eta = S,B
+\f]
+
+  TMVA then uses as normalised analyser for event \f$ (i) \f$ the ratio:
+\f[
+\frac{(chi_S(i)^2 - chi_B^2(i))}{(chi_S^2(i) + chi_B^2(i))}
+\f]
 */
-//End_Html
-//_______________________________________________________________________
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
 /// standard constructor for the H-Matrix method
 
-TMVA::MethodHMatrix::MethodHMatrix( const TString& jobName,
-                                    const TString& methodTitle,
-                                    DataSetInfo& theData,
-                                    const TString& theOption,
-                                    TDirectory* theTargetDir )
-   : TMVA::MethodBase( jobName, Types::kHMatrix, methodTitle, theData, theOption, theTargetDir )
-  ,fInvHMatrixS(0) 
-  ,fInvHMatrixB(0) 
-  ,fVecMeanS(0)    
-  ,fVecMeanB(0)    
+   TMVA::MethodHMatrix::MethodHMatrix( const TString& jobName,
+                                       const TString& methodTitle,
+                                       DataSetInfo& theData,
+                                       const TString& theOption )
+   : TMVA::MethodBase( jobName, Types::kHMatrix, methodTitle, theData, theOption)
+   ,fInvHMatrixS(0)
+   ,fInvHMatrixB(0)
+   ,fVecMeanS(0)
+   ,fVecMeanB(0)
 {
 }
 
@@ -91,13 +96,12 @@ TMVA::MethodHMatrix::MethodHMatrix( const TString& jobName,
 /// constructor from weight file
 
 TMVA::MethodHMatrix::MethodHMatrix( DataSetInfo& theData,
-                                    const TString& theWeightFile,
-                                    TDirectory* theTargetDir )
-   : TMVA::MethodBase( Types::kHMatrix, theData, theWeightFile, theTargetDir )
-  ,fInvHMatrixS(0) 
-  ,fInvHMatrixB(0) 
-  ,fVecMeanS(0)    
-  ,fVecMeanB(0)    
+                                    const TString& theWeightFile)
+   : TMVA::MethodBase( Types::kHMatrix, theData, theWeightFile)
+   ,fInvHMatrixS(0)
+   ,fInvHMatrixB(0)
+   ,fVecMeanS(0)
+   ,fVecMeanB(0)
 {
 }
 
@@ -163,34 +167,35 @@ void TMVA::MethodHMatrix::Train( void )
 
    // sanity checks
    if (TMath::Abs(fInvHMatrixS->Determinant()) < 10E-24) {
-      Log() << kWARNING << "<Train> H-matrix  S is almost singular with deterinant= "
+      Log() << kWARNING << "<Train> H-matrix  S is almost singular with determinant= "
             << TMath::Abs(fInvHMatrixS->Determinant())
             << " did you use the variables that are linear combinations or highly correlated ???"
             << Endl;
    }
    if (TMath::Abs(fInvHMatrixB->Determinant()) < 10E-24) {
-      Log() << kWARNING << "<Train> H-matrix  B is almost singular with deterinant= "
+      Log() << kWARNING << "<Train> H-matrix  B is almost singular with determinant= "
             << TMath::Abs(fInvHMatrixB->Determinant())
             << " did you use the variables that are linear combinations or highly correlated ???"
             << Endl;
    }
 
-    if (TMath::Abs(fInvHMatrixS->Determinant()) < 10E-120) {
-       Log() << kFATAL << "<Train> H-matrix  S is singular with deterinant= "
-             << TMath::Abs(fInvHMatrixS->Determinant())
-             << " did you use the variables that are linear combinations ???"
-             << Endl;
-    }
-    if (TMath::Abs(fInvHMatrixB->Determinant()) < 10E-120) {
-       Log() << kFATAL << "<Train> H-matrix  B is singular with deterinant= "
-             << TMath::Abs(fInvHMatrixB->Determinant())
-             << " did you use the variables that are linear combinations ???"
-             << Endl;
-    }
+   if (TMath::Abs(fInvHMatrixS->Determinant()) < 10E-120) {
+      Log() << kFATAL << "<Train> H-matrix  S is singular with determinant= "
+            << TMath::Abs(fInvHMatrixS->Determinant())
+            << " did you use the variables that are linear combinations ???"
+            << Endl;
+   }
+   if (TMath::Abs(fInvHMatrixB->Determinant()) < 10E-120) {
+      Log() << kFATAL << "<Train> H-matrix  B is singular with determinant= "
+            << TMath::Abs(fInvHMatrixB->Determinant())
+            << " did you use the variables that are linear combinations ???"
+            << Endl;
+   }
 
    // invert matrix
    fInvHMatrixS->Invert();
    fInvHMatrixB->Invert();
+   ExitFromTraining();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -226,7 +231,7 @@ void TMVA::MethodHMatrix::ComputeCovariance( Bool_t isSignal, TMatrixD* mat )
       // transform the event
       GetTransformationHandler().SetTransformationReferenceClass( origEvt->GetClass() );
       const Event* ev = GetTransformationHandler().Transform( origEvt );
-      
+
       // event is of good type
       sumOfWeights += weight;
 
@@ -267,7 +272,7 @@ Double_t TMVA::MethodHMatrix::GetMvaValue( Double_t* err, Double_t* errUpper )
 {
    Double_t s = GetChi2( Types::kSignal     );
    Double_t b = GetChi2( Types::kBackground );
-  
+
    if (s+b < 0) Log() << kFATAL << "big trouble: s+b: " << s+b << Endl;
 
    // cannot determine error
@@ -279,7 +284,7 @@ Double_t TMVA::MethodHMatrix::GetMvaValue( Double_t* err, Double_t* errUpper )
 ////////////////////////////////////////////////////////////////////////////////
 /// compute chi2-estimator for event according to type (signal/background)
 
-Double_t TMVA::MethodHMatrix::GetChi2( Types::ESBType type ) 
+Double_t TMVA::MethodHMatrix::GetChi2( Types::ESBType type )
 {
    // get original (not transformed) event
 
@@ -302,7 +307,7 @@ Double_t TMVA::MethodHMatrix::GetChi2( Types::ESBType type )
    Double_t chi2 = 0;
    for (ivar=0; ivar<nvar; ivar++) {
       for (jvar=0; jvar<nvar; jvar++) {
-         if (type == Types::kSignal) 
+         if (type == Types::kSignal)
             chi2 += ( (val[ivar] - (*fVecMeanS)(ivar))*(val[jvar] - (*fVecMeanS)(jvar))
                       * (*fInvHMatrixS)(ivar,jvar) );
          else
@@ -320,12 +325,12 @@ Double_t TMVA::MethodHMatrix::GetChi2( Types::ESBType type )
 ////////////////////////////////////////////////////////////////////////////////
 /// create XML description for HMatrix classification
 
-void TMVA::MethodHMatrix::AddWeightsXMLTo( void* parent ) const 
+void TMVA::MethodHMatrix::AddWeightsXMLTo( void* parent ) const
 {
    void* wght = gTools().AddChild(parent, "Weights");
-   gTools().WriteTVectorDToXML( wght, "VecMeanS", fVecMeanS    ); 
+   gTools().WriteTVectorDToXML( wght, "VecMeanS", fVecMeanS    );
    gTools().WriteTVectorDToXML( wght, "VecMeanB", fVecMeanB    );
-   gTools().WriteTMatrixDToXML( wght, "InvHMatS", fInvHMatrixS ); 
+   gTools().WriteTMatrixDToXML( wght, "InvHMatS", fInvHMatrixS );
    gTools().WriteTMatrixDToXML( wght, "InvHMatB", fInvHMatrixB );
 }
 
@@ -339,14 +344,14 @@ void TMVA::MethodHMatrix::ReadWeightsFromXML( void* wghtnode )
    descnode = gTools().GetNextChild(descnode);
    gTools().ReadTVectorDFromXML( descnode, "VecMeanB", fVecMeanB    );
    descnode = gTools().GetNextChild(descnode);
-   gTools().ReadTMatrixDFromXML( descnode, "InvHMatS", fInvHMatrixS ); 
+   gTools().ReadTMatrixDFromXML( descnode, "InvHMatS", fInvHMatrixS );
    descnode = gTools().GetNextChild(descnode);
    gTools().ReadTMatrixDFromXML( descnode, "InvHMatB", fInvHMatrixB );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// read variable names and min/max
-/// NOTE: the latter values are mandatory for the normalisation 
+/// NOTE: the latter values are mandatory for the normalisation
 /// in the reader application !!!
 
 void  TMVA::MethodHMatrix::ReadWeightsFromStream( std::istream& istr )
@@ -357,17 +362,17 @@ void  TMVA::MethodHMatrix::ReadWeightsFromStream( std::istream& istr )
    //this->SetMethodName(dummy);
 
    // mean vectors
-   for (ivar=0; ivar<GetNvar(); ivar++) 
+   for (ivar=0; ivar<GetNvar(); ivar++)
       istr >> (*fVecMeanS)(ivar) >> (*fVecMeanB)(ivar);
 
    // inverse covariance matrices (signal)
-   for (ivar=0; ivar<GetNvar(); ivar++) 
-      for (jvar=0; jvar<GetNvar(); jvar++) 
+   for (ivar=0; ivar<GetNvar(); ivar++)
+      for (jvar=0; jvar<GetNvar(); jvar++)
          istr >> (*fInvHMatrixS)(ivar,jvar);
 
    // inverse covariance matrices (background)
-   for (ivar=0; ivar<GetNvar(); ivar++) 
-      for (jvar=0; jvar<GetNvar(); jvar++) 
+   for (ivar=0; ivar<GetNvar(); ivar++)
+      for (jvar=0; jvar<GetNvar(); jvar++)
          istr >> (*fInvHMatrixB)(ivar,jvar);
 }
 
@@ -396,9 +401,9 @@ void TMVA::MethodHMatrix::MakeClassSpecific( std::ostream& fout, const TString& 
    fout << "   // init H-matrices" << std::endl;
    for (UInt_t ivar=0; ivar<GetNvar(); ivar++) {
       for (UInt_t jvar=0; jvar<GetNvar(); jvar++) {
-         fout << "   fInvHMatrixS[" << ivar << "][" << jvar << "] = " 
+         fout << "   fInvHMatrixS[" << ivar << "][" << jvar << "] = "
               << (*fInvHMatrixS)(ivar,jvar) << ";" << std::endl;
-         fout << "   fInvHMatrixB[" << ivar << "][" << jvar << "] = " 
+         fout << "   fInvHMatrixB[" << ivar << "][" << jvar << "] = "
               << (*fInvHMatrixB)(ivar,jvar) << ";" << std::endl;
       }
    }
@@ -418,12 +423,12 @@ void TMVA::MethodHMatrix::MakeClassSpecific( std::ostream& fout, const TString& 
       fout << "   Transform(inputValuesBgd," << backgroundClass << ");" << std::endl;
    }
 
-//   fout << "   for(uint i=0; i<GetNvar(); ++i) std::cout << inputValuesSig.at(i) << \"  \" << inputValuesBgd.at(i) << std::endl; " << std::endl;
+   //   fout << "   for(uint i=0; i<GetNvar(); ++i) std::cout << inputValuesSig.at(i) << \"  \" << inputValuesBgd.at(i) << std::endl; " << std::endl;
 
    fout << "   double s = GetChi2( inputValuesSig, " << Types::kSignal << " );" << std::endl;
    fout << "   double b = GetChi2( inputValuesBgd, " << Types::kBackground << " );" << std::endl;
 
-//   fout << "   std::cout << s << \"  \" << b << std::endl; " << std::endl;
+   //   fout << "   std::cout << s << \"  \" << b << std::endl; " << std::endl;
 
    fout << "   " << std::endl;
    fout << "   if (s+b <= 0) std::cout << \"Problem in class " << className << "::GetMvaValue__: s+b = \"" << std::endl;
@@ -466,7 +471,7 @@ void TMVA::MethodHMatrix::MakeClassSpecific( std::ostream& fout, const TString& 
 ////////////////////////////////////////////////////////////////////////////////
 /// get help message text
 ///
-/// typical length of text line: 
+/// typical length of text line:
 ///         "|--------------------------------------------------------------|"
 
 void TMVA::MethodHMatrix::GetHelpMessage() const

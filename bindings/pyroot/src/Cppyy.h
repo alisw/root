@@ -13,7 +13,7 @@ namespace Cppyy {
    typedef TCppScope_t TCppType_t;
    typedef void*       TCppObject_t;
    typedef ptrdiff_t   TCppMethod_t;
-   
+
    typedef Long_t      TCppIndex_t;
    typedef void* (*TCppMethPtrGetter_t)( TCppObject_t );
 
@@ -22,6 +22,7 @@ namespace Cppyy {
    std::string GetScopeName( TCppScope_t parent, TCppIndex_t iscope );
    std::string ResolveName( const std::string& cppitem_name );
    TCppScope_t GetScope( const std::string& scope_name );
+   std::string GetName( const std::string& scope_name );
    TCppType_t  GetTemplate( const std::string& template_name );
    TCppType_t  GetActualClass( TCppType_t klass, TCppObject_t obj );
    size_t      SizeOf( TCppType_t klass );

@@ -44,20 +44,22 @@ MacroArgs *MacroArgs::create(const MacroInfo *MI,
       // Otherwise, use the best fit.
       ClosestMatch = (*Entry)->NumUnexpArgTokens;
     }
-  
+
   MacroArgs *Result;
   if (!ResultEnt) {
     // Allocate memory for a MacroArgs object with the lexer tokens at the end.
-    Result = (MacroArgs*)malloc(sizeof(MacroArgs) + 
-                                UnexpArgTokens.size() * sizeof(Token));
+    Result = (MacroArgs *)malloc(sizeof(MacroArgs) +
+                                 UnexpArgTokens.size() * sizeof(Token));
     // Construct the MacroArgs object.
-    new (Result) MacroArgs(UnexpArgTokens.size(), VarargsElided);
+    new (Result)
+        MacroArgs(UnexpArgTokens.size(), VarargsElided, MI->getNumParams());
   } else {
     Result = *ResultEnt;
     // Unlink this node from the preprocessors singly linked list.
     *ResultEnt = Result->ArgCache;
     Result->NumUnexpArgTokens = UnexpArgTokens.size();
     Result->VarargsElided = VarargsElided;
+    Result->NumMacroArgs = MI->getNumParams();
   }
 
   // Copy the actual unexpanded tokens to immediately after the result ptr.
@@ -133,12 +135,11 @@ bool MacroArgs::ArgNeedsPreexpansion(const Token *ArgTok,
   // If there are no identifiers in the argument list, or if the identifiers are
   // known to not be macros, pre-expansion won't modify it.
   for (; ArgTok->isNot(tok::eof); ++ArgTok)
-    if (IdentifierInfo *II = ArgTok->getIdentifierInfo()) {
-      if (II->hasMacroDefinition() && PP.getMacroInfo(II)->isEnabled())
+    if (IdentifierInfo *II = ArgTok->getIdentifierInfo())
+      if (II->hasMacroDefinition())
         // Return true even though the macro could be a function-like macro
-        // without a following '(' token.
+        // without a following '(' token, or could be disabled, or not visible.
         return true;
-    }
   return false;
 }
 
@@ -147,11 +148,11 @@ bool MacroArgs::ArgNeedsPreexpansion(const Token *ArgTok,
 const std::vector<Token> &
 MacroArgs::getPreExpArgument(unsigned Arg, const MacroInfo *MI, 
                              Preprocessor &PP) {
-  assert(Arg < MI->getNumArgs() && "Invalid argument number!");
+  assert(Arg < MI->getNumParams() && "Invalid argument number!");
 
   // If we have already computed this, return it.
-  if (PreExpArgTokens.size() < MI->getNumArgs())
-    PreExpArgTokens.resize(MI->getNumArgs());
+  if (PreExpArgTokens.size() < MI->getNumParams())
+    PreExpArgTokens.resize(MI->getNumParams());
   
   std::vector<Token> &Result = PreExpArgTokens[Arg];
   if (!Result.empty()) return Result;
@@ -299,12 +300,10 @@ const Token &MacroArgs::getStringifiedArgument(unsigned ArgNo,
                                                Preprocessor &PP,
                                                SourceLocation ExpansionLocStart,
                                                SourceLocation ExpansionLocEnd) {
-  assert(ArgNo < NumUnexpArgTokens && "Invalid argument number!");
-  if (StringifiedArgs.empty()) {
-    StringifiedArgs.resize(getNumArguments());
-    memset((void*)&StringifiedArgs[0], 0,
-           sizeof(StringifiedArgs[0])*getNumArguments());
-  }
+  assert(ArgNo < getNumMacroArguments() && "Invalid argument number!");
+  if (StringifiedArgs.empty())
+    StringifiedArgs.resize(getNumMacroArguments(), {});
+
   if (StringifiedArgs[ArgNo].isNot(tok::string_literal))
     StringifiedArgs[ArgNo] = StringifyArgument(getUnexpArgument(ArgNo), PP,
                                                /*Charify=*/false,

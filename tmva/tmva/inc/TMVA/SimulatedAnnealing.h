@@ -1,4 +1,4 @@
-// @(#)root/tmva $Id$   
+// @(#)root/tmva $Id$
 // Author: Andreas Hoecker, Joerg Stelzer, Helge Voss, Krzysztof Danielowski, Kamil Kraszewski, Maciej Kruk
 
 /**********************************************************************************
@@ -17,8 +17,8 @@
  *                                                                                *
  * Copyright (c) 2008:                                                            *
  *      IFJ-Krakow, Poland                                                        *
- *      CERN, Switzerland                                                         * 
- *      MPI-K Heidelberg, Germany                                                 * 
+ *      CERN, Switzerland                                                         *
+ *      MPI-K Heidelberg, Germany                                                 *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
@@ -39,9 +39,7 @@
 #include <vector>
 #include <list>
 
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
 
 class TRandom;
 
@@ -70,9 +68,14 @@ namespace TMVA {
       void SetAdaptiveSpeed     ( Double_t speed ) { fAdaptiveSpeed = speed; }
 
       void SetOptions( Int_t maxCalls, Double_t initialTemperature, Double_t minTemperature, Double_t eps,
-                       TString  kernelTemperatureS, Double_t temperatureScale, Double_t adaptiveSpeed, 
+                       TString  kernelTemperatureS, Double_t temperatureScale, Double_t adaptiveSpeed,
                        Double_t temperatureAdaptiveStep, Bool_t useDefaultScale, Bool_t useDefaultTemperature );
 
+      //setting up helper variables for JsMVA
+      void SetIPythonInteractive(bool* ExitFromTraining, UInt_t *fIPyCurrentIter_){
+        fExitFromTraining = ExitFromTraining;
+        fIPyCurrentIter = fIPyCurrentIter_;
+      }
 
    private:
 
@@ -99,15 +102,15 @@ namespace TMVA {
       TRandom*                      fRandom;                 // random generator
       const std::vector<TMVA::Interval*>& fRanges;                 // parameter ranges
 
-      // fitter setup 
+      // fitter setup
       Int_t                         fMaxCalls;               // maximum number of minimisation calls
       Double_t                      fInitialTemperature;     // initial temperature
-      Double_t                      fMinTemperature;         // mimimum temperature
+      Double_t                      fMinTemperature;         // minimum temperature
       Double_t                      fEps;                    // epsilon
       Double_t                      fTemperatureScale;       // how fast temperature change
       Double_t                      fAdaptiveSpeed;          // how fast temperature change in adaptive (in adaptive two variables describe
-                                                             // the change of temperature, but fAdaptiveSpeed should be 1.0 and its not 
-                                                             // recomended to change it)
+                                                             // the change of temperature, but fAdaptiveSpeed should be 1.0 and its not
+                                                             // recommended to change it)
       Double_t                      fTemperatureAdaptiveStep;// used to calculate InitialTemperature if fUseDefaultTemperature
 
       Bool_t                        fUseDefaultScale;        // if TRUE, SA calculates its own TemperatureScale
@@ -118,7 +121,11 @@ namespace TMVA {
 
       Double_t fProgress;
 
-      ClassDef(SimulatedAnnealing,0)  // Base class for Simulated Annealing fitting
+      // variables for JsMVA
+      UInt_t *fIPyCurrentIter = nullptr;
+      bool * fExitFromTraining = nullptr;
+
+      ClassDef(SimulatedAnnealing,0);  // Base class for Simulated Annealing fitting
    };
 
 } // namespace TMVA

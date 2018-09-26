@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TTimer
+\ingroup Base
+
 Handles synchronous and a-synchronous timer events.
 1. synchronous timer is registered into TSystem and is processed
    within the standard ROOT event-loop.
@@ -46,7 +48,7 @@ To emit the Timeout signal repeatedly with minimum timeout:
 #include "TSystem.h"
 #include "TROOT.h"
 
-ClassImp(TTimer)
+ClassImp(TTimer);
 
 
 class TSingleShotCleaner : public TTimer {

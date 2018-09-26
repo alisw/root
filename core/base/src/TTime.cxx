@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TTime
+\ingroup Base
+
 Basic time type with millisecond precision.
 */
 
@@ -18,7 +20,7 @@ Basic time type with millisecond precision.
 #include "TError.h"
 
 
-ClassImp(TTime)
+ClassImp(TTime);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return the time as a string.

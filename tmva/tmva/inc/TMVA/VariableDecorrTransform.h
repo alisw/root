@@ -36,17 +36,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
 
-#ifndef ROOT_TMatrixDSymfwd
 #include "TMatrixDSymfwd.h"
-#endif
 
-#ifndef ROOT_TMVA_VariableTransformBase
 #include "TMVA/VariableTransformBase.h"
-#endif
 
 namespace TMVA {
 
@@ -86,7 +80,7 @@ namespace TMVA {
       void CalcSQRMats( const std::vector< Event*>&, Int_t maxCls );
       std::vector<TMatrixDSym*>* CalcCovarianceMatrices( const std::vector<const Event*>& events, Int_t maxCls );
 
-      ClassDef(VariableDecorrTransform,0) // Variable transformation: decorrelation
+      ClassDef(VariableDecorrTransform,0); // Variable transformation: decorrelation
    };
 
 } // namespace TMVA

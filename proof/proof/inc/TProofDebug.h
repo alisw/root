@@ -21,9 +21,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
 // Remember to update the related mapping in tutorials/proof/runProof.C !
 
@@ -56,6 +54,6 @@ R__EXTERN TProofDebug::EProofDebugMask gProofDebugMask;
 R__EXTERN Int_t gProofDebugLevel;
 
 #define PDB(mask,level) \
-   if ((TProofDebug::mask & gProofDebugMask) && gProofDebugLevel >= (level))
+if ((TProofDebug::mask & gProofDebugMask) && gProofDebugLevel >= (level))
 
 #endif

@@ -9,10 +9,11 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
+#include "TText.h"
+
 #include "Riostream.h"
 #include "TROOT.h"
 #include "TVirtualPad.h"
-#include "TText.h"
 #  include <ft2build.h>
 #  include FT_FREETYPE_H
 #  include FT_GLYPH_H
@@ -24,7 +25,7 @@
 #include <wchar.h>
 #include <cstdlib>
 
-ClassImp(TText)
+ClassImp(TText);
 
 
 /** \class TText
@@ -94,7 +95,7 @@ TText::~TText()
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor.
 
-TText::TText(const TText &text) : TNamed(text), TAttText(text), TAttBBox2D(text)
+TText::TText(const TText &text) : TNamed(text), TAttText(text), TAttBBox2D(text), fWcsTitle(NULL)
 {
    fX = 0.;
    fY = 0.;
@@ -110,13 +111,17 @@ void TText::Copy(TObject &obj) const
    ((TText&)obj).fY = fY;
    TNamed::Copy(obj);
    TAttText::Copy(((TText&)obj));
-   if (fWcsTitle != NULL) {
-      *reinterpret_cast<std::wstring *>(fWcsTitle) =
-         *reinterpret_cast<std::wstring *>(((TText&)obj).fWcsTitle);
+   if (((TText&)obj).fWcsTitle != NULL) {
+      if (fWcsTitle != NULL) {
+         *reinterpret_cast<std::wstring*>(&((TText&)obj).fWcsTitle) = *reinterpret_cast<const std::wstring*>(&fWcsTitle);
+      } else {
+        delete reinterpret_cast<std::wstring*>(&((TText&)obj).fWcsTitle);
+        ((TText&)obj).fWcsTitle = NULL;
+      }
    } else {
-      dynamic_cast<TText &>(obj).fWcsTitle =
-         new std::wstring(*reinterpret_cast<std::wstring *>(
-         dynamic_cast<TText &>(obj).fWcsTitle));
+      if (fWcsTitle != NULL) {
+         ((TText&)(obj)).fWcsTitle = new std::wstring(*reinterpret_cast<const std::wstring*>(fWcsTitle));
+      }
    }
 }
 

@@ -14,10 +14,11 @@
 
 #include "TEveElement.h"
 
-#include "TRootBrowser.h"
-#include "TGListTree.h"
-
 #include "TContextMenu.h"
+#include "TGListTree.h"
+#include "TRootBrowser.h"
+#include "TString.h"
+
 
 class TGFileBrowser;
 class TGSplitter;
@@ -141,7 +142,7 @@ protected:
 
 public:
    TEveBrowser(UInt_t w, UInt_t h);
-   virtual ~TEveBrowser() {}
+   virtual ~TEveBrowser() { CloseTabs(); }
 
    virtual void ReallyDelete();
    virtual void CloseTab(Int_t id);

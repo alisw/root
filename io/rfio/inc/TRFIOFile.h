@@ -12,12 +12,8 @@
 #ifndef ROOT_TRFIOFile
 #define ROOT_TRFIOFile
 
-#ifndef ROOT_TFile
 #include "TFile.h"
-#endif
-#ifndef ROOT_TSystem
 #include "TSystem.h"
-#endif
 
 
 class TRFIOFile : public TFile {
@@ -37,7 +33,7 @@ private:
 
 public:
    TRFIOFile(const char *url, Option_t *option="",
-             const char *ftitle="", Int_t compress=1);
+             const char *ftitle="", Int_t compress=4);
    ~TRFIOFile();
 
    Int_t   GetErrno() const;

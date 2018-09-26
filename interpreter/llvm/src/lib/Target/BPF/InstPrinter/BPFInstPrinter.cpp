@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "BPF.h"
 #include "BPFInstPrinter.h"
+#include "BPF.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -27,12 +27,13 @@ using namespace llvm;
 #include "BPFGenAsmWriter.inc"
 
 void BPFInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-                               StringRef Annot) {
+                               StringRef Annot, const MCSubtargetInfo &STI) {
   printInstruction(MI, O);
   printAnnotation(O, Annot);
 }
 
 static void printExpr(const MCExpr *Expr, raw_ostream &O) {
+#ifndef NDEBUG
   const MCSymbolRefExpr *SRE;
 
   if (const MCBinaryExpr *BE = dyn_cast<MCBinaryExpr>(Expr))
@@ -44,6 +45,7 @@ static void printExpr(const MCExpr *Expr, raw_ostream &O) {
   MCSymbolRefExpr::VariantKind Kind = SRE->getKind();
 
   assert(Kind == MCSymbolRefExpr::VK_None);
+#endif
   O << *Expr;
 }
 
@@ -65,15 +67,21 @@ void BPFInstPrinter::printMemOperand(const MCInst *MI, int OpNo, raw_ostream &O,
                                      const char *Modifier) {
   const MCOperand &RegOp = MI->getOperand(OpNo);
   const MCOperand &OffsetOp = MI->getOperand(OpNo + 1);
-  // offset
-  if (OffsetOp.isImm())
-    O << formatDec(OffsetOp.getImm());
-  else
-    assert(0 && "Expected an immediate");
 
   // register
   assert(RegOp.isReg() && "Register operand not a register");
-  O << '(' << getRegisterName(RegOp.getReg()) << ')';
+  O << getRegisterName(RegOp.getReg());
+
+  // offset
+  if (OffsetOp.isImm()) {
+    auto Imm = OffsetOp.getImm();
+    if (Imm >= 0)
+      O << " + " << formatDec(Imm);
+    else
+      O << " - " << formatDec(-Imm);
+  } else {
+    assert(0 && "Expected an immediate");
+  }
 }
 
 void BPFInstPrinter::printImm64Operand(const MCInst *MI, unsigned OpNo,

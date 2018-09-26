@@ -27,9 +27,12 @@
 TStyle  *gStyle;
 const UInt_t kTakeStyle = BIT(17);
 
-ClassImp(TStyle)
+ClassImp(TStyle);
 
 /** \class TStyle
+\ingroup Base
+ \ingroup GraphicsAtt
+
 TStyle objects may be created to define special styles.
 By default ROOT creates a default style that can be accessed via
 the gStyle pointer.
@@ -44,6 +47,93 @@ This class includes functions to set some of the following object attributes.
   - Markers
   - Functions
   - Histogram Statistics and Titles
+
+All objects that can be drawn in a pad inherit from one or more attribute classes
+like TAttLine, TAttFill, TAttText, TAttMarker. When the objects are created, their
+default attributes are taken from the current style. The current style is an object
+of the class[TStyle](https://root.cern.ch/doc/master/classTStyle.html) and can be
+referenced via the global variable `gStyle` (in TStyle.h).
+
+ROOT provides two styles called "Default" and "Plain". The "Default"
+style is created simply by:
+
+~~~ .cpp
+auto default = new TStyle("Default","Default Style");
+~~~
+
+The "**Plain**" style can be used if you are working on a monochrome display or
+if you want to get a "conventional" Postscript output. These are the instructions
+in the ROOT constructor to create the "Plain*" style.
+
+```
+auto plain  = new TStyle("Plain","Plain Style (no colors/fill areas)");
+
+   plain->SetCanvasBorderMode(0);
+   plain->SetPadBorderMode(0);
+   plain->SetPadColor(0);
+   plain->SetCanvasColor(0);
+   plain->SetTitleColor(0);
+   plain->SetStatColor(0);
+```
+
+You can set the current style with:
+
+```
+gROOT->SetStyle(style_name);
+```
+
+You can get a pointer to an existing style with:
+
+```
+auto style = gROOT->GetStyle(style_name);
+```
+
+You can create additional styles with:
+
+```
+ TStyle *st1 = new TStyle("st1","my style");
+    st1->Set....
+    st1->cd();  this becomes now the current style gStyle
+```
+
+In your [rootlogon.C](https://root.cern.ch/doc/master/classexamples/startsession.log.html)
+file, you can redefine the default parameters via statements like:
+
+```
+  gStyle->SetStatX(0.7);
+  gStyle->SetStatW(0.2);
+  gStyle->SetLabelOffset(1.2);
+  gStyle->SetLabelFont(72);
+```
+
+Note that when an object is created, its attributes are taken from the current
+style. For example, you may have created an histogram in a previous session,
+saved it in a file. Meanwhile, if you have changed the style, the histogram will
+be drawn with the old attributes. You can force the current style attributes to
+be set when you read an object from a file by calling:
+
+```
+gROOT->ForceStyle();
+```
+
+before reading the objects from the file.
+
+Let's assume you have a canvas or pad with your histogram or any other object,
+you can force these objects to get the attributes of the current style via:
+
+```
+canvas->UseCurrentStyle();
+```
+
+The description of the style functions should be clear from the name of the
+TStyle Setters or Getters. Some functions have an extended description, in particular:
+
+  - TStyle:SetLabelFont.
+  - TStyle:SetLineStyleString, to set the format of dashed lines.
+  - TStyle:SetOptStat.
+  - TStyle:SetPalette to change the colors palette.
+  - TStyle:SetTitleOffset.
+
 */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,12 +147,13 @@ TStyle::TStyle() :TNamed()
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a new TStyle.
 /// The following names are reserved to create special styles
-///   -Classic: the default style set in TStyle::Reset
-///   -Plain: a black&white oriented style
-///   -Bold:
-///   -Video;
-///   -Pub:
-///   -Modern:
+///   - `Classic`: the default style set in TStyle::Reset
+///   - `Plain`: a black&white oriented style
+///   - `Bold`
+///   - `Video`
+///   - `Pub`
+///   - `Modern`
+///   - `ATLAS`: style used by the ATLAS experiment
 ///     (see the definition of these styles below).
 ///
 /// Note a side-effect of calling gStyle->SetFillColor(0). This is nearly
@@ -112,13 +203,12 @@ TStyle::TStyle(const char *name, const char *title)
    Reset();
 
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfStyles()->Add(this);
    }
 
    if (strcmp(style_name,"Modern") == 0) {
       // Modern style
-//      SetPalette(57,0);
       SetFrameBorderMode(0);
       SetFrameFillColor(0);
       SetCanvasBorderMode(0);
@@ -146,6 +236,7 @@ TStyle::TStyle(const char *name, const char *title)
       SetTitleBorderSize(0);
       SetTitleFillColor(0);
       SetTitleStyle(0);
+      SetTitleOffset(0.,"Y");
       SetStatBorderSize(1);
       SetOptStat(1111);
       SetStatY(0.935);
@@ -252,7 +343,50 @@ TStyle::TStyle(const char *name, const char *title)
       SetTitleTextColor(kBlue);
       return;
    }
-
+   if (strcmp(style_name,"ATLAS") == 0) {
+      // Author: M.Sutton - Atlas Collaboration 2010
+      SetFrameBorderMode(0);
+      SetFrameFillColor(0);
+      SetCanvasBorderMode(0);
+      SetCanvasColor(0);
+      SetPadBorderMode(0);
+      SetPadColor(0);
+      SetStatColor(0);
+      SetPaperSize(20,26);
+      SetPadTopMargin(0.05);
+      SetPadRightMargin(0.05);
+      SetPadBottomMargin(0.16);
+      SetPadLeftMargin(0.16);
+      SetTitleXOffset(1.4);
+      SetTitleYOffset(1.4);
+      Int_t font = 42;
+      Double_t tsize=0.05;
+      SetTextFont(font);
+      SetTextSize(tsize);
+      SetLabelFont(font,"x");
+      SetTitleFont(font,"x");
+      SetLabelFont(font,"y");
+      SetTitleFont(font,"y");
+      SetLabelFont(font,"z");
+      SetTitleFont(font,"z");
+      SetLabelSize(tsize,"x");
+      SetTitleSize(tsize,"x");
+      SetLabelSize(tsize,"y");
+      SetTitleSize(tsize,"y");
+      SetLabelSize(tsize,"z");
+      SetTitleSize(tsize,"z");
+      SetMarkerStyle(20);
+      SetMarkerSize(1.2);
+      SetHistLineWidth(2.);
+      SetLineStyleString(2,"[12 12]");
+      SetErrorX(0.0001);   // get rid of X error bars (as recommended in ATLAS figure guidelines)
+      SetEndErrorSize(0.); // get rid of error bar caps
+      SetOptTitle(0);
+      SetOptStat(0);
+      SetOptFit(0);
+      SetPadTickX(1);
+      SetPadTickY(1);
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -260,7 +394,7 @@ TStyle::TStyle(const char *name, const char *title)
 
 TStyle::~TStyle()
 {
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfStyles()->Remove(this);
    if (gStyle == this) gStyle = (TStyle*)gROOT->GetListOfStyles()->Last();
 }
@@ -294,6 +428,7 @@ void TStyle::BuildStyles()
    new TStyle("Classic","Classic Style");
    new TStyle("Default","Equivalent to Classic");
    new TStyle("Modern", "Modern Style");
+   new TStyle("ATLAS",  "ATLAS Style");
    delete col;
 }
 
@@ -422,6 +557,7 @@ void TStyle::Copy(TObject &obj) const
    ((TStyle&)obj).fJoinLinePS     = fJoinLinePS;
    ((TStyle&)obj).fColorModelPS   = fColorModelPS;
    ((TStyle&)obj).fTimeOffset     = fTimeOffset;
+   ((TStyle&)obj).fImageScaling   = fImageScaling;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -541,6 +677,7 @@ void TStyle::Reset(Option_t *opt)
    fLegendFont      = 62;
    fLegendTextSize  = 0.,
    fLegendFillColor = 0;
+   fImageScaling    = 1.;
 
    SetDateX();
    SetDateY();
@@ -571,7 +708,6 @@ void TStyle::Reset(Option_t *opt)
 
    if (strcmp(style_name,"Modern") == 0) {
       // Modern style
-//      SetPalette(57,0);
       SetFrameBorderMode(0);
       SetFrameFillColor(0);
       SetCanvasBorderMode(0);
@@ -599,6 +735,7 @@ void TStyle::Reset(Option_t *opt)
       SetTitleBorderSize(0);
       SetTitleFillColor(0);
       SetTitleStyle(0);
+      SetTitleOffset(0.,"Y");
       SetStatBorderSize(1);
       SetOptStat(1111);
       SetStatY(0.935);
@@ -698,6 +835,50 @@ void TStyle::Reset(Option_t *opt)
       SetTitleOffset(1.3,"y");
       SetTitleFillColor(10);
       SetTitleTextColor(kBlue);
+      return;
+   }
+   if (strcmp(style_name,"ATLAS") == 0) {
+      SetFrameBorderMode(0);
+      SetFrameFillColor(0);
+      SetCanvasBorderMode(0);
+      SetCanvasColor(0);
+      SetPadBorderMode(0);
+      SetPadColor(0);
+      SetStatColor(0);
+      SetPaperSize(20,26);
+      SetPadTopMargin(0.05);
+      SetPadRightMargin(0.05);
+      SetPadBottomMargin(0.16);
+      SetPadLeftMargin(0.16);
+      SetTitleXOffset(1.4);
+      SetTitleYOffset(1.4);
+      Int_t font = 42;
+      Double_t tsize=0.05;
+      SetTextFont(font);
+      SetTextSize(tsize);
+      SetLabelFont(font,"x");
+      SetTitleFont(font,"x");
+      SetLabelFont(font,"y");
+      SetTitleFont(font,"y");
+      SetLabelFont(font,"z");
+      SetTitleFont(font,"z");
+      SetLabelSize(tsize,"x");
+      SetTitleSize(tsize,"x");
+      SetLabelSize(tsize,"y");
+      SetTitleSize(tsize,"y");
+      SetLabelSize(tsize,"z");
+      SetTitleSize(tsize,"z");
+      SetMarkerStyle(20);
+      SetMarkerSize(1.2);
+      SetHistLineWidth(2.);
+      SetLineStyleString(2,"[12 12]");
+      SetErrorX(0.0001);
+      SetEndErrorSize(0.);
+      SetOptTitle(0);
+      SetOptStat(0);
+      SetOptFit(0);
+      SetPadTickX(1);
+      SetPadTickY(1);
       return;
    }
 }
@@ -872,7 +1053,6 @@ Float_t TStyle::GetTitleSize( Option_t *axis) const
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Show the options from the current style
-/// if (TClass::GetClass("TStyleManager")) gSystem->Load("libGed");
 
 void TStyle::Paint(Option_t *option)
 {
@@ -905,7 +1085,9 @@ void TStyle::SetColorModelPS(Int_t c)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// If the argument zero=kTRUE the minimum value for the Y axis of 1-d histograms
-/// is set to 0 if the minimum bin content is greater than 0 and TH1::SetMinimum
+/// is set to 0.
+///
+/// If the minimum bin content is greater than 0 and TH1::SetMinimum
 /// has not been called.
 /// Otherwise the minimum is based on the minimum bin content.
 
@@ -957,6 +1139,7 @@ void TStyle::SetAxisColor(Color_t color, Option_t *axis)
 ////////////////////////////////////////////////////////////////////////////////
 /// Set the size (in pixels) of the small lines drawn at the
 /// end of the error bars (TH1 or TGraphErrors).
+///
 /// The default value is 2 pixels.
 /// Set np=0 to remove these lines
 
@@ -967,7 +1150,8 @@ void TStyle::SetEndErrorSize(Float_t np)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Define a string to be inserted in the Postscript header
+/// Define a string to be inserted in the Postscript header.
+///
 /// The string in header will be added to the Postscript file
 /// immediately following the %%Page line
 /// For example, this string may contain special Postscript instructions like
@@ -987,9 +1171,10 @@ void TStyle::SetHeaderPS(const char *header)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Sets the fIsReading member to reading (default=kTRUE)
-/// fIsReading (used via gStyle->IsReading()) can be used in
-/// the functions myclass::UseCurrentStyle to read from the current style
+/// Sets the `fIsReading` member to reading (default=kTRUE).
+///
+/// `fIsReading` (used via `gStyle->IsReading()`) can be used in
+/// the functions `myclass::UseCurrentStyle` to read from the current style
 /// or write to the current style
 
 void TStyle::SetIsReading(Bool_t reading)
@@ -1187,8 +1372,8 @@ void TStyle::SetOptDate(Int_t optdate)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// The type of information about fit parameters printed in the histogram
-/// statistics box can be selected via the parameter mode.
-///  The parameter mode can be = pcev  (default = 0111)
+/// statistics box can be selected via the parameter `mode`.
+///  The parameter mode can be = `pcev`:
 ///  -  p = 1;  print Probability
 ///  -  c = 1;  print Chisquare/Number of degrees of freedom
 ///  -  e = 1;  print errors (if e=1, v must be 1)
@@ -1198,8 +1383,13 @@ void TStyle::SetOptDate(Int_t optdate)
 ///  -  When "v"=1 is specified, only the non-fixed parameters are shown.
 ///  -  When "v"=2 all parameters are shown.
 ///
-///  Note: `gStyle->SetOptFit(1)` means "default value", so it is equivalent to
-///        `gStyle->SetOptFit(111)`
+///  #### Notes:
+///  - `gStyle->SetOptFit(1)` is a shortcut allowing to set the most common
+///    case and is equivalent to `gStyle->SetOptFit(111)`
+///  - At ROOT startup the option fit is set to `0`. So, to see the fit parameters
+///    on all plot resulting from a fit, a call to `gStyle->SetOptFit()` with a
+///    non null value should be done. One can put it in the `rootlogon.C` file to
+///    always have it.
 ///
 /// see also SetOptStat below.
 
@@ -1220,7 +1410,7 @@ void TStyle::SetOptFit(Int_t mode)
 ////////////////////////////////////////////////////////////////////////////////
 /// The type of information printed in the histogram statistics box
 ///  can be selected via the parameter mode.
-///  The parameter mode can be = ksiourmen  (default = 000001111)
+///  The parameter mode can be = `ksiourmen`
 ///  -  k = 1;  kurtosis printed
 ///  -  k = 2;  kurtosis and kurtosis error printed
 ///  -  s = 1;  skewness printed
@@ -1240,16 +1430,16 @@ void TStyle::SetOptFit(Int_t mode)
 ///           print only name of histogram and number of entries.
 ///           `gStyle->SetOptStat(1101);`  displays the name of histogram, mean value and RMS.
 ///
-///  WARNING: never call `SetOptStat(000111);` but `SetOptStat(1111)`, 0001111 will
-///          be taken as an octal number !!
+///  #### Notes:
 ///
-///  WARNING: `SetOptStat(1)` is taken as `SetOptStat(1111)` (for back compatibility
-///           with older versions. If you want to print only the name of the histogram
-///           call `SetOptStat(1000000001)`.
-///
-///  NOTE that in case of 2-D histograms, when selecting just underflow (10000)
-///        or overflow (100000), the stats box will show all combinations
-///        of underflow/overflows and not just one single number!
+///  - never call `SetOptStat(000111);` but `SetOptStat(1111)`, 0001111 will
+///    be taken as an octal number !!
+///  - `SetOptStat(1)` is s shortcut allowing to set the most common case, and is
+///    taken as `SetOptStat(1111)` (for backward compatibility with older versions.
+///    If you want to print only the name of the histogram call `SetOptStat(1000000001)`.
+///  - that in case of 2-D histograms, when selecting just underflow (10000)
+///    or overflow (100000), the stats box will show all combinations
+///    of underflow/overflows and not just one single number!
 
 void TStyle::SetOptStat(Int_t mode)
 {
@@ -1493,7 +1683,7 @@ void TStyle::SaveSource(const char *filename, Option_t *option)
    Int_t lenfname = strlen(fname);
    char *sname = new char[lenfname + 1];
    Int_t i = 0;
-   while ((fname[i] != '.') && (i < lenfname)) {
+   while ((i < lenfname) && (fname[i] != '.')) {
       sname[i] = fname[i];
       i++;
    }

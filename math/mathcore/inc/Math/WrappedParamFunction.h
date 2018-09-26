@@ -13,9 +13,7 @@
 #ifndef ROOT_Math_WrappedParamFunction
 #define ROOT_Math_WrappedParamFunction
 
-#ifndef ROOT_Math_IParamFunction
 #include "Math/IParamFunction.h"
-#endif
 
 //#include <iostream>
 //#include <iterator>
@@ -59,7 +57,7 @@ public:
 //    /**
 //       Constructor a wrapped function from a non-const pointer to a callable object, the function dimension and number of parameters
 //       which are set to zero by default
-//       This constructor is needed in the case FuncPtr is a std::auto_ptr which has a copy ctor taking non const objects
+//       This constructor is needed in the case FuncPtr is a std::unique_ptr which has a copy ctor taking non const objects
 //    */
 //    WrappedParamFunction (FuncPtr & func, unsigned int dim = 1, unsigned int npar = 0, double * par = 0) :
 //       fFunc(func),
@@ -82,7 +80,7 @@ public:
 
 //    /**
 //       Constructor a wrapped function from a non - const pointer to a callable object, the function dimension and an iterator specifying begin and end of parameters.
-//       This constructor is needed in the case FuncPtr is a std::auto_ptr which has a copy ctor taking non const objects
+//       This constructor is needed in the case FuncPtr is a std::unique_ptr which has a copy ctor taking non const objects
 //    */
 //    template<class Iterator>
 //    WrappedParamFunction (FuncPtr func, unsigned int dim, Iterator begin, Iterator end) :
@@ -97,7 +95,7 @@ public:
    }
 
    const double * Parameters() const {
-      return  &(fParams.front());
+      return fParams.empty() ? nullptr : &fParams.front();
    }
 
    void SetParameters(const double * p)  {
@@ -160,7 +158,7 @@ public:
 
    /**
       Constructor as before but taking now a non - const pointer to a callable object.
-      This constructor is needed in the case FuncPtr is a std::auto_ptr which has a copy ctor taking non const objects
+      This constructor is needed in the case FuncPtr is a std::unique_ptr which has a copy ctor taking non const objects
    */
    WrappedParamFunctionGen (FuncPtr & func, unsigned int dim, unsigned int npar, const double * par, const unsigned int * idx) :
       fFunc(func),
@@ -174,7 +172,7 @@ public:
 
    /// clone the function
    IMultiGenFunction * Clone() const {
-      return new WrappedParamFunctionGen(fFunc, fDim, fParams.size() , &fParams.front(), &fParIndices.front());
+      return new WrappedParamFunctionGen(fFunc, fDim, fParams.size(), fParams.empty() ? nullptr : &fParams.front(), fParIndices.empty() ? nullptr : &fParIndices.front());
    }
 
 private:
@@ -185,7 +183,7 @@ private:
 public:
 
    const double * Parameters() const {
-      return  &(fParams.front());
+      return fParams.empty() ? nullptr : &fParams.front();
    }
 
    void SetParameters(const double * p)  {
@@ -229,7 +227,7 @@ private:
 //       std::copy(fX.begin(), fX.end(), oi);
 //       std::cout << std::endl;
 
-      return (*fFunc)( &fX.front() );
+      return (*fFunc)( fX.empty() ? nullptr : &fX.front() );
    }
 
 
@@ -266,7 +264,7 @@ private:
 //       std::cout << this << std::endl;
 
       // set parameter values in fX
-      SetParValues(npar, &fParams.front() );
+      SetParValues(npar, fParams.empty() ? nullptr : &fParams.front());
       for (unsigned int i = 0; i < npar; ++i) {
          unsigned int j = fParIndices[i];
          assert ( j  < npar + fDim);

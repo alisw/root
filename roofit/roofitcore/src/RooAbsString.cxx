@@ -42,7 +42,7 @@ is provided to modify the contents
 
 using namespace std;
 
-ClassImp(RooAbsString) 
+ClassImp(RooAbsString); 
 ;
 
 
@@ -200,9 +200,9 @@ Bool_t RooAbsString::traceEvalHook(const char* /*value*/) const
 ////////////////////////////////////////////////////////////////////////////////
 /// Calculate current value of object, with error tracing wrapper
 
-const char* RooAbsString::traceEval() const
+TString RooAbsString::traceEval() const
 {
-  const char* value = evaluate() ;
+  TString value = evaluate() ;
   
   //Standard tracing code goes here
   if (!isValidString(value)) {
@@ -257,13 +257,13 @@ void RooAbsString::attachToTree(TTree& t, Int_t bufSize)
     t.SetBranchAddress(GetName(),_value) ;
     if (branch->GetCompressionLevel()<0) {
       cxcoutD(DataHandling) << "RooAbsString::attachToTree(" << GetName() << ") Fixing compression level of branch " << GetName() << endl ;
-      branch->SetCompressionLevel(1) ;
+      branch->SetCompressionLevel(4) ;
     }
   } else {
     TString format(GetName());
     format.Append("/C");
     branch = t.Branch(GetName(), _value, (const Text_t*)format, bufSize);
-    branch->SetCompressionLevel(1) ;
+    branch->SetCompressionLevel(4) ;
   }
 }
  

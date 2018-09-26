@@ -18,12 +18,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/SchedulerRegistry.h"
 #include "ScheduleDAGSDNodes.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LatencyPriorityQueue.h"
 #include "llvm/CodeGen/ResourcePriorityQueue.h"
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
+#include "llvm/CodeGen/SchedulerRegistry.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Support/Debug.h"
@@ -76,7 +76,7 @@ public:
     HazardRec = STI.getInstrInfo()->CreateTargetHazardRecognizer(&STI, this);
   }
 
-  ~ScheduleDAGVLIW() {
+  ~ScheduleDAGVLIW() override {
     delete HazardRec;
     delete AvailableQueue;
   }

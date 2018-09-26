@@ -10,7 +10,7 @@
 #ifndef CLING_RUNTIME_EXCEPTION_H
 #define CLING_RUNTIME_EXCEPTION_H
 
-#include <exception>
+#include <stdexcept>
 
 namespace clang {
   class Sema;
@@ -21,12 +21,16 @@ namespace clang {
 namespace cling {
   ///\brief Base class for all interpreter exceptions.
   ///
-  class InterpreterException : public std::exception {
+  class InterpreterException : public std::runtime_error {
+  protected:
+    clang::Sema* const m_Sema;
   public:
-    virtual ~InterpreterException();
+    InterpreterException(const std::string& Reason);
+    InterpreterException(const char* What, clang::Sema* = nullptr);
+    virtual ~InterpreterException() noexcept;
 
-    virtual const char* what() const throw();
-    virtual void diagnose() const {}
+    ///\brief Return true if error was diagnosed false otherwise
+    virtual bool diagnose() const;
   };
 
   ///\brief Exception that is thrown when a invalid pointer dereference is found
@@ -36,16 +40,34 @@ namespace cling {
   public:
     enum DerefType {INVALID_MEM, NULL_DEREF};
   private:
-    clang::Sema* m_Sema;
-    clang::Expr* m_Arg;
-    clang::DiagnosticsEngine* m_Diags;
-    DerefType m_Type;
+    const clang::Expr* const m_Arg;
+    const DerefType m_Type;
   public:
-    InvalidDerefException(clang::Sema* S, clang::Expr* E, DerefType type);
-    virtual ~InvalidDerefException();
+    InvalidDerefException(clang::Sema* S, const clang::Expr* E, DerefType type);
+    virtual ~InvalidDerefException() noexcept;
 
-    const char* what() const throw() override;
-    void diagnose() const override;
+    bool diagnose() const override;
+  };
+
+  ///\brief Exception that pulls cling out of runtime-compilation (llvm + clang)
+  ///       errors.
+  ///
+  /// If user code provokes an llvm::unreachable it will cause this exception
+  /// to be thrown.
+  /// Note that this exception is *not* thrown during the execution of the
+  /// user's code but during its compilation (at runtime).
+  class CompilationException: public InterpreterException {
+  public:
+    CompilationException(const std::string& Reason);
+    ~CompilationException() noexcept;
+
+    // Handle fatal llvm errors by throwing an exception.
+    // Yes, throwing exceptions in error handlers is bad.
+    // Doing nothing is pretty terrible, too.
+    static void throwingHandler(void * /*user_data*/,
+                                const std::string& reason,
+                                bool /*gen_crash_diag*/);
   };
 } // end namespace cling
+
 #endif // CLING_RUNTIME_EXCEPTION_H

@@ -11,19 +11,16 @@
 
 //#define NDEBUG
 
-#include <algorithm>
-#include <stdexcept>
-#include <cassert>
-#include <cstring>
-#include <cstddef>
-#include <limits>
+#include "TGCocoa.h"
 
-#include <ApplicationServices/ApplicationServices.h>
-#include <OpenGL/OpenGL.h>
-#include <Cocoa/Cocoa.h>
-#include <OpenGL/gl.h>
+// We want to pickup ROOT's glew and not the system OpenGL coming from:
+// ROOTOpenGLView.h ->QuartzWindow.h->Cocoa.h
+// Allowing TU's which include the system GL and then glew (from TGLIncludes)
+// leads to gltypes.h redefinition errors.
+#include "TGLIncludes.h"
 
 #include "ROOTOpenGLView.h"
+#include "CocoaConstants.h"
 #include "TMacOSXSystem.h"
 #include "CocoaPrivate.h"
 #include "QuartzWindow.h"
@@ -40,12 +37,24 @@
 #include "TGWindow.h"
 #include "TSystem.h"
 #include "TGFrame.h"
-#include "TGCocoa.h"
+#include "TGLIncludes.h"
 #include "TError.h"
 #include "TColor.h"
 #include "TROOT.h"
 #include "TEnv.h"
 #include "TVirtualMutex.h"
+
+#include <ApplicationServices/ApplicationServices.h>
+#include <OpenGL/OpenGL.h>
+#include <Cocoa/Cocoa.h>
+
+#include <algorithm>
+#include <stdexcept>
+#include <cassert>
+#include <cstring>
+#include <cstddef>
+#include <limits>
+
 
 //Style notes: I'm using a lot of asserts to check pre-conditions - mainly function parameters.
 //In asserts, expression always looks like 'p != 0' for "C++ pointer" (either object of built-in type
@@ -517,7 +526,7 @@ Int_t TGCocoa::GetDepth() const
 //______________________________________________________________________________
 void TGCocoa::Update(Int_t mode)
 {
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
 
    if (mode == 2) {
       assert(gClient != 0 && "Update, gClient is null");
@@ -982,6 +991,7 @@ void TGCocoa::SelectInput(Window_t windowID, UInt_t eventMask)
 void TGCocoa::ReparentChild(Window_t wid, Window_t pid, Int_t x, Int_t y)
 {
    //Reparent view.
+   using namespace Details;
 
    assert(!fPimpl->IsRootWindow(wid) && "ReparentChild, can not re-parent root window");
 
@@ -997,9 +1007,9 @@ void TGCocoa::ReparentChild(Window_t wid, Window_t pid, Int_t x, Int_t y)
       NSRect frame = view.frame;
       frame.origin = NSPoint();
 
-      NSUInteger styleMask = NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask;
+      NSUInteger styleMask = kClosableWindowMask | kMiniaturizableWindowMask | kResizableWindowMask;
       if (!view.fOverrideRedirect)
-         styleMask |= NSTitledWindowMask;
+         styleMask |= kTitledWindowMask;
 
       QuartzWindow * const newTopLevel = [[QuartzWindow alloc] initWithContentRect : frame
                                                                          styleMask : styleMask
@@ -1501,19 +1511,14 @@ void TGCocoa::ShapeCombineMask(Window_t windowID, Int_t /*x*/, Int_t /*y*/, Pixm
    assert([fPimpl->GetDrawable(pixmapID) isKindOfClass : [QuartzImage class]] &&
           "ShapeCombineMask, pixmapID parameter must point to QuartzImage object");
 
-   //TODO: nonrectangular window can be only NSWindow object,
-   //not NSView (and mask is attached to a window).
-   //This means, if some nonrectangular window is created as a child
-   //first, and detached later (becoming top-level), the shape will be lost.
-   //Find a better way to fix it.
    if (fPimpl->GetWindow(windowID).fContentView.fParentView)
       return;
 
    QuartzImage * const srcImage = (QuartzImage *)fPimpl->GetDrawable(pixmapID);
    assert(srcImage.fIsStippleMask == YES && "ShapeCombineMask, source image is not a stipple mask");
 
-   //TODO: there is some kind of problems with shape masks and
-   //flipped views, I have to do an image flip here - check this!
+   // There is some kind of problems with shape masks and
+   // flipped views, I have to do an image flip here.
    const Util::NSScopeGuard<QuartzImage> image([[QuartzImage alloc] initFromImageFlipped : srcImage]);
    if (image.Get()) {
       QuartzWindow * const qw = fPimpl->GetWindow(windowID).fQuartzWindow;
@@ -1529,23 +1534,25 @@ void TGCocoa::ShapeCombineMask(Window_t windowID, Int_t /*x*/, Int_t /*y*/, Pixm
 void TGCocoa::SetMWMHints(Window_t wid, UInt_t value, UInt_t funcs, UInt_t /*input*/)
 {
    // Sets decoration style.
+   using namespace Details;
+
    assert(!fPimpl->IsRootWindow(wid) && "SetMWMHints, called for 'root' window");
 
    QuartzWindow * const qw = fPimpl->GetWindow(wid).fQuartzWindow;
    NSUInteger newMask = 0;
 
-   if ([qw styleMask] & NSTitledWindowMask) {//Do not modify this.
-      newMask |= NSTitledWindowMask;
-      newMask |= NSClosableWindowMask;
+   if ([qw styleMask] & kTitledWindowMask) {//Do not modify this.
+      newMask |= kTitledWindowMask;
+      newMask |= kClosableWindowMask;
    }
 
    if (value & kMWMFuncAll) {
-      newMask |= NSMiniaturizableWindowMask | NSResizableWindowMask;
+      newMask |= kMiniaturizableWindowMask | kResizableWindowMask;
    } else {
       if (value & kMWMDecorMinimize)
-         newMask |= NSMiniaturizableWindowMask;
+         newMask |= kMiniaturizableWindowMask;
       if (funcs & kMWMFuncResize)
-         newMask |= NSResizableWindowMask;
+         newMask |= kResizableWindowMask;
    }
 
    [qw setStyleMask : newMask];
@@ -1578,10 +1585,11 @@ void TGCocoa::SetWMSize(Window_t /*wid*/, UInt_t /*w*/, UInt_t /*h*/)
 //______________________________________________________________________________
 void TGCocoa::SetWMSizeHints(Window_t wid, UInt_t wMin, UInt_t hMin, UInt_t wMax, UInt_t hMax, UInt_t /*wInc*/, UInt_t /*hInc*/)
 {
-   //
+   using namespace Details;
+
    assert(!fPimpl->IsRootWindow(wid) && "SetWMSizeHints, called for root window");
 
-   const NSUInteger styleMask = NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask;
+   const NSUInteger styleMask = kTitledWindowMask | kClosableWindowMask | kMiniaturizableWindowMask | kResizableWindowMask;
    const NSRect minRect = [NSWindow frameRectForContentRect : NSMakeRect(0., 0., wMin, hMin) styleMask : styleMask];
    const NSRect maxRect = [NSWindow frameRectForContentRect : NSMakeRect(0., 0., wMax, hMax) styleMask : styleMask];
 
@@ -1661,7 +1669,6 @@ void TGCocoa::DrawLineAux(Drawable_t wid, const GCValues_t &gcVals, Int_t x1, In
       CGContextTranslateCTM(ctx, 0.5, 0.5);
    else {
       //Pixmap uses native Cocoa's left-low-corner system.
-      //TODO: check the line on the edge.
       y1 = Int_t(X11::LocalYROOTToCocoa(drawable, y1));
       y2 = Int_t(X11::LocalYROOTToCocoa(drawable, y2));
    }
@@ -1789,7 +1796,6 @@ void TGCocoa::DrawRectangleAux(Drawable_t wid, const GCValues_t &gcVals, Int_t x
             h -= 1;
       }
    } else {
-      //TODO: check the line on the edge.
       //Pixmap has native Cocoa's low-left-corner system.
       y = Int_t(X11::LocalYROOTToCocoa(drawable, y + h));
    }
@@ -1868,7 +1874,6 @@ void TGCocoa::FillRectangleAux(Drawable_t wid, const GCValues_t &gcVals, Int_t x
 
    if (drawable.fIsPixmap) {
       //Pixmap has low-left-corner based system.
-      //TODO: check how pixmap works with pattern fill.
       y = Int_t(X11::LocalYROOTToCocoa(drawable, y + h));
    }
 
@@ -2340,7 +2345,6 @@ Int_t TGCocoa::OpenPixmap(UInt_t w, UInt_t h)
    newSize.width = w;
    newSize.height = h;
 
-   //TODO: what about multi-head setup and scaling factor?
    Util::NSScopeGuard<QuartzPixmap> pixmap([[QuartzPixmap alloc] initWithW : w H : h
                                            scaleFactor : [[NSScreen mainScreen] backingScaleFactor]]);
    if (pixmap.Get()) {
@@ -2365,7 +2369,6 @@ Int_t TGCocoa::ResizePixmap(Int_t wid, UInt_t w, UInt_t h)
    if (w == pixmap.fWidth && h == pixmap.fHeight)
       return 1;
 
-   //TODO: what about multi-head setup and scale factor?
    if ([pixmap resizeW : w H : h scaleFactor : [[NSScreen mainScreen] backingScaleFactor]])
       return 1;
 
@@ -2420,6 +2423,11 @@ void TGCocoa::CopyPixmap(Int_t pixmapID, Int_t x, Int_t y)
 void TGCocoa::ClosePixmap()
 {
    // Deletes current pixmap.
+   assert(fSelectedDrawable > fPimpl->GetRootWindowID() && "ClosePixmap, no drawable selected");
+   assert(fPimpl->GetDrawable(fSelectedDrawable).fIsPixmap == YES && "ClosePixmap, selected drawable is not a pixmap");
+
+   DeletePixmap(fSelectedDrawable);
+   fSelectedDrawable = 0;
 }
 
 #pragma mark - Different functions to create pixmap from different data sources. Used by GUI.
@@ -3201,7 +3209,6 @@ Double_t TGCocoa::GetOpenGLScalingFactor()
    //Scaling factor to let our OpenGL code know, that we probably
    //work on a retina display.
 
-   //TODO: what about multi-head setup?
    return [[NSScreen mainScreen] backingScaleFactor];
 }
 
@@ -3312,6 +3319,8 @@ void TGCocoa::CreateOpenGLContext(Int_t /*wid*/)
 //______________________________________________________________________________
 Bool_t TGCocoa::MakeOpenGLContextCurrent(Handle_t ctxID, Window_t windowID)
 {
+   using namespace Details;
+
    assert(ctxID > 0 && "MakeOpenGLContextCurrent, invalid context id");
 
    NSOpenGLContext * const glContext = fPimpl->GetGLContextForHandle(ctxID);
@@ -3344,8 +3353,6 @@ Bool_t TGCocoa::MakeOpenGLContextCurrent(Handle_t ctxID, Window_t windowID)
       //Funny enough, but if you have invisible window with visible view,
       //this trick works.
 
-      //TODO: this code is a total mess, refactor.
-
       NSView *fakeView = nil;
       QuartzWindow *fakeWindow = fPimpl->GetFakeGLWindow();
 
@@ -3360,8 +3367,8 @@ Bool_t TGCocoa::MakeOpenGLContextCurrent(Handle_t ctxID, Window_t windowID)
          viewFrame.size.width = width;
          viewFrame.size.height = height;
 
-         const NSUInteger styleMask = NSTitledWindowMask | NSClosableWindowMask |
-                                      NSMiniaturizableWindowMask | NSResizableWindowMask;
+         const NSUInteger styleMask = kTitledWindowMask | kClosableWindowMask |
+                                      kMiniaturizableWindowMask | kResizableWindowMask;
 
          //NOTE: defer parameter is 'NO', otherwise this trick will not help.
          fakeWindow = [[QuartzWindow alloc] initWithContentRect : viewFrame styleMask : styleMask
@@ -3483,7 +3490,6 @@ void TGCocoa::SetDoubleBufferON()
          return;
    }
 
-   //TODO: what about multi-head setup?
    Util::NSScopeGuard<QuartzPixmap> pixmap([[QuartzPixmap alloc] initWithW : currW
                                             H : currH scaleFactor : [[NSScreen mainScreen] backingScaleFactor]]);
    if (pixmap.Get())
@@ -3569,8 +3575,6 @@ Handle_t TGCocoa::GetNativeEvent() const
 Atom_t  TGCocoa::InternAtom(const char *name, Bool_t onlyIfExist)
 {
    //X11 properties emulation.
-   //TODO: this is a temporary hack to make
-   //client message (close window) work.
 
    assert(name != 0 && "InternAtom, parameter 'name' is null");
    return FindAtom(name, !onlyIfExist);
@@ -3589,7 +3593,6 @@ void TGCocoa::SetPrimarySelectionOwner(Window_t windowID)
    if (!windowID)//From TGWin32.
       return;
 
-   //TODO: check, if this really happens and probably remove assert.
    assert(!fPimpl->IsRootWindow(windowID) &&
           "SetPrimarySelectionOwner, windowID parameter is a 'root' window");
    assert(fPimpl->GetDrawable(windowID).fIsPixmap == NO &&
@@ -3721,8 +3724,6 @@ Int_t TGCocoa::GetProperty(Window_t windowID, Atom_t propertyID, Long_t, Long_t,
    // actually returned.
    //End of comment.
 
-   //TODO: actually, property can be set for root window.
-   //I have to save this data somehow.
    if (fPimpl->IsRootWindow(windowID))
       return 0;
 
@@ -3900,7 +3901,6 @@ void TGCocoa::DeleteProperty(Window_t windowID, Atom_t &propertyID)
       return;
 
    //Strange signature - why propertyID is a reference?
-   //TODO: check, if ROOT sets/deletes properties on a 'root' window.
    assert(!fPimpl->IsRootWindow(windowID) &&
           "DeleteProperty, parameter 'windowID' is root window");
    assert(fPimpl->GetDrawable(windowID).fIsPixmap == NO &&
@@ -3950,7 +3950,6 @@ void TGCocoa::SetDNDAware(Window_t windowID, Atom_t *typeList)
    //While calling XChangeProperty, it passes the address of this typelist
    //and format is ... 32. I have to pack data into unsigned and force the size:
    assert(sizeof(unsigned) == 4 && "SetDNDAware, sizeof(unsigned) must be 4");
-   //TODO: find fixed-width integer type (I do not have cstdint header at the moment?)
 
    std::vector<unsigned> propertyData;
    propertyData.push_back(4);//This '4' is from TGX11 (is it XA_ATOM???)
@@ -4512,7 +4511,7 @@ Atom_t TGCocoa::FindAtom(const std::string &atomName, bool addIfNotFound)
 void TGCocoa::SetApplicationIcon()
 {
    if (gEnv) {
-      const char * const iconDirectoryPath = gEnv->GetValue("Gui.IconPath","$(ROOTSYS)/icons");//This one I do not own.
+      const char * const iconDirectoryPath = gEnv->GetValue("Gui.IconPath",TROOT::GetIconPath());
       if (iconDirectoryPath) {
          const Util::ScopedArray<char> fileName(gSystem->Which(iconDirectoryPath, "Root6Icon.png", kReadPermission));
          if (fileName.Get()) {

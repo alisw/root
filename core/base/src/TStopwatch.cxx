@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TStopwatch
+\ingroup Base
+
 Stopwatch class. This class returns the real and cpu time between
 the start and stop events.
 */
@@ -29,7 +31,7 @@ const Double_t gTicks = 1.0e-7;
 #endif
 
 
-ClassImp(TStopwatch)
+ClassImp(TStopwatch);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a stopwatch and start it.

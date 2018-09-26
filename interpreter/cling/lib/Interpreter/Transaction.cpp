@@ -8,8 +8,8 @@
 //------------------------------------------------------------------------------
 
 #include "cling/Interpreter/Transaction.h"
-
 #include "cling/Utils/AST.h"
+#include "cling/Utils/Output.h"
 #include "IncrementalExecutor.h"
 
 #include "clang/AST/ASTContext.h"
@@ -20,7 +20,6 @@
 #include "clang/Sema/Sema.h"
 
 #include "llvm/IR/Module.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 
@@ -43,7 +42,6 @@ namespace cling {
     m_IssuedDiags = kNone;
     m_Opts = CompilationOptions();
     m_Module = 0;
-    m_ExeUnload = {(void*)(size_t)-1};
     m_WrapperFD = 0;
     m_Next = 0;
     //m_Sema = S;
@@ -52,6 +50,8 @@ namespace cling {
   }
 
   Transaction::~Transaction() {
+    // FIXME: Enable this once we have a good control on the ownership.
+    //assert(m_Module.use_count() <= 1 && "There is still a reference!");
     if (hasNestedTransactions())
       for (size_t i = 0; i < m_NestedTransactions->size(); ++i) {
         assert(((*m_NestedTransactions)[i]->getState() == kCommitted
@@ -59,18 +59,31 @@ namespace cling {
                && "All nested transactions must be committed!");
         delete (*m_NestedTransactions)[i];
       }
-    if (getExecutor())
-      getExecutor()->unloadFromJIT(m_Module.get(), getExeUnloadHandle());
   }
 
   NamedDecl* Transaction::containsNamedDecl(llvm::StringRef name) const {
-    for (auto I = decls_begin(), E = decls_end(); I < E; ++I)
+    for (auto I = decls_begin(), E = decls_end(); I != E; ++I) {
       for (auto DI : I->m_DGR) {
-        if (NamedDecl* ND = dyn_cast<NamedDecl>(DI))
+        if (NamedDecl* ND = dyn_cast<NamedDecl>(DI)) {
           if (name.equals(ND->getNameAsString()))
             return ND;
+        }
       }
-    return 0;
+    }
+    // Not found yet, peek inside extern "C" declarations
+    for (auto I = decls_begin(), E = decls_end(); I != E; ++I) {
+      for (auto DI : I->m_DGR) {
+        if (LinkageSpecDecl* LSD = dyn_cast<LinkageSpecDecl>(DI)) {
+          for (Decl* DI : LSD->decls()) {
+            if (NamedDecl* ND = dyn_cast<NamedDecl>(DI)) {
+              if (name.equals(ND->getNameAsString()))
+                return ND;
+            }
+          }
+        }
+      }
+    }
+    return nullptr;
   }
 
   void Transaction::addNestedTransaction(Transaction* nested) {
@@ -146,7 +159,8 @@ namespace cling {
       // declaration, because each time Sema believes a vtable is used it emits
       // that callback.
       // For reference (clang::CodeGen::CodeGenModule::EmitVTable).
-      if (oldDCI.m_Call != kCCIHandleVTable)
+      if (oldDCI.m_Call != kCCIHandleVTable
+          && oldDCI.m_Call != kCCIHandleCXXImplicitFunctionInstantiation)
         assert(oldDCI != DCI && "Duplicates?!");
     }
     // We want to assert there is only one wrapper per transaction.
@@ -186,11 +200,23 @@ namespace cling {
     assert(MDE.m_MD && "Appending null MacroDirective?!");
     assert(getState() == kCollecting
            && "Cannot append declarations in current state.");
+
 #ifndef NDEBUG
-    // Check for duplicates
-    for (size_t i = 0, e = m_MacroDirectiveInfoQueue.size(); i < e; ++i) {
-      MacroDirectiveInfo &oldMacroDirectiveInfo (m_MacroDirectiveInfoQueue[i]);
-      assert(oldMacroDirectiveInfo != MDE && "Duplicates?!");
+    if (size_t i = m_MacroDirectiveInfoQueue.size()) {
+      // Check for duplicates
+      do {
+        MacroDirectiveInfo &prevDir (m_MacroDirectiveInfoQueue[--i]);
+        if (prevDir == MDE) {
+          const UndefMacroDirective* A =
+                                        dyn_cast<UndefMacroDirective>(MDE.m_MD);
+          const UndefMacroDirective* B =
+                                    dyn_cast<UndefMacroDirective>(prevDir.m_MD);
+          // Allow undef to follow def and vice versa, but that is all.
+          assert((A ? B==nullptr : B!=nullptr) && "Duplicates");
+          // Has previously been checked prior to here, so were done.
+          break;
+        }
+      } while (i != 0);
     }
 #endif
 
@@ -210,7 +236,7 @@ namespace cling {
 
   void Transaction::DelayCallInfo::dump() const {
     PrintingPolicy Policy((LangOptions()));
-    print(llvm::errs(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
+    print(cling::log(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
   }
 
   void Transaction::DelayCallInfo::print(llvm::raw_ostream& Out,
@@ -252,7 +278,7 @@ namespace cling {
   }
 
   void Transaction::MacroDirectiveInfo::dump(const clang::Preprocessor& PP) const {
-    print(llvm::errs(), PP);
+    print(cling::log(), PP);
   }
 
   void Transaction::MacroDirectiveInfo::print(llvm::raw_ostream& Out,
@@ -263,13 +289,13 @@ namespace cling {
   void Transaction::dump() const {
     const ASTContext& C = m_Sema.getASTContext();
     PrintingPolicy Policy = C.getPrintingPolicy();
-    print(llvm::errs(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
+    print(cling::log(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
   }
 
   void Transaction::dumpPretty() const {
     const ASTContext& C = m_Sema.getASTContext();
     PrintingPolicy Policy(C.getLangOpts());
-    print(llvm::errs(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
+    print(cling::log(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
   }
 
   void Transaction::print(llvm::raw_ostream& Out, const PrintingPolicy& Policy,
@@ -317,19 +343,19 @@ namespace cling {
     assert((sizeof(stateNames) / sizeof(void*)) == kNumStates
            && "Missing a state to print.");
     std::string indent(nindent, ' ');
-    llvm::errs() << indent << "Transaction @" << this << ": \n";
+    cling::log() << indent << "Transaction @" << this << ": \n";
     for (const_nested_iterator I = nested_begin(), E = nested_end();
          I != E; ++I) {
       (*I)->printStructure(nindent + 3);
     }
-    llvm::errs() << indent << " state: " << stateNames[getState()]
+    cling::log() << indent << " state: " << stateNames[getState()]
                  << " decl groups, ";
     if (hasNestedTransactions())
-      llvm::errs() << m_NestedTransactions->size();
+      cling::log() << m_NestedTransactions->size();
     else
-      llvm::errs() << "0";
+      cling::log() << "0";
 
-    llvm::errs() << " nested transactions\n"
+    cling::log() << " nested transactions\n"
                  << indent << " wrapper: " << m_WrapperFD
                  << ", parent: " << m_Parent
                  << ", next: " << m_Next << "\n";
@@ -337,14 +363,14 @@ namespace cling {
 
   void Transaction::printStructureBrief(size_t nindent /*=0*/) const {
     std::string indent(nindent, ' ');
-    llvm::errs() << indent << "<cling::Transaction* " << this
+    cling::log() << indent << "<cling::Transaction* " << this
                  << " isEmpty=" << empty();
-    llvm::errs() << " isCommitted=" << (getState() == kCommitted);
-    llvm::errs() <<"> \n";
+    cling::log() << " isCommitted=" << (getState() == kCommitted);
+    cling::log() <<"> \n";
 
     for (const_nested_iterator I = nested_begin(), E = nested_end();
          I != E; ++I) {
-      llvm::errs() << indent << "`";
+      cling::log() << indent << "`";
       (*I)->printStructureBrief(nindent + 3);
     }
   }
@@ -356,7 +382,34 @@ namespace cling {
 
     // Take the first/only decl in the group.
     Decl* D = *DGR.begin();
-    return D->isFromASTFile();
+
+    // If D is from an AST file, we can return true.
+    if (D->isFromASTFile()) return true;
+
+    if (m_Sema.getASTContext().getLangOpts().Modules) {
+      // If we currently compile a module and the decl is from a submodule that
+      // we are currently compiling, then we also pretend it's from a AST file.
+      // If we don't do that than our duplicate check in forceAppend will fail
+      // when we try to generate a module that has multiple submodules that
+      // textually include the same declaration (which will cause multiple
+      // entries of the same merged decl to be in this list).
+      if (D->getOwningModule()) {
+        StringRef CurrentModule =
+            D->getASTContext().getLangOpts().CurrentModule;
+        StringRef DeclModule = D->getOwningModule()->getTopLevelModuleName();
+        return CurrentModule == DeclModule;
+      }
+    }
+
+    return false;
+  }
+
+  SourceLocation
+  Transaction::getSourceStart(const clang::SourceManager& SM) const {
+    // Children can have invalid BufferIDs. In that case use the parent's.
+    if (m_BufferFID.isInvalid() && m_Parent)
+      return m_Parent->getSourceStart(SM);
+    return SM.getLocForStartOfFile(m_BufferFID);
   }
 
 } // end namespace cling

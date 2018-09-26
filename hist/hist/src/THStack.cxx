@@ -23,8 +23,9 @@
 #include "TBrowser.h"
 #include "TMath.h"
 #include "TObjString.h"
+#include "TVirtualMutex.h"
 
-ClassImp(THStack)
+ClassImp(THStack);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -86,6 +87,23 @@ Begin_Macro(source)
 End_Macro
 
 Note that picking is supported for all drawing modes.
+
+\since **ROOT version 6.07/07:**
+Stacks of 2D histograms can also be painted as candle plots:
+\since **ROOT version 6.09/02:**
+Stacks of 2D histograms can also be painted as violin plots, combinations of candle and
+violin plots are possible as well:
+
+Begin_Macro(source)
+../../../tutorials/hist/candleplotstack.C
+End_Macro
+
+Automatic coloring according to the current palette is available as shown in the
+following example:
+
+Begin_Macro(source)
+../../../tutorials/hist/thstackpalettecolor.C
+End_Macro
 */
 
 
@@ -112,6 +130,7 @@ THStack::THStack(const char *name, const char *title)
    fHistogram = 0;
    fMaximum   = -1111;
    fMinimum   = -1111;
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfCleanups()->Add(this);
 }
 
@@ -155,8 +174,10 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
    fHistogram = 0;
    fMaximum   = -1111;
    fMinimum   = -1111;
-   gROOT->GetListOfCleanups()->Add(this);
-
+   {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfCleanups()->Add(this);
+   }
    if (!axis) {
       Warning("THStack", "Need an axis.");
       return;
@@ -299,7 +320,10 @@ THStack::THStack(TH1* hist, Option_t *axis /*="x"*/,
 THStack::~THStack()
 {
 
-   gROOT->GetListOfCleanups()->Remove(this);
+   {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfCleanups()->Remove(this);
+   }
    if (!fHists) return;
    fHists->Clear("nodelete");
    delete fHists;
@@ -670,13 +694,43 @@ void THStack::Modified()
 ///
 /// See THistPainter::Paint for a list of valid options.
 
-void THStack::Paint(Option_t *option)
+void THStack::Paint(Option_t *choptin)
 {
    if (!fHists) return;
    if (!fHists->GetSize()) return;
 
+   char option[128];
+   strlcpy(option,choptin,128);
+
+   // Automatic color
+   char *l1 = strstr(option,"pfc"); // Automatic Fill Color
+   char *l2 = strstr(option,"plc"); // Automatic Line Color
+   char *l3 = strstr(option,"pmc"); // Automatic Marker Color
+   if (l1 || l2 || l3) {
+      TString opt1 = option;
+      if (l1) memcpy(l1,"   ",3);
+      if (l2) memcpy(l2,"   ",3);
+      if (l3) memcpy(l3,"   ",3);
+      TString ws = option;
+      if (ws.IsWhitespace()) strncpy(option,"\0",1);
+      TObjOptLink *lnk = (TObjOptLink*)fHists->FirstLink();
+      TH1* hAti;
+      Int_t nhists = fHists->GetSize();
+      Int_t ic;
+      gPad->IncrementPaletteColor(nhists, opt1);
+      for (Int_t i=0;i<nhists;i++) {
+         ic = gPad->NextPaletteColor();
+         hAti = (TH1F*)(fHists->At(i));
+         if (l1) hAti->SetFillColor(ic);
+         if (l2) hAti->SetLineColor(ic);
+         if (l3) hAti->SetMarkerColor(ic);
+         lnk = (TObjOptLink*)lnk->Next();
+      }
+   }
+
    TString opt = option;
    opt.ToLower();
+   opt.ReplaceAll(" ","");
    Bool_t lsame = kFALSE;
    if (opt.Contains("same")) {
       lsame = kTRUE;
@@ -735,15 +789,18 @@ void THStack::Paint(Option_t *option)
       if (h->GetYaxis()->GetXmax() > ymax) ymax = h->GetYaxis()->GetXmax();
    }
 
-   char loption[32];
+   char loption[40];
    snprintf(loption,31,"%s",opt.Data());
    char *nostack  = strstr(loption,"nostack");
    char *nostackb = strstr(loption,"nostackb");
+   char *candle   = strstr(loption,"candle");
+   char *violin   = strstr(loption,"violin");
+
    // do not delete the stack. Another pad may contain the same object
    // drawn in stack mode!
    //if (nostack && fStack) {fStack->Delete(); delete fStack; fStack = 0;}
 
-   if (!opt.Contains("nostack")) BuildStack();
+   if (!opt.Contains("nostack") && (!opt.Contains("candle")) && (!opt.Contains("violin"))) BuildStack();
 
    Double_t themax,themin;
    if (fMaximum == -1111) themax = GetMaximum(option);
@@ -839,24 +896,34 @@ void THStack::Paint(Option_t *option)
    char noption[32];
    strlcpy(noption,loption,32);
    Int_t nhists = fHists->GetSize();
-   if (nostack) {
+   if (nostack || candle || violin) {
       lnk = (TObjOptLink*)fHists->FirstLink();
       TH1* hAti;
       Double_t bo=0.03;
       Double_t bw = (1.-(2*bo))/nhists;
       for (Int_t i=0;i<nhists;i++) {
          if (strstr(lnk->GetOption(),"same")) {
-            if (nostackb) snprintf(loption,31,"%s%s b",noption,lnk->GetOption());
-            else          snprintf(loption,31,"%s%s",noption,lnk->GetOption());
+            if (nostackb) snprintf(loption,34,"%s%s b",noption,lnk->GetOption());
+            else          snprintf(loption,32,"%s%s",noption,lnk->GetOption());
          } else {
-            if (nostackb) snprintf(loption,31,"%ssame%s b",noption,lnk->GetOption());
-            else          snprintf(loption,31,"%ssame%s",noption,lnk->GetOption());
+            TString indivOpt = lnk->GetOption();
+            indivOpt.ToLower();
+            if (nostackb) snprintf(loption,38,"%ssame%s b",noption,lnk->GetOption());
+            else if (candle && (indivOpt.Contains("candle") || indivOpt.Contains("violin"))) snprintf(loption,31,"%ssame",lnk->GetOption());
+            else          snprintf(loption,36,"%ssame%s",noption,lnk->GetOption());
          }
          hAti = (TH1F*)(fHists->At(i));
          if (nostackb) {
             hAti->SetBarWidth(bw);
             hAti->SetBarOffset(bo);
             bo += bw;
+         }
+         if (candle || violin) {
+            float candleSpace = 1./(nhists*2);
+            float candleOffset = - 1./2 + candleSpace + 2*candleSpace*i;
+            candleSpace *= 1.66; //width of the candle per bin: 1.0 means space is as great as the candle, 2.0 means there is no space
+            hAti->SetBarWidth(candleSpace);
+            hAti->SetBarOffset(candleOffset);
          }
          hAti->Paint(loption);
          lnk = (TObjOptLink*)lnk->Next();
@@ -867,9 +934,9 @@ void THStack::Paint(Option_t *option)
       Int_t h1col, h1fill;
       for (Int_t i=0;i<nhists;i++) {
          if (strstr(lnk->GetOption(),"same")) {
-            snprintf(loption,31,"%s%s",noption,lnk->GetOption());
+            snprintf(loption,32,"%s%s",noption,lnk->GetOption());
          } else {
-            snprintf(loption,31,"%ssame%s",noption,lnk->GetOption());
+            snprintf(loption,36,"%ssame%s",noption,lnk->GetOption());
          }
          h1 = (TH1*)fStack->At(nhists-i-1);
          if (i>0 && lclear) {
@@ -893,7 +960,10 @@ void THStack::Paint(Option_t *option)
          lnk = (TObjOptLink*)lnk->Prev();
       }
    }
-   if (!lsame) fHistogram->Paint("axissame");
+
+   opt.ReplaceAll("nostack","");
+   opt.ReplaceAll("candle","");
+   if (!lsame && !opt.Contains("a")) fHistogram->Paint("axissame");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -958,8 +1028,12 @@ void THStack::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    TH1 *h;
    if (fHists) {
       TObjOptLink *lnk = (TObjOptLink*)fHists->FirstLink();
+      Int_t hcount = 0;
       while (lnk) {
          h = (TH1*)lnk->GetObject();
+         TString hname = h->GetName();
+         hname += Form("_stack_%d",++hcount);
+         h->SetName(hname);
          h->SavePrimitive(out,"nodraw");
          out<<"   "<<GetName()<<"->Add("<<h->GetName()<<","<<quote<<lnk->GetOption()<<quote<<");"<<std::endl;
          lnk = (TObjOptLink*)lnk->Next();
@@ -985,4 +1059,12 @@ void THStack::SetMinimum(Double_t minimum)
 {
    fMinimum = minimum;
    if (fHistogram) fHistogram->SetMinimum(minimum);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Get iterator over internal hists list.
+TIter THStack::begin() const
+{
+  return TIter(fHists);
 }

@@ -36,12 +36,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
 
 namespace TMVA {
 
@@ -52,12 +48,10 @@ namespace TMVA {
       MethodBayesClassifier( const TString& jobName, 
                              const TString& methodTitle, 
                              DataSetInfo& theData,
-                             const TString& theOption = "",
-                             TDirectory* theTargetDir = 0 );
+                             const TString& theOption = "");
       
       MethodBayesClassifier( DataSetInfo& theData, 
-                             const TString& theWeightFile,  
-                             TDirectory* theTargetDir = NULL );
+                             const TString& theWeightFile);
       
       virtual ~MethodBayesClassifier( void );
     
@@ -97,7 +91,7 @@ namespace TMVA {
       void DeclareOptions();
       void ProcessOptions();
 
-      ClassDef(MethodBayesClassifier,0)  // Friedman's BayesClassifier method 
+      ClassDef(MethodBayesClassifier,0);  // Friedman's BayesClassifier method 
    };
 
 } // namespace TMVA

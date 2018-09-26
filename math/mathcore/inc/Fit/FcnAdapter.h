@@ -1,4 +1,4 @@
-// @(#)root/minuit2:$Id$
+// @(#)root/mathcore:$Id$
 // Author: L. Moneta    10/2005
 
 /**********************************************************************
@@ -10,9 +10,7 @@
 #ifndef ROOT_Fit_FcnAdapter_H_
 #define ROOT_Fit_FcnAdapter_H_
 
-#ifndef ROOT_Math_IFunction
 #include "Math/IFunction.h"
-#endif
 
 
 //___________________________________________________________

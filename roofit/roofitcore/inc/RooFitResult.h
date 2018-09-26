@@ -16,7 +16,6 @@
 #ifndef ROO_FIT_RESULT
 #define ROO_FIT_RESULT
 
-#include "Riosfwd.h"
 #include "RooAbsArg.h"
 #include "RooPrintable.h"
 #include "RooDirItem.h"
@@ -53,6 +52,8 @@ public:
   virtual ~RooFitResult() ;
 
   static RooFitResult* lastMinuitFit(const RooArgList& varList=RooArgList()) ;
+
+  static RooFitResult *prefitResult(const RooArgList &paramList);
 
   // Printing interface (human readable)
   virtual void printValue(std::ostream& os) const ;
@@ -171,6 +172,7 @@ protected:
   void fillCorrMatrix() ;
   void fillCorrMatrix(const std::vector<double>& globalCC, const TMatrixDSym& corrs, const TMatrixDSym& covs) ;
   void fillLegacyCorrMatrix() const ;
+  void fillPrefitCorrMatrix();
   void setStatusHistory(std::vector<std::pair<std::string,int> >& hist) { _statusHistory = hist ; }
 
   Double_t correlation(Int_t row, Int_t col) const;

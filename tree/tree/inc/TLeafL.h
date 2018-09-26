@@ -22,17 +22,15 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TLeaf
 #include "TLeaf.h"
-#endif
 
 class TLeafL : public TLeaf {
 
 protected:
-   Long64_t     fMinimum;         //Minimum value if leaf range is specified
-   Long64_t     fMaximum;         //Maximum value if leaf range is specified
-   Long64_t    *fValue;           //!Pointer to data buffer
-   Long64_t   **fPointer;         //!Address of pointer to data buffer
+   Long64_t     fMinimum;         ///<  Minimum value if leaf range is specified
+   Long64_t     fMaximum;         ///<  Maximum value if leaf range is specified
+   Long64_t    *fValue;           ///<! Pointer to data buffer
+   Long64_t   **fPointer;         ///<! Address of pointer to data buffer
 
 public:
    TLeafL();
@@ -48,6 +46,7 @@ public:
    virtual Long64_t     GetValueLong64(Int_t i = 0) const ;
    virtual LongDouble_t GetValueLongDouble(Int_t i = 0) const;
    virtual void   *GetValuePointer() const {return fValue;}
+   virtual Bool_t  IncludeRange(TLeaf *);
    virtual void    Import(TClonesArray *list, Int_t n);
    virtual void    PrintValue(Int_t i=0) const;
    virtual void    ReadBasket(TBuffer &b);

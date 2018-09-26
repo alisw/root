@@ -27,7 +27,7 @@ namespace cling {
     /// 0 -> Disabled; 1 -> Enabled; 2 -> Auto;
     ///
     unsigned ValuePrinting : 2;
-    enum ValuePrinting { VPDisabled, VPEnabled, VPAuto };
+    enum ValuePrint { VPDisabled, VPEnabled, VPAuto };
 
     ///\brief Whether or not to return result from an execution.
     ///
@@ -58,6 +58,19 @@ namespace cling {
     /// is wrapped.
     unsigned IgnorePromptDiags : 1;
 
+    ///\brief Pointer validity check can be enabled/disabled.
+    ///
+    unsigned CheckPointerValidity : 1;
+
+    ///\brief Optimization level.
+    unsigned OptLevel : 2;
+
+    ///\brief Offset into the input line to enable the setting of the
+    /// code completion point.
+    /// -1 diasables code completion.
+    ///
+    int CodeCompletionOffset = -1;
+
     CompilationOptions() {
       DeclarationExtraction = 0;
       ValuePrinting = VPDisabled;
@@ -67,6 +80,8 @@ namespace cling {
       CodeGeneration = 1;
       CodeGenerationForModule = 0;
       IgnorePromptDiags = 0;
+      OptLevel = 2;
+      CheckPointerValidity = 1;
     }
 
     bool operator==(CompilationOptions Other) const {
@@ -78,7 +93,10 @@ namespace cling {
         Debug                 == Other.Debug &&
         CodeGeneration        == Other.CodeGeneration &&
         CodeGenerationForModule == Other.CodeGenerationForModule &&
-        IgnorePromptDiags     == Other.IgnorePromptDiags;
+        IgnorePromptDiags     == Other.IgnorePromptDiags &&
+        CheckPointerValidity  == Other.CheckPointerValidity &&
+        OptLevel              == Other.OptLevel &&
+        CodeCompletionOffset  == Other.CodeCompletionOffset;
     }
 
     bool operator!=(CompilationOptions Other) const {
@@ -90,7 +108,10 @@ namespace cling {
         Debug                 != Other.Debug ||
         CodeGeneration        != Other.CodeGeneration ||
         CodeGenerationForModule != Other.CodeGenerationForModule ||
-        IgnorePromptDiags     != Other.IgnorePromptDiags;
+        IgnorePromptDiags     != Other.IgnorePromptDiags ||
+        CheckPointerValidity  != Other.CheckPointerValidity ||
+        OptLevel              != Other.OptLevel ||
+        CodeCompletionOffset  != Other.CodeCompletionOffset;
     }
   };
 } // end namespace cling

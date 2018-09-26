@@ -22,12 +22,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TBuffer
-#include "TBuffer.h"
-#endif
-#ifndef ROOT_Bytes
+#include "TBufferIO.h"
 #include "Bytes.h"
-#endif
 
 #include <vector>
 
@@ -42,69 +38,40 @@ class TVirtualStreamerInfo;
 class TStreamerInfo;
 class TStreamerElement;
 class TClass;
-class TExMap;
 class TVirtualArray;
 namespace TStreamerInfoActions {
    class TActionSequence;
 }
 
-class TBufferFile : public TBuffer {
+class TBufferFile : public TBufferIO {
 
 protected:
    typedef std::vector<TStreamerInfo*> InfoList_t;
 
-   Int_t           fMapCount;      ///< Number of objects or classes in map
-   Int_t           fMapSize;       ///< Default size of map
-   Int_t           fDisplacement;  ///< Value to be added to the map offsets
-   UShort_t        fPidOffset;     ///< Offset to be added to the pid index in this key/buffer.
-   TExMap         *fMap;           ///< Map containing object,offset pairs for reading/writing
-   TExMap         *fClassMap;      ///< Map containing object,class pairs for reading
-   TStreamerInfo  *fInfo;          ///< Pointer to TStreamerInfo object writing/reading the buffer
+   TStreamerInfo  *fInfo{nullptr};  ///< Pointer to TStreamerInfo object writing/reading the buffer
    InfoList_t      fInfoStack;     ///< Stack of pointers to the TStreamerInfos
 
-   static Int_t    fgMapSize;      ///< Default map size for all TBuffer objects
-
    // Default ctor
-   TBufferFile() : TBuffer(), fMapCount(0), fMapSize(0),
-               fDisplacement(0),fPidOffset(0), fMap(0), fClassMap(0),
-     fInfo(0), fInfoStack() {}
+   TBufferFile() = default;
 
    // TBuffer objects cannot be copied or assigned
    TBufferFile(const TBufferFile &);       ///<  not implemented
    void operator=(const TBufferFile &);    ///<  not implemented
 
    Int_t  CheckByteCount(UInt_t startpos, UInt_t bcnt, const TClass *clss, const char* classname);
-   void   CheckCount(UInt_t offset);
+   virtual void  CheckCount(UInt_t offset);
    UInt_t CheckObject(UInt_t offset, const TClass *cl, Bool_t readClass = kFALSE);
 
-   virtual  void  WriteObjectClass(const void *actualObjStart, const TClass *actualClass);
+   virtual  void  WriteObjectClass(const void *actualObjStart, const TClass *actualClass, Bool_t cacheReuse);
 
 public:
-   enum { kMapSize = 503 };
    enum { kStreamedMemberWise = BIT(14) }; //added to version number to know if a collection has been stored member-wise
-   enum { kNotDecompressed = BIT(15) };    //indicates a weird buffer, used by TBasket
-   enum { kTextBasedStreaming = BIT(18) }; //indicates if buffer used for XML/SQL object streaming
-   enum { kUser1 = BIT(21), kUser2 = BIT(22), kUser3 = BIT(23)}; //free for user
 
    TBufferFile(TBuffer::EMode mode);
    TBufferFile(TBuffer::EMode mode, Int_t bufsiz);
    TBufferFile(TBuffer::EMode mode, Int_t bufsiz, void *buf, Bool_t adopt = kTRUE, ReAllocCharFun_t reallocfunc = 0);
    virtual ~TBufferFile();
 
-   Int_t    GetMapCount() const { return fMapCount; }
-   void     GetMappedObject(UInt_t tag, void* &ptr, TClass* &ClassPtr) const;
-   void     MapObject(const TObject *obj, UInt_t offset = 1);
-   void     MapObject(const void *obj, const TClass *cl, UInt_t offset = 1);
-   void     Reset() { SetBufferOffset(); ResetMap(); }
-   void     InitMap();
-   void     ResetMap();
-   void     SetReadParam(Int_t mapsize);
-   void     SetWriteParam(Int_t mapsize);
-
-   Bool_t   CheckObject(const TObject *obj);
-   Bool_t   CheckObject(const void *obj, const TClass *ptrClass);
-
-   virtual Int_t      GetVersionOwner() const;
    virtual Int_t      CheckByteCount(UInt_t startpos, UInt_t bcnt, const TClass *clss);
    virtual Int_t      CheckByteCount(UInt_t startpos, UInt_t bcnt, const char *classname);
    virtual void       SetByteCount(UInt_t cntpos, Bool_t packInVersion = kFALSE);
@@ -119,7 +86,6 @@ public:
    virtual void      *ReadObjectAny(const TClass* cast);
    virtual void       SkipObjectAny();
 
-   virtual void       TagStreamerInfo(TVirtualStreamerInfo* info);
    virtual void       IncrementLevel(TVirtualStreamerInfo* info);
    virtual void       SetStreamerElementNumber(TStreamerElement*,Int_t) {}
    virtual void       DecrementLevel(TVirtualStreamerInfo*);
@@ -138,19 +104,8 @@ public:
    virtual void       WriteClass(const TClass *cl);
 
    virtual TObject   *ReadObject(const TClass *cl);
-   virtual void       WriteObject(const TObject *obj);
 
-   virtual Int_t      WriteObjectAny(const void *obj, const TClass *ptrClass);
-
-   UShort_t GetPidOffset() const {
-      // See comment in TBuffer::SetPidOffset
-      return fPidOffset;
-   }
-   void     SetPidOffset(UShort_t offset);
-   Int_t    GetBufferDisplacement() const { return fDisplacement; }
-   void     SetBufferDisplacement() { fDisplacement = 0; }
-   void     SetBufferDisplacement(Int_t skipped)
-            { fDisplacement =  (Int_t)(Length() - skipped); }
+   using TBufferIO::CheckObject;
 
    // basic types and arrays of basic types
    virtual   void     ReadFloat16 (Float_t *f, TStreamerElement *ele=0);
@@ -272,7 +227,9 @@ public:
    virtual   void     ReadDouble(Double_t   &d);
    virtual   void     ReadCharP(Char_t      *c);
    virtual   void     ReadTString(TString   &s);
-   virtual   void     ReadStdString(std::string &s);
+   virtual   void     ReadStdString(std::string *s);
+   using              TBuffer::ReadStdString;
+   virtual   void     ReadCharStar(char* &s);
 
    virtual   void     WriteBool(Bool_t       b);
    virtual   void     WriteChar(Char_t       c);
@@ -289,19 +246,9 @@ public:
    virtual   void     WriteDouble(Double_t   d);
    virtual   void     WriteCharP(const Char_t *c);
    virtual   void     WriteTString(const TString &s);
-   virtual   void     WriteStdString(const std::string &s);
-
-   // Special basic ROOT objects and collections
-   virtual   TProcessID *GetLastProcessID(TRefTable *reftable) const;
-   virtual   UInt_t      GetTRefExecId();
-   virtual   TProcessID *ReadProcessID(UShort_t pidf);
-   virtual   UShort_t    WriteProcessID(TProcessID *pid);
-
-   // Utilities for TStreamerInfo
-   virtual   void   ForceWriteInfo(TVirtualStreamerInfo *info, Bool_t force);
-   virtual   void   ForceWriteInfoClones(TClonesArray *a);
-   virtual   Int_t  ReadClones (TClonesArray *a, Int_t nobjects, Version_t objvers);
-   virtual   Int_t  WriteClones(TClonesArray *a, Int_t nobjects);
+   using              TBuffer::WriteStdString;
+   virtual   void     WriteStdString(const std::string *s);
+   virtual   void     WriteCharStar(char *s);
 
    // Utilities for TClass
    virtual   Int_t  ReadClassEmulated(const TClass *cl, void *object, const TClass *onfile_class);
@@ -313,11 +260,6 @@ public:
    Int_t ApplySequence(const TStreamerInfoActions::TActionSequence &sequence, void *object);
    Int_t ApplySequenceVecPtr(const TStreamerInfoActions::TActionSequence &sequence, void *start_collection, void *end_collection);
    Int_t ApplySequence(const TStreamerInfoActions::TActionSequence &sequence, void *start_collection, void *end_collection);
-
-   static void    SetGlobalReadParam(Int_t mapsize);
-   static void    SetGlobalWriteParam(Int_t mapsize);
-   static Int_t   GetGlobalReadParam();
-   static Int_t   GetGlobalWriteParam();
 
    ClassDef(TBufferFile,0)  //concrete implementation of TBuffer for writing/reading to/from a ROOT file or socket.
 };

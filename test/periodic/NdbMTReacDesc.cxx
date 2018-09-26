@@ -4,7 +4,7 @@
 
 #include "NdbMTReacDesc.h"
 
-ClassImp(NdbMTReacDesc)
+ClassImp(NdbMTReacDesc);
 
 /* ================ NdbMTReacDesc ================== */
 NdbMTReacDesc::NdbMTReacDesc(const char *filename)
@@ -95,7 +95,7 @@ NdbMTReacDesc::Init(const char *filename)
          if (str2[0] == '\n') break;
          strlcat(str,str2,512);
       }
-      if (str && str[0])
+      if (str[0])
          str[strlen(str)-1] = 0;
       comment[i] = strdup(str);
    }

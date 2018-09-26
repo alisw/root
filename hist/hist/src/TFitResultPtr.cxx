@@ -20,7 +20,7 @@ In addition it provides an automatic comversion to an integer. In this way it ca
 returned from the TH1::Fit method and the change in TH1::Fit be backward compatible.
  */
 
-ClassImp(TFitResultPtr)
+ClassImp(TFitResultPtr);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor from a TFitResult pointer
@@ -102,3 +102,11 @@ TFitResultPtr & TFitResultPtr::operator=(const TFitResultPtr& rhs)
    return *this;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Print the TFitResultPtr by printing its TFitResult.
+
+std::string cling::printValue(const TFitResultPtr* val) {
+   if (TFitResult* fr = val->Get())
+      return printValue(fr);
+   return "<nullptr TFitResult>";
+}

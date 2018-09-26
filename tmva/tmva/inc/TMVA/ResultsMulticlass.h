@@ -41,22 +41,12 @@
 
 #include <vector>
 
-#ifndef ROOT_TH1F
 #include "TH1F.h"
-#endif
-#ifndef ROOT_TH2F
 #include "TH2F.h"
-#endif
 
-#ifndef ROOT_TMVA_Results
 #include "TMVA/Results.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
-#ifndef ROOT_IFitterTarget
 #include "IFitterTarget.h"
-#endif
 
 namespace TMVA {
 
@@ -72,7 +62,8 @@ namespace TMVA {
       // setters
       void     SetValue( std::vector<Float_t>& value, Int_t ievt );
       void     Resize( Int_t entries )  { fMultiClassValues.resize( entries ); }
-      void     Clear()                  { fMultiClassValues.clear(); }
+      using TObject::Clear;
+      virtual void     Clear(Option_t *)  { fMultiClassValues.clear(); }
 
       // getters
       Long64_t GetSize() const        { return fMultiClassValues.size(); }
@@ -84,7 +75,11 @@ namespace TMVA {
       Float_t GetAchievablePur(UInt_t cls){return fAchievablePur.at(cls);}
       std::vector<Float_t>& GetAchievableEff(){return fAchievableEff;}
       std::vector<Float_t>& GetAchievablePur(){return fAchievablePur;}
+
+      TMatrixD GetConfusionMatrix(Double_t effB);
+
       // histogramming
+      void CreateMulticlassPerformanceHistos(TString prefix);
       void     CreateMulticlassHistos( TString prefix, Int_t nbins, Int_t nbins_high);
 
       Double_t EstimatorFunction( std::vector<Double_t> & );
@@ -92,13 +87,23 @@ namespace TMVA {
 
    private:
 
-      mutable std::vector<std::vector< Float_t> >  fMultiClassValues;        //! mva values (Results)
-      mutable MsgLogger* fLogger;                     //! message logger
+      mutable std::vector<std::vector< Float_t> >  fMultiClassValues;        // mva values (Results)
+      mutable MsgLogger* fLogger;                                            //! message logger
       MsgLogger& Log() const { return *fLogger; }
       UInt_t fClassToOptimize;
       std::vector<Float_t> fAchievableEff;
       std::vector<Float_t> fAchievablePur;
       std::vector<std::vector<Double_t> > fBestCuts;
+
+      // Temporary storage used during GetBestMultiClassCuts
+      std::vector<Float_t> fClassSumWeights;
+      std::vector<Float_t> fEventWeights;
+      std::vector<UInt_t>  fEventClasses;
+
+   protected:
+       
+       ClassDef(ResultsMulticlass,2);
+
    }; 
 
 }

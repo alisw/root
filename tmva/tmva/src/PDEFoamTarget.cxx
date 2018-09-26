@@ -26,18 +26,15 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_____________________________________________________________________
-//
-// PDEFoamTarget
-//
-// This PDEFoam variant stores in every cell the average target
-// fTarget (see the Constructor) as well as the statistical error on
-// the target fTarget.  It therefore acts as a target estimator.  It
-// should be booked together with the PDEFoamTargetDensity density
-// estimator, which returns the target fTarget density at a given
-// phase space point during the foam build-up.
-//
-//_____________________________________________________________________
+/*! \class TMVA::PDEFoamTarget
+\ingroup TMVA
+This PDEFoam variant stores in every cell the average target
+fTarget (see the Constructor) as well as the statistical error on
+the target fTarget.  It therefore acts as a target estimator.  It
+should be booked together with the PDEFoamTargetDensity density
+estimator, which returns the target fTarget density at a given
+phase space point during the foam build-up.
+*/
 
 #include "TMVA/PDEFoamTarget.h"
 
@@ -48,19 +45,17 @@
 #include "TMVA/PDEFoamKernelBase.h"
 #include "TMVA/Types.h"
 
-#ifndef ROOT_TMath
 #include "TMath.h"
-#endif
 
 #include "Rtypes.h"
 
-ClassImp(TMVA::PDEFoamTarget)
+ClassImp(TMVA::PDEFoamTarget);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for streamer, user should not use it.
 
 TMVA::PDEFoamTarget::PDEFoamTarget()
-   : PDEFoam()
+: PDEFoam()
    , fTarget(0)
 {
 }
@@ -184,7 +179,7 @@ Float_t TMVA::PDEFoamTarget::GetAverageNeighborsValue(std::vector<Float_t> &txve
    Float_t norm   = 0; // normalisation
    Float_t result = 0; // return value
 
-   PDEFoamCell *cell = FindCell(txvec); // find cooresponding cell
+   PDEFoamCell *cell = FindCell(txvec); // find corresponding cell
    PDEFoamVect cellSize(GetTotDim());
    PDEFoamVect cellPosi(GetTotDim());
    cell->GetHcub(cellPosi, cellSize); // get cell coordinates

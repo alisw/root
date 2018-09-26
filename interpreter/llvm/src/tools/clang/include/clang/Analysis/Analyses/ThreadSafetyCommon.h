@@ -286,6 +286,16 @@ public:
             sx::partiallyMatches(CapExpr, other.CapExpr);
   }
 
+  const ValueDecl* valueDecl() const {
+    if (Negated || CapExpr == nullptr)
+      return nullptr;
+    if (auto *P = dyn_cast<til::Project>(CapExpr))
+      return P->clangDecl();
+    if (auto *P = dyn_cast<til::LiteralPtr>(CapExpr))
+      return P->clangDecl();
+    return nullptr;
+  }
+
   std::string toString() const {
     if (Negated)
       return "!" + sx::toString(CapExpr);
@@ -405,25 +415,8 @@ private:
     BlockInfo()
         : HasBackEdges(false), UnprocessedSuccessors(0),
           ProcessedPredecessors(0) {}
-    BlockInfo(BlockInfo &&RHS)
-        : ExitMap(std::move(RHS.ExitMap)),
-          HasBackEdges(RHS.HasBackEdges),
-          UnprocessedSuccessors(RHS.UnprocessedSuccessors),
-          ProcessedPredecessors(RHS.ProcessedPredecessors) {}
-
-    BlockInfo &operator=(BlockInfo &&RHS) {
-      if (this != &RHS) {
-        ExitMap = std::move(RHS.ExitMap);
-        HasBackEdges = RHS.HasBackEdges;
-        UnprocessedSuccessors = RHS.UnprocessedSuccessors;
-        ProcessedPredecessors = RHS.ProcessedPredecessors;
-      }
-      return *this;
-    }
-
-  private:
-    BlockInfo(const BlockInfo &) LLVM_DELETED_FUNCTION;
-    void operator=(const BlockInfo &) LLVM_DELETED_FUNCTION;
+    BlockInfo(BlockInfo &&) = default;
+    BlockInfo &operator=(BlockInfo &&) = default;
   };
 
   // We implement the CFGVisitor API

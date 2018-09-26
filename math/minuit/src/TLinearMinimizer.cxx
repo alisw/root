@@ -65,7 +65,7 @@ struct BasisFunction {
 //__________________________________________________________________________________________
 
 
-ClassImp(TLinearMinimizer)
+ClassImp(TLinearMinimizer);
 
 
 TLinearMinimizer::TLinearMinimizer(int ) :
@@ -145,7 +145,8 @@ void TLinearMinimizer::SetFunction(const  ROOT::Math::IMultiGradFunction & objfu
    fDim = chi2func->NDim(); // number of parameters
    fNFree = fDim;
    // get the basis functions (derivatives of the modelfunc)
-   TObjArray flist;
+   TObjArray flist(fDim);
+   flist.SetOwner(kFALSE);  // we do not want to own the list - it will be owned by the TLinearFitter class
    for (unsigned int i = 0; i < fDim; ++i) {
       // t.b.f: should not create TF1 classes
       // when creating TF1 (if onother function with same name exists it is
@@ -155,12 +156,8 @@ void TLinearMinimizer::SetFunction(const  ROOT::Math::IMultiGradFunction & objfu
       TUUID u;
       std::string fname = "_LinearMinimimizer_BasisFunction_" +
          std::string(u.AsString() );
-      TF1 * f = new TF1(fname.c_str(),ROOT::Math::ParamFunctor(bf));
+      TF1 * f = new TF1(fname.c_str(),ROOT::Math::ParamFunctor(bf),0,1,0,1,TF1::EAddToList::kNo);
       flist.Add(f);
-      // remove this functions from gROOT
-      R__LOCKGUARD2(gROOTMutex);
-      gROOT->GetListOfFunctions()->Remove(f);
-
    }
 
    // create TLinearFitter (do it now because olny now now the coordinate dimensions)

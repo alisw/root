@@ -26,7 +26,7 @@ hooks for tracking, such as media, materials, magnetic field or track state flag
 in order to allow interfacing to tracking MC's. The final goal is to be
 able to use the same geometry for several purposes, such as tracking,
 reconstruction or visualization, taking advantage of the ROOT features
-related to bookkeeping, I/O, histograming, browsing and GUI's.
+related to bookkeeping, I/O, histogramming, browsing and GUI's.
 
   The geometrical modeler is the most important component of the package and
 it provides answers to the basic questions like "Where am I ?" or "How far
@@ -115,7 +115,7 @@ loaded on demand in order to control visualization actions.
   A given geometry can be built in various ways, but there are mandatory steps
 that have to be followed in order to be validated by the modeler. There are
 general rules : volumes needs media and shapes in order to be created,
-both container an containee volumes must be created before linking them together,
+both container and containee volumes must be created before linking them together,
 and the relative transformation matrix must be provided. All branches must
 have an upper link point otherwise they will not be considered as part of the
 geometry. Visibility or tracking properties of volumes can be provided both
@@ -248,8 +248,8 @@ in order to enhance rays.
 #include "TKey.h"
 #include "THashList.h"
 #include "TClass.h"
-#include "TThread.h"
 #include "ThreadLocalStorage.h"
+#include "TBufferText.h"
 
 #include "TGeoVoxelFinder.h"
 #include "TGeoElement.h"
@@ -282,13 +282,15 @@ in order to enhance rays.
 #include "TMath.h"
 #include "TEnv.h"
 #include "TGeoParallelWorld.h"
+#include "TGeoRegion.h"
 
 // statics and globals
 
 TGeoManager *gGeoManager = 0;
 
-ClassImp(TGeoManager)
+ClassImp(TGeoManager);
 
+std::mutex TGeoManager::fgMutex;
 Bool_t TGeoManager::fgLock         = kFALSE;
 Bool_t TGeoManager::fgLockNavigators = kFALSE;
 Int_t  TGeoManager::fgVerboseLevel = 1;
@@ -296,6 +298,7 @@ Int_t  TGeoManager::fgMaxLevel = 1;
 Int_t  TGeoManager::fgMaxDaughters = 1;
 Int_t  TGeoManager::fgMaxXtruVert = 1;
 Int_t  TGeoManager::fgNumThreads   = 0;
+UInt_t TGeoManager::fgExportPrecision = 17;
 TGeoManager::ThreadsMap_t *TGeoManager::fgThreadId = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -325,6 +328,7 @@ TGeoManager::TGeoManager()
       fMatrices = 0;
       fNodes = 0;
       fOverlaps = 0;
+      fRegions = 0;
       fNNodes = 0;
       fMaxVisNodes = 10000;
       fVolumes = 0;
@@ -368,6 +372,7 @@ TGeoManager::TGeoManager()
       fKeyPNEId = 0;
       fValuePNEId = 0;
       fMultiThread = kFALSE;
+      fRaytraceMode = 0;
       fMaxThreads = 0;
       fUsePWNav = kFALSE;
       fParallelWorld = 0;
@@ -426,6 +431,7 @@ void TGeoManager::Init()
    fMatrices = new TObjArray(256);
    fNodes = new TObjArray(30);
    fOverlaps = new TObjArray(256);
+   fRegions = new TObjArray(256);
    fNNodes = 0;
    fMaxVisNodes = 10000;
    fVolumes = new TObjArray(256);
@@ -469,6 +475,7 @@ void TGeoManager::Init()
    fKeyPNEId = 0;
    fValuePNEId = 0;
    fMultiThread = kFALSE;
+   fRaytraceMode = 0;
    fMaxThreads = 0;
    fUsePWNav = kFALSE;
    fParallelWorld = 0;
@@ -520,6 +527,7 @@ TGeoManager::TGeoManager(const TGeoManager& gm) :
   fMedia(gm.fMedia),
   fNodes(gm.fNodes),
   fOverlaps(gm.fOverlaps),
+  fRegions(gm.fRegions),
   fBits(gm.fBits),
   fCurrentNavigator(gm.fCurrentNavigator),
   fCurrentVolume(gm.fCurrentVolume),
@@ -544,6 +552,7 @@ TGeoManager::TGeoManager(const TGeoManager& gm) :
   fValuePNEId(0),
   fMaxThreads(0),
   fMultiThread(kFALSE),
+  fRaytraceMode(0),
   fUsePWNav(kFALSE),
   fParallelWorld(0)
 {
@@ -603,6 +612,7 @@ TGeoManager& TGeoManager::operator=(const TGeoManager& gm)
       fMedia=gm.fMedia;
       fNodes=gm.fNodes;
       fOverlaps=gm.fOverlaps;
+      fRegions=gm.fRegions;
       fBits=gm.fBits;
       fCurrentNavigator=gm.fCurrentNavigator;
       fCurrentVolume = gm.fCurrentVolume;
@@ -626,6 +636,7 @@ TGeoManager& TGeoManager::operator=(const TGeoManager& gm)
       fKeyPNEId = 0;
       fValuePNEId = 0;
       fMultiThread = kFALSE;
+      fRaytraceMode = 0;
       fMaxThreads = 0;
       fUsePWNav = kFALSE;
       fParallelWorld = 0;
@@ -658,6 +669,7 @@ TGeoManager::~TGeoManager()
    SafeDelete(fNodes);
    SafeDelete(fTopNode);
    if (fOverlaps) {fOverlaps->Delete(); SafeDelete(fOverlaps);}
+   if (fRegions) {fRegions->Delete(); SafeDelete(fRegions);}
    if (fMaterials) {fMaterials->Delete(); SafeDelete(fMaterials);}
    SafeDelete(fElementTable);
    if (fMedia) {fMedia->Delete(); SafeDelete(fMedia);}
@@ -702,6 +714,15 @@ Int_t TGeoManager::AddOverlap(const TNamed *ovlp)
    Int_t size = fOverlaps->GetEntriesFast();
    fOverlaps->Add((TObject*)ovlp);
    return size;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Add a new region of volumes.
+Int_t TGeoManager::AddRegion(TGeoRegion *region)
+{
+  Int_t size = fRegions->GetEntriesFast();
+  fRegions->Add(region);
+  return size;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -802,12 +823,8 @@ Int_t TGeoManager::AddVolume(TGeoVolume *volume)
 
 TGeoNavigator *TGeoManager::AddNavigator()
 {
-   if (fMultiThread) TThread::Lock();
-//   if (fgLockNavigators) {
-//      Error("AddNavigator", "Navigators are locked. Use SetNavigatorsLock(false) first.");
-//      return 0;
-//   }
-   Long_t threadId = fMultiThread ? TThread::SelfId() : 0;
+   if (fMultiThread) { TGeoManager::ThreadId(); fgMutex.lock(); }
+   std::thread::id threadId = std::this_thread::get_id();
    NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
    TGeoNavigatorArray *array = 0;
    if (it != fNavigators.end()) array = it->second;
@@ -817,7 +834,7 @@ TGeoNavigator *TGeoManager::AddNavigator()
    }
    TGeoNavigator *nav = array->AddNavigator();
    if (fClosed) nav->GetCache()->BuildInfoBranch();
-   if (fMultiThread) TThread::UnLock();
+   if (fMultiThread) fgMutex.unlock();
    return nav;
 }
 
@@ -830,7 +847,7 @@ TGeoNavigator *TGeoManager::GetCurrentNavigator() const
    if (!fMultiThread) return fCurrentNavigator;
    TGeoNavigator *nav = tnav; // TTHREAD_TLS_GET(TGeoNavigator*,tnav);
    if (nav) return nav;
-   Long_t threadId = TThread::SelfId();
+   std::thread::id threadId = std::this_thread::get_id();
    NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
    if (it == fNavigators.end()) return 0;
    TGeoNavigatorArray *array = it->second;
@@ -844,7 +861,7 @@ TGeoNavigator *TGeoManager::GetCurrentNavigator() const
 
 TGeoNavigatorArray *TGeoManager::GetListOfNavigators() const
 {
-   Long_t threadId = fMultiThread ? TThread::SelfId() : 0;
+   std::thread::id threadId = std::this_thread::get_id();
    NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
    if (it == fNavigators.end()) return 0;
    TGeoNavigatorArray *array = it->second;
@@ -856,16 +873,18 @@ TGeoNavigatorArray *TGeoManager::GetListOfNavigators() const
 
 Bool_t TGeoManager::SetCurrentNavigator(Int_t index)
 {
-   Long_t threadId = fMultiThread ? TThread::SelfId() : 0;
+   std::thread::id threadId = std::this_thread::get_id();
    NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
    if (it == fNavigators.end()) {
-      Error("SetCurrentNavigator", "No navigator defined for thread %ld\n", threadId);
+      Error("SetCurrentNavigator", "No navigator defined for this thread\n");
+      std::cout << "  thread id: " << threadId << std::endl;
       return kFALSE;
    }
    TGeoNavigatorArray *array = it->second;
    TGeoNavigator *nav = array->SetCurrentNavigator(index);
    if (!nav) {
-      Error("SetCurrentNavigator", "Navigator %d not existing for thread %ld\n", index, threadId);
+      Error("SetCurrentNavigator", "Navigator %d not existing for this thread\n", index);
+      std::cout << "  thread id: " << threadId << std::endl;
       return kFALSE;
    }
    if (!fMultiThread) fCurrentNavigator = nav;
@@ -885,15 +904,15 @@ void TGeoManager::SetNavigatorsLock(Bool_t flag)
 
 void TGeoManager::ClearNavigators()
 {
-   if (fMultiThread) TThread::Lock();
+   if (fMultiThread) fgMutex.lock();
    TGeoNavigatorArray *arr = 0;
    for (NavigatorsMap_t::iterator it = fNavigators.begin();
-        it != fNavigators.end(); it++) {
+        it != fNavigators.end(); ++it) {
       arr = (*it).second;
       if (arr) delete arr;
    }
    fNavigators.clear();
-   if (fMultiThread) TThread::UnLock();
+   if (fMultiThread) fgMutex.unlock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -901,21 +920,20 @@ void TGeoManager::ClearNavigators()
 
 void TGeoManager::RemoveNavigator(const TGeoNavigator *nav)
 {
-   if (fMultiThread) TThread::Lock();
-   for (NavigatorsMap_t::iterator it = fNavigators.begin();
-        it != fNavigators.end(); it++) {
+   if (fMultiThread) fgMutex.lock();
+   for (NavigatorsMap_t::iterator it = fNavigators.begin(); it != fNavigators.end(); ++it) {
       TGeoNavigatorArray *arr = (*it).second;
       if (arr) {
          if ((TGeoNavigator*)arr->Remove((TObject*)nav)) {
             delete nav;
             if (!arr->GetEntries()) fNavigators.erase(it);
-            if (fMultiThread) TThread::UnLock();
+            if (fMultiThread) fgMutex.unlock();
             return;
          }
       }
    }
    Error("Remove navigator", "Navigator %p not found", nav);
-   if (fMultiThread) TThread::UnLock();
+   if (fMultiThread) fgMutex.unlock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -929,8 +947,8 @@ void TGeoManager::SetMaxThreads(Int_t nthreads)
    }
    if (!fMultiThread) {
       ROOT::EnableThreadSafety();
-      Long_t threadId =TThread::SelfId();
-      NavigatorsMap_t::const_iterator it = fNavigators.find(0);
+      std::thread::id threadId = std::this_thread::get_id();
+      NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
       if (it != fNavigators.end()) {
          TGeoNavigatorArray *array = it->second;
          fNavigators.erase(it);
@@ -953,11 +971,11 @@ void TGeoManager::SetMaxThreads(Int_t nthreads)
 void TGeoManager::ClearThreadData() const
 {
    if (!fMaxThreads) return;
-   TThread::Lock();
+   fgMutex.lock();
    TIter next(fVolumes);
    TGeoVolume *vol;
    while ((vol=(TGeoVolume*)next())) vol->ClearThreadData();
-   TThread::UnLock();
+   fgMutex.unlock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -966,11 +984,11 @@ void TGeoManager::ClearThreadData() const
 void TGeoManager::CreateThreadData() const
 {
    if (!fMaxThreads) return;
-   TThread::Lock();
+   fgMutex.lock();
    TIter next(fVolumes);
    TGeoVolume *vol;
    while ((vol=(TGeoVolume*)next())) vol->CreateThreadData(fMaxThreads);
-   TThread::UnLock();
+   fgMutex.unlock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -980,10 +998,10 @@ void TGeoManager::CreateThreadData() const
 void TGeoManager::ClearThreadsMap()
 {
    if (gGeoManager && !gGeoManager->IsMultiThread()) return;
-   TThread::Lock();
+   fgMutex.lock();
    if (!fgThreadId->empty()) fgThreadId->clear();
    fgNumThreads = 0;
-   TThread::UnLock();
+   fgMutex.unlock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -996,14 +1014,15 @@ Int_t TGeoManager::ThreadId()
    Int_t ttid = tid; // TTHREAD_TLS_GET(Int_t,tid);
    if (ttid > -1) return ttid;
    if (gGeoManager && !gGeoManager->IsMultiThread()) return 0;
-   TGeoManager::ThreadsMapIt_t it = fgThreadId->find(TThread::SelfId());
+   std::thread::id threadId = std::this_thread::get_id();
+   TGeoManager::ThreadsMapIt_t it = fgThreadId->find(threadId);
    if (it != fgThreadId->end()) return it->second;
    // Map needs to be updated.
-   TThread::Lock();
-   (*fgThreadId)[TThread::SelfId()] = fgNumThreads;
+   fgMutex.lock();
+   (*fgThreadId)[threadId] = fgNumThreads;
    tid = fgNumThreads; // TTHREAD_TLS_SET(Int_t,tid,fgNumThreads);
    ttid = fgNumThreads++;
-   TThread::UnLock();
+   fgMutex.unlock();
    return ttid;
 }
 
@@ -1483,9 +1502,6 @@ void TGeoManager::CloseGeometry(Option_t *option)
       // Create a geometry navigator if not present
       if (!GetCurrentNavigator()) fCurrentNavigator = AddNavigator();
       nnavigators = GetListOfNavigators()->GetEntriesFast();
-      TIter next(fShapes);
-      TGeoShape *shape;
-      while ((shape = (TGeoShape*)next())) shape->AfterStreamer();
       Voxelize("ALL");
       CountLevels();
       for (Int_t i=0; i<nnavigators; i++) {
@@ -2868,6 +2884,15 @@ void TGeoManager::ResetUserData()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Change raytracing mode.
+
+void TGeoManager::SetRTmode(Int_t mode)
+{
+   fRaytraceMode = mode;
+   if (fPainter && fPainter->IsRaytracing()) ModifiedPad();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Restore the master volume of the geometry.
 
 void TGeoManager::RestoreMasterVolume()
@@ -3512,7 +3537,7 @@ void TGeoManager::CheckPoint(Double_t x, Double_t y, Double_t z, Option_t *optio
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Test for shape navigation methods. Summary for test numbers:
-///  1: DistFromInside/Outside. Sample points inside the shape. Generate
+///  - 1: DistFromInside/Outside. Sample points inside the shape. Generate
 ///    directions randomly in cos(theta). Compute DistFromInside and move the
 ///    point with bigger distance. Compute DistFromOutside back from new point.
 ///    Plot d-(d1+d2)
@@ -3532,14 +3557,14 @@ void TGeoManager::CheckShape(TGeoShape *shape, Int_t testNo, Int_t nsamples, Opt
 ///  checked by user to get report, then TGeoVolume::CheckOverlaps(0.01, "s") can
 ///  be called for the suspicious volumes.
 ///
-/// STAGE2 : normal overlap checking using the shapes mesh - fills the list of
+/// STAGE 2: normal overlap checking using the shapes mesh - fills the list of
 ///  overlaps.
 ///
-/// STAGE3 : shooting NRAYS rays from VERTEX and counting the total number of
+/// STAGE 3: shooting NRAYS rays from VERTEX and counting the total number of
 ///  crossings per volume (rays propagated from boundary to boundary until
 ///  geometry exit). Timing computed and results stored in a histo.
 ///
-/// STAGE4 : shooting 1 mil. random rays inside EACH volume and calling
+/// STAGE 4: shooting 1 mil. random rays inside EACH volume and calling
 ///  FindNextBoundary() + Safety() for each call. The timing is normalized by the
 ///  number of crossings computed at stage 2 and presented as percentage.
 ///  One can get a picture on which are the most "burned" volumes during
@@ -3735,7 +3760,20 @@ Int_t TGeoManager::Export(const char *filename, const char *name, Option_t *opti
          fStreamVoxels = kFALSE;
          if (fgVerboseLevel>0) Info("Export","Exporting %s %s as root file. Optimizations not streamed.", GetName(), GetTitle());
       }
+
+      const char *precision_dbl = TBufferText::GetDoubleFormat();
+      const char *precision_flt = TBufferText::GetFloatFormat();
+      TString new_format_dbl = TString::Format("%%.%dg", TGeoManager::GetExportPrecision());
+      if (sfile.Contains(".xml")) {
+        TBufferText::SetDoubleFormat(new_format_dbl.Data());
+        TBufferText::SetFloatFormat(new_format_dbl.Data());
+      }
       Int_t nbytes = Write(keyname);
+      if (sfile.Contains(".xml")) {
+        TBufferText::SetFloatFormat(precision_dbl);
+        TBufferText::SetDoubleFormat(precision_flt);
+      }
+
       fStreamVoxels = kFALSE;
       delete f;
       return nbytes;

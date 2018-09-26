@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TLeafF
+\ingroup tree
+
 A TLeaf for a 32 bit floating point data type.
 */
 
@@ -19,7 +21,7 @@ A TLeaf for a 32 bit floating point data type.
 #include "TClonesArray.h"
 #include "Riostream.h"
 
-ClassImp(TLeafF)
+ClassImp(TLeafF);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for LeafF.

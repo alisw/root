@@ -27,32 +27,40 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_______________________________________________________________________
-//
-// Node for the Decision Tree
-//
-// The node specifies ONE variable out of the given set of selection variable
-// that is used to split the sample which "arrives" at the node, into a left
-// (background-enhanced) and a right (signal-enhanced) sample.
-//_______________________________________________________________________
+/*! \class TMVA::
+\ingroup TMVA
+
+Node for the Decision Tree.
+
+The node specifies ONE variable out of the given set of selection variable
+that is used to split the sample which "arrives" at the node, into a left
+(background-enhanced) and a right (signal-enhanced) sample.
+
+*/
+
+#include "TMVA/DecisionTreeNode.h"
+
+#include "TMVA/Types.h"
+#include "TMVA/MsgLogger.h"
+#include "TMVA/Tools.h"
+#include "TMVA/Event.h"
+
+#include "ThreadLocalStorage.h"
+#include "TString.h"
 
 #include <algorithm>
 #include <exception>
 #include <iomanip>
 #include <limits>
-
-#include "TMVA/Types.h"
-#include "TMVA/MsgLogger.h"
-#include "TMVA/DecisionTreeNode.h"
-#include "TMVA/Tools.h"
-#include "TMVA/Event.h"
+#include <sstream>
 
 using std::string;
 
-ClassImp(TMVA::DecisionTreeNode)
+ClassImp(TMVA::DecisionTreeNode);
 
 bool     TMVA::DecisionTreeNode::fgIsTraining = false;
 UInt_t   TMVA::DecisionTreeNode::fgTmva_Version_Code = 0;
+
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor of an essentially "empty" node floating in space
 
@@ -141,9 +149,8 @@ TMVA::DecisionTreeNode::~DecisionTreeNode(){
    delete fTrainInfo;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
-/// test event if it decends the tree at this node to the right
+/// test event if it descends the tree at this node to the right
 
 Bool_t TMVA::DecisionTreeNode::GoesRight(const TMVA::Event & e) const
 {
@@ -151,13 +158,13 @@ Bool_t TMVA::DecisionTreeNode::GoesRight(const TMVA::Event & e) const
    // first check if the fisher criterium is used or ordinary cuts:
    if (GetNFisherCoeff() == 0){
 
-      result = (e.GetValue(this->GetSelector()) >= this->GetCutValue() );
+      result = (e.GetValueFast(this->GetSelector()) >= this->GetCutValue() );
 
    }else{
 
       Double_t fisher = this->GetFisherCoeff(fFisherCoeff.size()-1); // the offset
       for (UInt_t ivar=0; ivar<fFisherCoeff.size()-1; ivar++)
-         fisher += this->GetFisherCoeff(ivar)*(e.GetValue(ivar));
+         fisher += this->GetFisherCoeff(ivar)*(e.GetValueFast(ivar));
 
       result = fisher > this->GetCutValue();
    }
@@ -167,7 +174,7 @@ Bool_t TMVA::DecisionTreeNode::GoesRight(const TMVA::Event & e) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// test event if it decends the tree at this node to the left
+/// test event if it descends the tree at this node to the left
 
 Bool_t TMVA::DecisionTreeNode::GoesLeft(const TMVA::Event & e) const
 {
@@ -187,14 +194,15 @@ void TMVA::DecisionTreeNode::SetPurity( void )
       fPurity = this->GetNSigEvents() / ( this->GetNSigEvents() + this->GetNBkgEvents());
    }
    else {
-      Log() << kINFO << "Zero events in purity calcuation , return purity=0.5" << Endl;
-      this->Print(Log());
+      Log() << kINFO << "Zero events in purity calculation , return purity=0.5" << Endl;
+      std::ostringstream oss;
+      this->Print(oss);
+      Log() <<oss.str();
       fPurity = 0.5;
    }
    return;
 }
 
-// print a node
 ////////////////////////////////////////////////////////////////////////////////
 ///print the node
 
@@ -228,7 +236,7 @@ void TMVA::DecisionTreeNode::Print(std::ostream& os) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///recursively print the node and its daughters (--> print the 'tree')
+/// recursively print the node and its daughters (--> print the 'tree')
 
 void TMVA::DecisionTreeNode::PrintRec(std::ostream& os) const
 {
@@ -530,6 +538,6 @@ void TMVA::DecisionTreeNode::ReadContent( std::stringstream& /*s*/ )
 ////////////////////////////////////////////////////////////////////////////////
 
 TMVA::MsgLogger& TMVA::DecisionTreeNode::Log() {
-  TTHREAD_TLS_DECL_ARG(MsgLogger,logger,"DecisionTreeNode");    // static because there is a huge number of nodes...
-  return logger;
+   TTHREAD_TLS_DECL_ARG(MsgLogger,logger,"DecisionTreeNode");    // static because there is a huge number of nodes...
+   return logger;
 }

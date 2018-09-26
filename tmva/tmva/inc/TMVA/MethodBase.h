@@ -46,32 +46,17 @@
 #include <map>
 #include "assert.h"
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
-#ifndef ROOT_TMVA_IMethod
 #include "TMVA/IMethod.h"
-#endif
-#ifndef ROOT_TMVA_Configurable
 #include "TMVA/Configurable.h"
-#endif
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
-#ifndef ROOT_TMVA_DataSet
 #include "TMVA/DataSet.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
-#ifndef ROOT_TMVA_TransformationHandler
 #include "TMVA/TransformationHandler.h"
-#endif
-#ifndef ROOT_TMVA_Results
-#include<TMVA/Results.h>
-#endif
+#include <TMVA/Results.h>
 
+#include <TFile.h>
 
 class TGraph;
 class TTree;
@@ -79,6 +64,18 @@ class TDirectory;
 class TSpline;
 class TH1F;
 class TH1D;
+class TMultiGraph;
+
+/*! \class TMVA::IPythonInteractive
+\ingroup TMVA
+
+This class is needed by JsMVA, and it's a helper class for tracking errors during
+the training in Jupyter notebook. It’s only initialized in Jupyter notebook context.
+In initialization we specify some title, and a TGraph will be created for every title.
+We can add new data points easily to all TGraphs. These graphs are added to a
+TMultiGraph, and during an interactive training we get this TMultiGraph object
+and plot it with JsROOT.
+*/
 
 namespace TMVA {
 
@@ -88,31 +85,54 @@ namespace TMVA {
    class MethodCuts;
    class MethodBoost;
    class DataSetInfo;
+   namespace Experimental {
+   class Classification;
+   }
+
+   class IPythonInteractive {
+   public:
+       IPythonInteractive();
+       ~IPythonInteractive();
+       void Init(std::vector<TString>& graphTitles);
+       void ClearGraphs();
+       void AddPoint(Double_t x, Double_t y1, Double_t y2);
+       void AddPoint(std::vector<Double_t>& dat);
+       inline TMultiGraph* Get() {return fMultiGraph;}
+       inline bool NotInitialized(){ return fNumGraphs==0;};
+   private:
+       TMultiGraph* fMultiGraph;
+       std::vector<TGraph*> fGraphs;
+       Int_t fNumGraphs;
+       Int_t fIndex;
+   };
 
    class MethodBase : virtual public IMethod, public Configurable {
 
+      friend class CrossValidation;
       friend class Factory;
+      friend class RootFinder;
+      friend class MethodBoost;
+      friend class MethodCrossValidation;
+      friend class Experimental::Classification;
 
    public:
 
       enum EWeightFileType { kROOT=0, kTEXT };
 
-      // default constructur
+      // default constructor
       MethodBase( const TString& jobName,
                   Types::EMVA methodType,
                   const TString& methodTitle,
                   DataSetInfo& dsi,
-                  const TString& theOption = "",
-                  TDirectory* theBaseDir = 0 );
+                  const TString& theOption = "" );
 
       // constructor used for Testing + Application of the MVA, only (no training),
       // using given weight file
       MethodBase( Types::EMVA methodType,
                   DataSetInfo& dsi,
-                  const TString& weightFile,
-                  TDirectory* theBaseDir = 0 );
+                  const TString& weightFile );
 
-      // default destructur
+      // default destructor
       virtual ~MethodBase();
 
       // declaration, processing and checking of configuration options
@@ -182,6 +202,10 @@ namespace TMVA {
       // helper function to set errors to -1
       void NoErrorCalc(Double_t* const err, Double_t* const errUpper);
 
+      // signal/background classification response for all current set of data
+      virtual std::vector<Double_t> GetMvaValues(Long64_t firstEvt = 0, Long64_t lastEvt = -1, Bool_t logProgress = false);
+
+
    public:
       // regression response
       const std::vector<Float_t>& GetRegressionValues(const TMVA::Event* const ev){
@@ -203,7 +227,7 @@ namespace TMVA {
       }
 
       // probability of classifier response (mvaval) to be signal (requires "CreateMvaPdf" option set)
-      virtual Double_t GetProba( const Event *ev); // the simple one, automatically calcualtes the mvaVal and uses the SAME sig/bkg ratio as given in the training sample (typically 50/50 .. (NormMode=EqualNumEvents) but can be different)
+      virtual Double_t GetProba( const Event *ev); // the simple one, automatically calculates the mvaVal and uses the SAME sig/bkg ratio as given in the training sample (typically 50/50 .. (NormMode=EqualNumEvents) but can be different)
       virtual Double_t GetProba( Double_t mvaVal, Double_t ap_sig );
 
       // Rarity of classifier response (signal or background (default) is uniform in [0,1])
@@ -269,18 +293,19 @@ namespace TMVA {
 
       // ---------- public evaluation methods --------------------------------------
 
-      // individual initialistion for testing of each method
+      // individual initialization for testing of each method
       // overload this one for individual initialisation of the testing,
       // it is then called automatically within the global "TestInit"
 
-      // variables (and private menber functions) for the Evaluation:
-      // get the effiency. It fills a histogram for efficiency/vs/bkg
+      // variables (and private member functions) for the Evaluation:
+      // get the efficiency. It fills a histogram for efficiency/vs/bkg
       // and returns the one value fo the efficiency demanded for
       // in the TString argument. (Watch the string format)
       virtual Double_t GetEfficiency( const TString&, Types::ETreeType, Double_t& err );
       virtual Double_t GetTrainingEfficiency(const TString& );
       virtual std::vector<Float_t> GetMulticlassEfficiency( std::vector<std::vector<Float_t> >& purity );
       virtual std::vector<Float_t> GetMulticlassTrainingEfficiency(std::vector<std::vector<Float_t> >& purity );
+      virtual TMatrixD GetMulticlassConfusionMatrix(Double_t effB, Types::ETreeType type);
       virtual Double_t GetSignificance() const;
       virtual Double_t GetROCIntegral(TH1D *histS, TH1D *histB) const;
       virtual Double_t GetROCIntegral(PDF *pdfS=0, PDF *pdfB=0) const;
@@ -314,7 +339,7 @@ namespace TMVA {
       // internal names and expressions of input variables
       const TString&   GetInputVar  ( Int_t i ) const { return DataInfo().GetVariableInfo(i).GetInternalName(); }
       const TString&   GetInputLabel( Int_t i ) const { return DataInfo().GetVariableInfo(i).GetLabel(); }
-      const TString&   GetInputTitle( Int_t i ) const { return DataInfo().GetVariableInfo(i).GetTitle(); }
+      const char *     GetInputTitle( Int_t i ) const { return DataInfo().GetVariableInfo(i).GetTitle(); }
 
       // normalisation and limit accessors
       Double_t         GetMean( Int_t ivar ) const { return GetTransformationHandler().GetMean(ivar); }
@@ -333,9 +358,20 @@ namespace TMVA {
       // pointers to ROOT directories
       TDirectory*      BaseDir()       const;
       TDirectory*      MethodBaseDir() const;
+      TFile*           GetFile() const {return fFile;}
+
       void             SetMethodDir ( TDirectory* methodDir ) { fBaseDir = fMethodBaseDir  = methodDir; }
       void             SetBaseDir( TDirectory* methodDir ){ fBaseDir = methodDir; }
       void             SetMethodBaseDir( TDirectory* methodDir ){ fMethodBaseDir = methodDir; }
+      void             SetFile(TFile* file){fFile=file;}
+
+      //Silent file
+      void SetSilentFile(Bool_t status){fSilentFile=status;}
+      Bool_t IsSilentFile(){return fSilentFile;}
+
+      //Model Persistence
+      void SetModelPersistence(Bool_t status){fModelPersistence=status;}//added support to create/remove dir here if exits or not
+      Bool_t IsModelPersistence(){return fModelPersistence;}
 
       // the TMVA version can be obtained and checked using
       //    if (GetTrainingTMVAVersionCode()>TMVA_VERSION(3,7,2)) {...}
@@ -347,9 +383,9 @@ namespace TMVA {
       TString          GetTrainingROOTVersionString() const;
 
       TransformationHandler&        GetTransformationHandler(Bool_t takeReroutedIfAvailable=true)
-      {
-         if(fTransformationPointer && takeReroutedIfAvailable) return *fTransformationPointer; else return fTransformation;
-      }
+         {
+            if(fTransformationPointer && takeReroutedIfAvailable) return *fTransformationPointer; else return fTransformation;
+         }
       const TransformationHandler&  GetTransformationHandler(Bool_t takeReroutedIfAvailable=true) const
       {
          if(fTransformationPointer && takeReroutedIfAvailable) return *fTransformationPointer; else return fTransformation;
@@ -368,7 +404,7 @@ namespace TMVA {
 
       // event reference and update
       // NOTE: these Event accessors make sure that you get the events transformed according to the
-      //        particular clasifiers transformation chosen
+      //        particular classifiers transformation chosen
       UInt_t           GetNEvents      () const { return Data()->GetNEvents(); }
       const Event*     GetEvent        () const;
       const Event*     GetEvent        ( const TMVA::Event* ev ) const;
@@ -394,11 +430,48 @@ namespace TMVA {
       Bool_t                DoMulticlass() const { return fAnalysisType == Types::kMulticlass; }
 
       // setter method for suppressing writing to XML and writing of standalone classes
-      void                  DisableWriting(Bool_t setter){ fDisableWriting = setter; }
+      void                  DisableWriting(Bool_t setter){ fModelPersistence = setter?kFALSE:kTRUE; }//DEPRECATED
+
+    protected:
+      // helper variables for JsMVA
+      IPythonInteractive *fInteractive = nullptr;
+      bool fExitFromTraining = false;
+      UInt_t fIPyMaxIter = 0, fIPyCurrentIter = 0;
+
+    public:
+
+      // initializing IPythonInteractive class (for JsMVA only)
+      inline void InitIPythonInteractive(){
+        if (fInteractive) delete fInteractive;
+        fInteractive = new IPythonInteractive();
+      }
+
+      // get training errors (for JsMVA only)
+      inline TMultiGraph* GetInteractiveTrainingError(){return fInteractive->Get();}
+
+      // stop's the training process (for JsMVA only)
+      inline void ExitFromTraining(){
+        fExitFromTraining = true;
+      }
+
+      // check's if the training ended (for JsMVA only)
+      inline bool TrainingEnded(){
+        if (fExitFromTraining && fInteractive){
+          delete fInteractive;
+          fInteractive = nullptr;
+        }
+        return fExitFromTraining;
+      }
+
+      // get fIPyMaxIter
+      inline UInt_t GetMaxIter(){ return fIPyMaxIter; }
+
+      // get fIPyCurrentIter
+      inline UInt_t GetCurrentIter(){ return fIPyCurrentIter; }
 
    protected:
 
-      // ---------- protected acccessors -------------------------------------------
+      // ---------- protected accessors -------------------------------------------
 
       //TDirectory*  LocalTDir() const { return Data().LocalRootDir(); }
 
@@ -438,8 +511,8 @@ namespace TMVA {
       // header and auxiliary classes
       virtual void     MakeClassSpecificHeader( std::ostream&, const TString& = "" ) const {}
 
-      // static pointer to this object - required for ROOT finder (to be solved differently)
-      static MethodBase* GetThisBase();
+      // static pointer to this object - required for ROOT finder (to be solved differently)(solved by Omar)
+      //static MethodBase* GetThisBase();
 
       // some basic statistical analysis
       void Statistics( Types::ETreeType treeType, const TString& theVarName,
@@ -467,7 +540,7 @@ namespace TMVA {
       enum ECutOrientation { kNegative = -1, kPositive = +1 };
       ECutOrientation  GetCutOrientation() const { return fCutOrientation; }
 
-      // ---------- private acccessors ---------------------------------------------
+      // ---------- private accessors ---------------------------------------------
 
       // reset required for RootFinder
       void             ResetThisBase();
@@ -478,8 +551,8 @@ namespace TMVA {
       void             CreateMVAPdfs();
 
       // for root finder
-      static Double_t  IGetEffForRoot( Double_t );  // interface
-      Double_t         GetEffForRoot ( Double_t );  // implementation
+      //virtual method to find ROOT
+      virtual Double_t         GetValueForRoot ( Double_t );  // implementation
 
       // used for file parsing
       Bool_t           GetLine( std::istream& fin, char * buf );
@@ -494,12 +567,6 @@ namespace TMVA {
 
       void             AddInfoItem( void* gi, const TString& name,
                                     const TString& value) const;
-
-      static void      CreateVariableTransforms(const TString& trafoDefinition,
-                                                TMVA::DataSetInfo& dataInfo,
-                                                TMVA::TransformationHandler& transformationHandler,
-                                                TMVA::MsgLogger& log );
-
 
       // ========== class members ==================================================
 
@@ -524,7 +591,6 @@ namespace TMVA {
       // MethodCuts redefines some of the evaluation variables and histograms -> must access private members
       friend class MethodCuts;
 
-      Bool_t           fDisableWriting;       //! set to true in order to suppress writing to XML
 
       // data sets
       DataSetInfo&     fDataSetInfo;         //! the data set information (sometimes needed)
@@ -542,11 +608,18 @@ namespace TMVA {
       UInt_t           fROOTTrainingVersion; // ROOT version used for training
       Bool_t           fConstructedFromWeightFile; // is it obtained from weight file?
 
-      // Directory structure: fMethodBaseDir/fBaseDir
+      // Directory structure: dataloader/fMethodBaseDir/fBaseDir
       // where the first directory name is defined by the method type
       // and the second is user supplied (the title given in Factory::BookMethod())
       TDirectory*      fBaseDir;             // base directory for the instance, needed to know where to jump back from localDir
       mutable TDirectory* fMethodBaseDir;    // base directory for the method
+      //this will be the next way to save results
+      TFile            *fFile;
+
+      //SilentFile
+      Bool_t fSilentFile;
+      //Model Persistence
+      Bool_t fModelPersistence;
 
       TString          fParentDir;           // method parent name, like booster name
 
@@ -630,7 +703,7 @@ namespace TMVA {
 
       // This is a workaround for OSx where static thread_local data members are
       // not supported. The C++ solution would indeed be the following:
-      static MethodBase*& GetThisBaseThreadLocal() {TTHREAD_TLS(MethodBase*) fgThisBase(nullptr); return fgThisBase; };
+//       static MethodBase*& GetThisBaseThreadLocal() {TTHREAD_TLS(MethodBase*) fgThisBase(nullptr); return fgThisBase; };
 
       // ===== depreciated options, kept for backward compatibility  =====
    private:
@@ -643,8 +716,8 @@ namespace TMVA {
       Int_t            fNsmoothMVAPdf;               // number of times a histogram is smoothed before creating the PDF
 
    protected:
-        Results *fResults;
-      ClassDef(MethodBase,0)  // Virtual base class for all TMVA method
+      Results *fResults;
+      ClassDef(MethodBase,0);  // Virtual base class for all TMVA method
 
    };
 } // namespace TMVA

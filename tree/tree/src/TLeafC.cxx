@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TLeafC
+\ingroup tree
+
 A TLeaf for a variable length string.
 */
 
@@ -20,7 +22,7 @@ A TLeaf for a variable length string.
 #include "Riostream.h"
 #include <string>
 
-ClassImp(TLeafC)
+ClassImp(TLeafC);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for LeafC.
@@ -86,6 +88,22 @@ const char *TLeafC::GetTypeName() const
 {
    if (fIsUnsigned) return "UChar_t";
    return "Char_t";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Copy/set fMinimum and fMaximum to include/be wide than those of the parameter
+
+Bool_t TLeafC::IncludeRange(TLeaf *input)
+{
+    if (input) {
+        if (input->GetMaximum() > this->GetMaximum())
+            this->SetMaximum( input->GetMaximum() );
+        if (input->GetMinimum() < this->GetMinimum())
+            this->SetMinimum( input->GetMinimum() );
+        return kTRUE;
+    } else {
+        return kFALSE;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

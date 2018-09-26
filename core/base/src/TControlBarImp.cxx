@@ -10,9 +10,11 @@
  *************************************************************************/
 
 /** \class TControlBarImp
+\ingroup Base
+
 ABC describing GUI independent control bar
 */
 
 #include "TControlBarImp.h"
 
-ClassImp(TControlBarImp)
+ClassImp(TControlBarImp);

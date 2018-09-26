@@ -1,4 +1,3 @@
-
 ############################################################################
 # CMakeLists.txt file for building ROOT proof/proofx package
 # @author Pere Mato, CERN
@@ -14,6 +13,7 @@ else()
 endif()
 
 include_directories(${XROOTD_INCLUDE_DIRS})
+include_directories(AFTER ${CMAKE_CURRENT_SOURCE_DIR}/../proofd/inc)
 link_directories(${XROOTD_LIBRARY_DIR})
 add_definitions(${XROOTD_CFLAGS})
 
@@ -21,6 +21,8 @@ if(GCC_MAJOR GREATER 3)
   set_source_files_properties(src/TXSocket.cxx COMPILE_FLAGS -Wno-address)
 endif()
 
-ROOT_GENERATE_DICTIONARY(G__Proofx ${headers} MODULE Proofx LINKDEF LinkDef.h)
-ROOT_LINKER_LIBRARY(Proofx ${sources} G__Proofx.cxx LIBRARIES ${XROOTD_LIBRARIES} XrdProofd DEPENDENCIES Net Proof Thread )
-ROOT_INSTALL_HEADERS()
+ROOT_STANDARD_LIBRARY_PACKAGE(Proofx
+                              HEADERS ${headers}
+                              LIBRARIES ${XROOTD_LIBRARIES} XrdProofd
+                              DEPENDENCIES Net Proof Thread
+                              BUILTINS XROOTD)

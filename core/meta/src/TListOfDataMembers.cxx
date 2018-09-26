@@ -28,9 +28,11 @@ unloaded data member.
 #include "TEnumConstant.h"
 #include "TClassEdit.h"
 
+#include <sstream>
+
 const unsigned int idsSize=19;
 
-ClassImp(TListOfDataMembers)
+ClassImp(TListOfDataMembers);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
@@ -439,7 +441,7 @@ void TListOfDataMembers::Load()
    // Treat the complex<float>, complex<double> in a special way, i.e. replacing
    // the datamembers with the ones of _root_std_complex<T>
    bool skipChecks = false;
-   if (fClass){
+   if (fClass) {
       auto complexType = TClassEdit::GetComplexType(fClass->GetName());
       switch(complexType) {
          case TClassEdit::EComplexType::kNone:
@@ -553,7 +555,7 @@ void TListOfDataMembers::Unload()
    while (lnk) {
       TDictionary *data = (TDictionary *)lnk->GetObject();
       UnmapObject(data);
-      fUnloaded = new THashList;
+      if (!fUnloaded) fUnloaded = new THashList;
       fUnloaded->Add(data);
 
       lnk = lnk->Next();
@@ -576,7 +578,7 @@ void TListOfDataMembers::Unload(TDictionary *mem)
       // list and move it to the list of unloaded objects.
 
       UnmapObject(mem);
-      fUnloaded = new THashList;
+      if (!fUnloaded) fUnloaded = new THashList;
       fUnloaded->Add(mem);
    }
 }

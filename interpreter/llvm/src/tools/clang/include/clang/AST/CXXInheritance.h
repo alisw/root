@@ -16,7 +16,6 @@
 
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
-#include "clang/AST/DeclarationName.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeOrdering.h"
 #include "llvm/ADT/MapVector.h"
@@ -24,7 +23,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include <cassert>
 #include <list>
-#include <map>
 
 namespace clang {
   
@@ -129,7 +127,11 @@ class CXXBasePaths {
   /// class subobjects for that class type. The key of the map is
   /// the cv-unqualified canonical type of the base class subobject.
   llvm::SmallDenseMap<QualType, std::pair<bool, unsigned>, 8> ClassSubobjects;
-  
+
+  /// VisitedDependentRecords - Records the dependent records that have been
+  /// already visited.
+  llvm::SmallDenseSet<const CXXRecordDecl *, 4> VisitedDependentRecords;
+
   /// FindAmbiguities - Whether Sema::IsDerivedFrom should try find
   /// ambiguous paths while it is looking for a path from a derived
   /// type to a base type.
@@ -155,17 +157,17 @@ class CXXBasePaths {
   /// \brief Array of the declarations that have been found. This
   /// array is constructed only if needed, e.g., to iterate over the
   /// results within LookupResult.
-  NamedDecl **DeclsFound;
+  std::unique_ptr<NamedDecl *[]> DeclsFound;
   unsigned NumDeclsFound;
   
   friend class CXXRecordDecl;
   
   void ComputeDeclsFound();
 
-  bool lookupInBases(ASTContext &Context, 
-                     const CXXRecordDecl *Record,
-                     CXXRecordDecl::BaseMatchesCallback *BaseMatches, 
-                     void *UserData);
+  bool lookupInBases(ASTContext &Context, const CXXRecordDecl *Record,
+                     CXXRecordDecl::BaseMatchesCallback BaseMatches,
+                     bool LookupInDependent = false);
+
 public:
   typedef std::list<CXXBasePath>::iterator paths_iterator;
   typedef std::list<CXXBasePath>::const_iterator const_paths_iterator;
@@ -173,15 +175,12 @@ public:
   
   /// BasePaths - Construct a new BasePaths structure to record the
   /// paths for a derived-to-base search.
-  explicit CXXBasePaths(bool FindAmbiguities = true,
-                        bool RecordPaths = true,
+  explicit CXXBasePaths(bool FindAmbiguities = true, bool RecordPaths = true,
                         bool DetectVirtual = true)
-    : FindAmbiguities(FindAmbiguities), RecordPaths(RecordPaths),
-      DetectVirtual(DetectVirtual), DetectedVirtual(nullptr),
-      DeclsFound(nullptr), NumDeclsFound(0) { }
-  
-  ~CXXBasePaths() { delete [] DeclsFound; }
-  
+      : Origin(), FindAmbiguities(FindAmbiguities), RecordPaths(RecordPaths),
+        DetectVirtual(DetectVirtual), DetectedVirtual(nullptr),
+        NumDeclsFound(0) {}
+
   paths_iterator begin() { return Paths.begin(); }
   paths_iterator end()   { return Paths.end(); }
   const_paths_iterator begin() const { return Paths.begin(); }
@@ -333,12 +332,12 @@ public:
 ///   struct D : B, C { };
 /// \endcode
 ///
-/// This data structure contaings a mapping from every virtual
+/// This data structure contains a mapping from every virtual
 /// function *that does not override an existing virtual function* and
 /// in every subobject where that virtual function occurs to the set
 /// of virtual functions that override it. Thus, the same virtual
 /// function \c A::f can actually occur in multiple subobjects of type
-/// \c A due to multiple inheritance, and may be overriden by
+/// \c A due to multiple inheritance, and may be overridden by
 /// different virtual functions in each, as in the following example:
 ///
 /// \code
@@ -354,7 +353,7 @@ public:
 /// \c A::f but in *different* subobjects of type A. This is
 /// represented by numbering the subobjects in which the overridden
 /// and the overriding virtual member functions are located. Subobject
-/// 0 represents the virtua base class subobject of that type, while
+/// 0 represents the virtual base class subobject of that type, while
 /// subobject numbers greater than 0 refer to non-virtual base class
 /// subobjects of that type.
 class CXXFinalOverriderMap

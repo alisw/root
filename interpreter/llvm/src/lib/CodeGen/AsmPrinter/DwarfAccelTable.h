@@ -16,12 +16,12 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/DIE.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Dwarf.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormattedStream.h"
@@ -126,8 +126,7 @@ public:
     uint16_t type; // enum AtomType
     uint16_t form; // DWARF DW_FORM_ defines
 
-    LLVM_CONSTEXPR Atom(uint16_t type, uint16_t form)
-        : type(type), form(form) {}
+    constexpr Atom(uint16_t type, uint16_t form) : type(type), form(form) {}
 #ifndef NDEBUG
     void print(raw_ostream &O) {
       O << "Type: " << dwarf::AtomTypeString(type) << "\n"
@@ -181,9 +180,8 @@ public:
 private:
   // String Data
   struct DataArray {
-    MCSymbol *StrSym;
+    DwarfStringPoolEntryRef Name;
     std::vector<HashDataContents *> Values;
-    DataArray() : StrSym(nullptr) {}
   };
   friend struct HashData;
   struct HashData {
@@ -201,7 +199,7 @@ private:
       O << "  Hash Value: " << format("0x%x", HashValue) << "\n";
       O << "  Symbol: ";
       if (Sym)
-        Sym->print(O);
+        O << *Sym;
       else
         O << "<none>";
       O << "\n";
@@ -215,15 +213,15 @@ private:
 #endif
   };
 
-  DwarfAccelTable(const DwarfAccelTable &) LLVM_DELETED_FUNCTION;
-  void operator=(const DwarfAccelTable &) LLVM_DELETED_FUNCTION;
+  DwarfAccelTable(const DwarfAccelTable &) = delete;
+  void operator=(const DwarfAccelTable &) = delete;
 
   // Internal Functions
   void EmitHeader(AsmPrinter *);
   void EmitBuckets(AsmPrinter *);
   void EmitHashes(AsmPrinter *);
-  void EmitOffsets(AsmPrinter *, MCSymbol *);
-  void EmitData(AsmPrinter *, DwarfDebug *D, MCSymbol *StrSym);
+  void emitOffsets(AsmPrinter *, const MCSymbol *);
+  void EmitData(AsmPrinter *, DwarfDebug *D);
 
   // Allocator for HashData and HashDataContents.
   BumpPtrAllocator Allocator;
@@ -245,10 +243,9 @@ private:
   // Public Implementation
 public:
   DwarfAccelTable(ArrayRef<DwarfAccelTable::Atom>);
-  void AddName(StringRef Name, MCSymbol *StrSym, const DIE *Die,
-               char Flags = 0);
+  void AddName(DwarfStringPoolEntryRef Name, const DIE *Die, char Flags = 0);
   void FinalizeTable(AsmPrinter *, StringRef);
-  void Emit(AsmPrinter *, MCSymbol *, DwarfDebug *, MCSymbol *StrSym);
+  void emit(AsmPrinter *, const MCSymbol *, DwarfDebug *);
 #ifndef NDEBUG
   void print(raw_ostream &O);
   void dump() { print(dbgs()); }

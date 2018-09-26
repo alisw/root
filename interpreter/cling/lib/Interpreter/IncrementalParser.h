@@ -23,26 +23,28 @@
 namespace llvm {
   struct GenericValue;
   class MemoryBuffer;
+  class Module;
 }
 
 namespace clang {
+  class ASTConsumer;
   class CodeGenerator;
   class CompilerInstance;
+  class DiagnosticConsumer;
   class Decl;
   class FileID;
   class Parser;
 }
 
 namespace cling {
-  class BackendPasses;
   class CompilationOptions;
-  class CIFactory;
   class DeclCollector;
   class ExecutionContext;
   class Interpreter;
   class Transaction;
   class TransactionPool;
   class ASTTransformer;
+  class IncrementalCUDADeviceCompiler;
 
   ///\brief Responsible for the incremental parsing and compilation of input.
   ///
@@ -62,9 +64,6 @@ namespace cling {
     // parser (incremental)
     std::unique_ptr<clang::Parser> m_Parser;
 
-    // optimizer etc passes
-    std::unique_ptr<BackendPasses> m_BackendPasses;
-
     // One buffer for each command line, owner by the source file manager
     std::deque<std::pair<llvm::MemoryBuffer*, clang::FileID>> m_MemoryBuffers;
 
@@ -83,15 +82,23 @@ namespace cling {
     std::deque<Transaction*> m_Transactions;
 
     ///\brief Number of created modules.
-    unsigned m_ModuleNo;
+    unsigned m_ModuleNo = 0;
 
     ///\brief Code generator
     ///
-    std::unique_ptr<clang::CodeGenerator> m_CodeGen;
+    clang::CodeGenerator* m_CodeGen = nullptr;
 
     ///\brief Pool of reusable block-allocated transactions.
     ///
     std::unique_ptr<TransactionPool> m_TransactionPool;
+
+    ///\brief DiagnosticConsumer instance
+    ///
+    std::unique_ptr<clang::DiagnosticConsumer> m_DiagConsumer;
+
+    ///\brief Cling's worker class implementing the compilation of CUDA device code
+    ///
+    std::unique_ptr<IncrementalCUDADeviceCompiler> m_CUDACompiler;
 
   public:
     enum EParseResult {
@@ -101,16 +108,21 @@ namespace cling {
     };
     typedef llvm::PointerIntPair<Transaction*, 2, EParseResult>
       ParseResultTransaction;
-    IncrementalParser(Interpreter* interp, int argc, const char* const *argv,
-                      const char* llvmdir, bool isChildInterpreter);
+    IncrementalParser(Interpreter* interp, const char* llvmdir);
     ~IncrementalParser();
 
-    void Initialize(llvm::SmallVectorImpl<ParseResultTransaction>& result,
+    ///\brief Whether the IncrementalParser is valid.
+    ///
+    ///\param[in] initialized - check if IncrementalParser has been initialized.
+    ///
+    bool isValid(bool initialized = true) const;
+
+    bool Initialize(llvm::SmallVectorImpl<ParseResultTransaction>& result,
                     bool isChildInterpreter);
     clang::CompilerInstance* getCI() const { return m_CI.get(); }
     clang::Parser* getParser() const { return m_Parser.get(); }
-    clang::CodeGenerator* getCodeGenerator() const { return m_CodeGen.get(); }
-    bool hasCodeGenerator() const { return m_CodeGen.get(); }
+    clang::CodeGenerator* getCodeGenerator() const { return m_CodeGen; }
+    bool hasCodeGenerator() const { return m_CodeGen; }
     clang::SourceLocation getLastMemoryBufferEndLoc() const;
 
     /// \{
@@ -127,10 +139,12 @@ namespace cling {
     ///\brief Commits a transaction if it was complete. I.e pipes it
     /// through the consumer chain, including codegen.
     ///
-    ///\param[in] PRT - the transaction (ParseResultTransaction, really) to be
+    ///\param[in] PRT - the transaction (ParseResultTransaction) to be
     /// committed
+    ///\param[in] ClearDiagClient - Reset the DiagnosticsEngine client or not
     ///
-    void commitTransaction(ParseResultTransaction PRT);
+    void commitTransaction(ParseResultTransaction& PRT,
+                           bool ClearDiagClient = true);
 
     ///\brief Runs the consumers (e.g. CodeGen) on a non-parsed transaction.
     ///
@@ -138,15 +152,11 @@ namespace cling {
     ///
     void emitTransaction(Transaction* T);
 
-    ///\brief Reverts the interpreter into its previous state.
-    ///
-    /// If one of the declarations caused error in clang it is rolled back from
-    /// the AST. This is essential feature for the error recovery subsystem.
-    /// Also this is a key entry point for the code unloading.
+    ///\brief Remove a Transaction from the collection of Transactions.
     ///
     ///\param[in] T - The transaction to be reverted from the AST
     ///
-    void rollbackTransaction(Transaction* T);
+    void deregisterTransaction(Transaction& T);
 
     ///\brief Returns the first transaction the incremental parser saw.
     ///
@@ -196,25 +206,7 @@ namespace cling {
     ///
     ParseResultTransaction Compile(llvm::StringRef input, const CompilationOptions& Opts);
 
-    ///\brief Parses the given input without calling the custom consumers and
-    /// code generation.
-    ///
-    /// I.e changes to the decls in the transaction commiting it will cause
-    /// different executable code.
-    ///
-    ///\param[in] input - The code to parse.
-    ///\param[in] Opts - The compilation options to use.
-    ///\returns The transaction corresponding to the input.
-    ///
-    ParseResultTransaction Parse(llvm::StringRef input, const CompilationOptions& Opts);
-
     void printTransactionStructure() const;
-
-    ///\brief Adds a UsedAttr to all decls in the transaction.
-    ///
-    ///\param[in] T - the transaction for which all decls will get a UsedAttr.
-    ///
-    void markWholeTransactionAsUsed(Transaction* T) const;
 
     ///\brief Runs the static initializers created by codegening a transaction.
     ///
@@ -222,18 +214,16 @@ namespace cling {
     ///
     bool runStaticInitOnTransaction(Transaction* T) const;
 
+    ///\brief Add the trnasformers to the Incremental Parser.
+    ///
+    void SetTransformers(bool isChildInterpreter);
+
   private:
     ///\brief Finalizes the consumers (e.g. CodeGen) on a transaction.
     ///
     ///\param[in] T - the transaction to be finalized
     ///
     void codeGenTransaction(Transaction* T);
-
-    ///\brief Runs IR transformers on a transaction.
-    ///
-    ///\param[in] T - the transaction to be transformed.
-    ///
-    bool transformTransactionIR(Transaction* T);
 
     ///\brief Initializes a virtual file, which will be able to produce valid
     /// source locations, with the proper offsets.
@@ -246,12 +236,14 @@ namespace cling {
     ///
     EParseResult ParseInternal(llvm::StringRef input);
 
-    ///\brief Return true if this decl (which comes from an AST file) should
-    /// not be sent to CodeGen. The module is assumed to describe the contents
-    /// of a library; symbols inside the library must thus not be reemitted /
-    /// duplicated by CodeGen.
+    ///\brief Create a unique name for the next llvm::Module
     ///
-    bool shouldIgnore(const clang::Decl* D) const;
+    std::string makeModuleName();
+
+    ///\brief Create a new llvm::Module
+    ///
+    llvm::Module* StartModule();
+
   };
 } // end namespace cling
 #endif // CLING_INCREMENTAL_PARSER_H

@@ -12,9 +12,7 @@
 #ifndef ROOT_Rstrstream
 #define ROOT_Rstrstream
 
-#ifndef ROOT_RConfig
-#include "RConfig.h"
-#endif
+#include <ROOT/RConfig.h>
 
 #if defined(R__ANSISTREAM)
 #  if defined(R__SSTREAM)

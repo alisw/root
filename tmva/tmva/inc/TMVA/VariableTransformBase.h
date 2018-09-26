@@ -39,28 +39,14 @@
 
 #include <vector>
 
-#ifndef ROOT_TH1
 #include "TH1.h"
-#endif
-#ifndef ROOT_TDirectory
 #include "TDirectory.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
-#ifndef ROOT_TMVA_VariableInfo
 #include "TMVA/VariableInfo.h"
-#endif
-#ifndef ROOT_TMVA_DataSetInfo
 #include "TMVA/DataSetInfo.h"
-#endif
 
 namespace TMVA {
 
@@ -186,7 +172,7 @@ namespace TMVA {
 
       mutable MsgLogger* fLogger;                     //! message logger
 
-      ClassDef(VariableTransformBase,0)   //  Base class for variable transformations
+      ClassDef(VariableTransformBase,0);   //  Base class for variable transformations
    };
 
 } // namespace TMVA

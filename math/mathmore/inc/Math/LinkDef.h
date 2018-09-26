@@ -24,17 +24,11 @@
 #include "LinkDef_Func.h"
 #include "LinkDef_RootFinding.h"
 
-#pragma link C++ struct ROOT::Math::MathMoreLibrary;
+#pragma link C++ class ROOT::Math::MathMoreLib+;
 
 #pragma link C++ class ROOT::Math::ParamFunction<ROOT::Math::IParametricGradFunctionOneDim>+;
 
-#ifndef _WIN32
-// virtual inheritance gives problem when making dictionary on Windows
 #pragma link C++ class ROOT::Math::Polynomial+;
-#else
-#pragma link C++ class ROOT::Math::Polynomial-;
-#endif
-
 #pragma link C++ class ROOT::Math::ChebyshevApprox+;
 #pragma link C++ class ROOT::Math::Derivator+;
 
@@ -99,6 +93,7 @@
 #pragma link C++ class ROOT::Math::QuasiRandom<ROOT::Math::GSLQRngNiederreiter2>+;
 #pragma link C++ typedef ROOT::Math::QuasiRandomSobol;
 #pragma link C++ typedef ROOT::Math::QuasiRandomNiederreiter;
+#pragma link C++ class ROOT::Math::GSLQuasiRandomEngine+;
 
 
 

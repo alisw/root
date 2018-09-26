@@ -15,7 +15,9 @@
 #ifndef LLVM_IR_MDBUILDER_H
 #define LLVM_IR_MDBUILDER_H
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/IR/GlobalValue.h"
 #include "llvm/Support/DataTypes.h"
 #include <utility>
 
@@ -60,12 +62,27 @@ public:
   /// \brief Return metadata containing a number of branch weights.
   MDNode *createBranchWeights(ArrayRef<uint32_t> Weights);
 
+  /// Return metadata specifying that a branch or switch is unpredictable.
+  MDNode *createUnpredictable();
+
+  /// Return metadata containing the entry \p Count for a function, and the
+  /// GUIDs stored in \p Imports that need to be imported for sample PGO, to
+  /// enable the same inlines as the profiled optimized binary
+  MDNode *createFunctionEntryCount(uint64_t Count,
+                                   const DenseSet<GlobalValue::GUID> *Imports);
+
+  /// Return metadata containing the section prefix for a function.
+  MDNode *createFunctionSectionPrefix(StringRef Prefix);
+
   //===------------------------------------------------------------------===//
   // Range metadata.
   //===------------------------------------------------------------------===//
 
   /// \brief Return metadata describing the range [Lo, Hi).
   MDNode *createRange(const APInt &Lo, const APInt &Hi);
+
+  /// \brief Return metadata describing the range [Lo, Hi).
+  MDNode *createRange(Constant *Lo, Constant *Hi);
 
   //===------------------------------------------------------------------===//
   // AA metadata.
@@ -147,7 +164,7 @@ public:
   /// \brief Return metadata for a TBAA tag node with the given
   /// base type, access type and offset relative to the base type.
   MDNode *createTBAAStructTagNode(MDNode *BaseType, MDNode *AccessType,
-                                  uint64_t Offset);
+                                  uint64_t Offset, bool IsConstant = false);
 };
 
 } // end namespace llvm

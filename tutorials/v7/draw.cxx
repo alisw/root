@@ -1,8 +1,12 @@
-/// \file draw.cxx
-/// \ingroup Tutorials
-/// \author Axel Naumann <axel@cern.ch>
+/// \file
+/// \ingroup tutorial_v7
+///
+/// \macro_code
+///
 /// \date 2015-03-22
-/// \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback is welcome!
+/// \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback
+/// is welcome!
+/// \author Axel Naumann <axel@cern.ch>
 
 /*************************************************************************
  * Copyright (C) 1995-2015, Rene Brun and Fons Rademakers.               *
@@ -14,30 +18,35 @@
 
 #include "Rtypes.h"
 
-R__LOAD_LIBRARY(libGpad)
+R__LOAD_LIBRARY(libROOTHistDraw);
 
-#include "ROOT/THist.h"
-#include "ROOT/TCanvas.h"
-#include "ROOT/TDirectory.h"
-#include <iostream>
+#include "ROOT/RHist.hxx"
+#include "ROOT/RCanvas.hxx"
+#include "ROOT/RColor.hxx"
+#include "ROOT/TDirectory.hxx"
 
-void example() {
-  using namespace ROOT;
+void draw()
+{
+   using namespace ROOT::Experimental;
 
-  auto pHist = MakeCoop<THist<2, double>>(TAxisConfig{100, 0., 1.},
-                                          TAxisConfig{{0., 1., 2., 3.,10.}});
+   // Create the histogram.
+   RAxisConfig xaxis("x", 10, 0., 1.);
+   RAxisConfig yaxis("y", {0., 1., 2., 3., 10.});
+   auto pHist = std::make_shared<RH2D>(xaxis, yaxis);
 
-  pHist->Fill({0.01, 1.02});
-  experimental::TDirectory::Heap().Add("hist", pHist);
+   // Fill a few points.
+   pHist->Fill({0.01, 1.02});
+   pHist->Fill({0.54, 3.02});
+   pHist->Fill({0.98, 1.02});
+   pHist->Fill({1.90, 1.02});
+   pHist->Fill({0.75, -0.02});
 
-  auto canvas = experimental::TCanvas::Create("MyCanvas");
-  canvas->Draw(pHist);
-}
+   // Register the histogram with ROOT: now it lives even after draw() ends.
+   ROOT::Experimental::TDirectory::Heap().Add("hist", pHist);
 
-void draw() {
-  example();
+   // Create a canvas to be displayed.
+   auto canvas = RCanvas::Create("Canvas Title");
+   canvas->Draw(pHist)->SetLineColor(RColor::kRed);
 
-  // And the event loop (?) will call
-  for (auto&& canv: experimental::TCanvas::GetCanvases())
-    canv->Paint();
+   canvas->Show();
 }

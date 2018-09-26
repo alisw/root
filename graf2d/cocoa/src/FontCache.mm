@@ -23,6 +23,7 @@
 #include "TSystem.h"
 #include "TError.h"
 #include "TEnv.h"
+#include "TROOT.h"
 
 namespace ROOT {
 namespace MacOSX {
@@ -224,7 +225,7 @@ void CreateXLFDString(const X11::XLFDName &xlfd, std::string &xlfdString)
     } else
         xlfdString += "-*";
 
-    xlfdString += "-*-*-*-*-*-*-*-";//TODO: something more reasonable?
+    xlfdString += "-*-*-*-*-*-*-*-";
 }
 
 }
@@ -504,8 +505,8 @@ CTFontRef FontCache::SelectSymbolFont(Float_t fontSize, unsigned fontIndex)
    font_map_iterator it = fFonts[fontIndex].find(fixedSize);//In ROOT, 11 is a font from symbol.ttf.
 
    if (it == fFonts[fontIndex].end()) {
-      //This GetValue + Which I took from Olivier's code.
-      const char * const fontDirectoryPath = gEnv->GetValue("Root.TTFontPath","$(ROOTSYS)/fonts");//This one I do not own.
+      //This GetValue
+      const char * const fontDirectoryPath = gEnv->GetValue("Root.TTFontPath",TROOT::GetTTFFontDir());
       char * const fontFileName = gSystem->Which(fontDirectoryPath, "symbol.ttf", kReadPermission);//This must be deleted.
 
       const Util::ScopedArray<char> arrayGuard(fontFileName);

@@ -19,7 +19,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include "RConfigure.h"
-#include "RConfig.h"
+#include <ROOT/RConfig.h>
 #include "Riostream.h"
 
 #ifdef WIN32
@@ -274,7 +274,7 @@ TASLogHandlerGuard::~TASLogHandlerGuard()
    }
 }
 
-ClassImp(TApplicationServer)
+ClassImp(TApplicationServer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Main constructor. Create an application environment. The TApplicationServer
@@ -1275,17 +1275,7 @@ void TApplicationServer::ExecLogon()
    TString name = ".rootlogon.C";
    TString sname = "system";
    sname += name;
-#ifdef ROOTETCDIR
-   char *s = gSystem->ConcatFileName(ROOTETCDIR, sname);
-#else
-   TString etc = gRootDir;
-#ifdef WIN32
-   etc += "\\etc";
-#else
-   etc += "/etc";
-#endif
-   char *s = gSystem->ConcatFileName(etc, sname);
-#endif
+   char *s = gSystem->ConcatFileName(TROOT::GetEtcDir(), sname);
    if (!gSystem->AccessPathName(s, kReadPermission)) {
       ProcessFile(s);
    }

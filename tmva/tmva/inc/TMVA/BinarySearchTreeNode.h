@@ -39,13 +39,9 @@
 
 #include <iosfwd>
 #include <vector>
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
-#ifndef ROOT_TMVA_Node
 #include "TMVA/Node.h"
-#endif
 
 namespace TMVA {
 
@@ -90,7 +86,7 @@ namespace TMVA {
       const std::vector<Float_t> & GetEventV() const { return fEventV; }
       Float_t                      GetWeight() const { return fWeight; }
       UInt_t                       GetClass()  const { return fClass; }
-//      Bool_t                       IsSignal()  const { return (fClass == fSignalClass); }
+      //      Bool_t                       IsSignal()  const { return (fClass == fSignalClass); }
 
       const std::vector<Float_t> & GetTargets() const { return fTargets; }
 
@@ -104,11 +100,12 @@ namespace TMVA {
       virtual void AddAttributesToNode(void* node) const;
       virtual void AddContentToNode(std::stringstream& s) const;
 
-   private: 
       // Read the data block
-      virtual void ReadAttributes(void* node, UInt_t tmva_Version_Code = TMVA_VERSION_CODE );
       virtual Bool_t ReadDataRecord( std::istream& is, UInt_t tmva_Version_Code = TMVA_VERSION_CODE );
+      virtual void ReadAttributes(void* node, UInt_t tmva_Version_Code = TMVA_VERSION_CODE );
       virtual void ReadContent(std::stringstream& s);
+
+   private: 
       std::vector<Float_t> fEventV;
       std::vector<Float_t> fTargets;
 
@@ -117,7 +114,7 @@ namespace TMVA {
 
       Short_t     fSelector;       // index of variable used in node selection (decision tree) 
 
-      ClassDef(BinarySearchTreeNode,0) // Node for the BinarySearchTree
+      ClassDef(BinarySearchTreeNode,0); // Node for the BinarySearchTree
    };
 
 } // namespace TMVA

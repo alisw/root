@@ -24,9 +24,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
 #include <string>
 #include <vector>
@@ -61,7 +59,7 @@ protected:
 
 public:
 
-   enum {
+   enum EStatusBits {
       kHaveWarnedReadingOld = BIT(14)
    };
 

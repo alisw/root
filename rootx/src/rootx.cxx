@@ -9,7 +9,7 @@
 // This program is called "root" in the $ROOTSYS/bin directory and the  //
 // real ROOT executable is now called "root.exe" (formerly "root").     //
 // Rootx puts up a splash screen giving some info about the current     //
-// version of ROOT and, more importanly, it sets up the required        //
+// version of ROOT and, more importantly, it sets up the required       //
 // LD_LIBRARY_PATH, SHLIB_PATH and LIBPATH environment variables        //
 // (depending on the platform).                                         //
 //                                                                      //
@@ -17,6 +17,8 @@
 
 #include "RConfigure.h"
 #include "Rtypes.h"
+
+#include "CommandLineOptionsHelp.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -218,7 +220,6 @@ static STRUCT_UTMP *SearchEntry(int n, const char *tty)
    return 0;
 }
 
-#ifndef ROOTPREFIX
 static const char *GetExePath()
 {
    static std::string exepath;
@@ -265,7 +266,6 @@ static void SetRootSys()
       delete [] ep;
    }
 }
-#endif
 
 static void SetDisplay()
 {
@@ -278,8 +278,9 @@ static void SetDisplay()
          STRUCT_UTMP *utmp_entry = SearchEntry(ReadUtmp(), tty);
          if (utmp_entry) {
             char *display = new char[sizeof(utmp_entry->ut_host) + 15];
-            char *host = new char[sizeof(utmp_entry->ut_host) + 1];
-            strncpy(host, utmp_entry->ut_host, sizeof(utmp_entry->ut_host));
+            constexpr size_t hostsize = sizeof(utmp_entry->ut_host) + 1;
+            char *host = new char[ hostsize ];
+            strncpy(host, utmp_entry->ut_host, hostsize - 1);
             host[sizeof(utmp_entry->ut_host)] = 0;
             if (host[0]) {
                if (strchr(host, ':')) {
@@ -314,7 +315,9 @@ static void SetDisplay()
 
 static void SetLibraryPath()
 {
-#ifndef ROOTLIBDIR
+#ifdef ROOTPREFIX
+   if (getenv("ROOTIGNOREPREFIX")) {
+#endif
    // Set library path for the different platforms.
 
    char *msg;
@@ -361,6 +364,8 @@ static void SetLibraryPath()
    }
 #  endif
    putenv(msg);
+#ifdef ROOTPREFIX
+   }
 #endif
 }
 
@@ -433,24 +438,7 @@ static void WaitChild()
 
 static void PrintUsage(char *pname)
 {
-   // This is a copy of the text in TApplication::GetOptions().
-
-   fprintf(stderr, "Usage: %s [-l] [-b] [-n] [-q] [dir] [[file:]data.root] [file1.C ... fileN.C]\n", pname);
-   fprintf(stderr, "Options:\n");
-   fprintf(stderr, "  -b : run in batch mode without graphics\n");
-   fprintf(stderr, "  -n : do not execute logon and logoff macros as specified in .rootrc\n");
-   fprintf(stderr, "  -q : exit after processing command line macro files\n");
-   fprintf(stderr, "  -l : do not show splash screen\n");
-   fprintf(stderr, "  -x : exit on exception\n");
-   fprintf(stderr, " dir : if dir is a valid directory cd to it before executing\n");
-   fprintf(stderr, " --notebook : execute ROOT notebook\n");
-   fprintf(stderr, "\n");
-   fprintf(stderr, "  -?       : print usage\n");
-   fprintf(stderr, "  -h       : print usage\n");
-   fprintf(stderr, "  --help   : print usage\n");
-   fprintf(stderr, "  -config  : print ./configure options\n");
-   fprintf(stderr, "  -memstat : run with memory usage monitoring\n");
-   fprintf(stderr, "\n");
+   fprintf(stderr, kCommandLineOptionsHelp, pname);
 }
 
 int main(int argc, char **argv)
@@ -458,7 +446,9 @@ int main(int argc, char **argv)
    char **argvv;
    char  arg0[kMAXPATHLEN];
 
-#ifndef ROOTPREFIX
+#ifdef ROOTPREFIX
+   if (getenv("ROOTIGNOREPREFIX")) {
+#endif
    // Try to set ROOTSYS depending on pathname of the executable
    SetRootSys();
 
@@ -466,6 +456,8 @@ int main(int argc, char **argv)
       fprintf(stderr, "%s: ROOTSYS not set. Set it before trying to run %s.\n",
               argv[0], argv[0]);
       return 1;
+   }
+#ifdef ROOTPREFIX
    }
 #endif
 
@@ -485,29 +477,27 @@ int main(int argc, char **argv)
       if (!strcmp(argv[i], "-ll"))        gNoLogo  = true;
       if (!strcmp(argv[i], "-a"))         about    = true;
       if (!strcmp(argv[i], "-config"))    gNoLogo  = true;
+      if (!strcmp(argv[i], "--version"))    gNoLogo  = true;
       if (!strcmp(argv[i], "--notebook")) notebook = true;
    }
 
    if (notebook) {
       // Build command
 #ifdef ROOTBINDIR
-      snprintf(arg0, sizeof(arg0), "%s/%s", ROOTBINDIR, ROOTNBBINARY);
-#else
-      snprintf(arg0, sizeof(arg0), "%s/bin/%s", getenv("ROOTSYS"), ROOTNBBINARY);
+      if (getenv("ROOTIGNOREPREFIX"))
+#endif
+         snprintf(arg0, sizeof(arg0), "%s/bin/%s", getenv("ROOTSYS"), ROOTNBBINARY);
+#ifdef ROOTBINDIR
+      else
+         snprintf(arg0, sizeof(arg0), "%s/%s", ROOTBINDIR, ROOTNBBINARY);
 #endif
 
       // Execute ROOT notebook binary
       execl(arg0, arg0, NULL);
-  
+
       // Exec failed
-#ifndef ROOTBINDIR
-      fprintf(stderr,
-              "%s: can't start ROOT notebook -- this option is only available when building with CMake, please check that %s/bin/%s exists\n",
-              argv[0], getenv("ROOTSYS"), ROOTNBBINARY);
-#else
-      fprintf(stderr, "%s: can't start ROOT notebook -- this option is only available when building with CMake, please check that %s/%s exists\n",
-              argv[0], ROOTBINDIR, ROOTNBBINARY);
-#endif
+      fprintf(stderr, "%s: can't start ROOT notebook -- this option is only available when building with CMake, please check that %s exists\n",
+              argv[0], arg0);
 
       return 1;
    }
@@ -604,9 +594,12 @@ int main(int argc, char **argv)
    // Build argv vector
    argvv = new char* [argc+2];
 #ifdef ROOTBINDIR
-   snprintf(arg0, sizeof(arg0), "%s/%s", ROOTBINDIR, ROOTBINARY);
-#else
-   snprintf(arg0, sizeof(arg0), "%s/bin/%s", getenv("ROOTSYS"), ROOTBINARY);
+   if (getenv("ROOTIGNOREPREFIX"))
+#endif
+      snprintf(arg0, sizeof(arg0), "%s/bin/%s", getenv("ROOTSYS"), ROOTBINARY);
+#ifdef ROOTBINDIR
+   else
+      snprintf(arg0, sizeof(arg0), "%s/%s", ROOTBINDIR, ROOTBINARY);
 #endif
    argvv[0] = arg0;
    argvv[1] = (char *) "-splash";
@@ -622,14 +615,8 @@ int main(int argc, char **argv)
    execv(arg0, argvv);
 
    // Exec failed
-#ifndef ROOTBINDIR
-   fprintf(stderr,
-           "%s: can't start ROOT -- check that %s/bin/%s exists!\n",
-           argv[0], getenv("ROOTSYS"), ROOTBINARY);
-#else
-   fprintf(stderr, "%s: can't start ROOT -- check that %s/%s exists!\n",
-           argv[0], ROOTBINDIR, ROOTBINARY);
-#endif
+   fprintf(stderr, "%s: can't start ROOT -- check that %s exists!\n",
+           argv[0], arg0);
 
    return 1;
 }

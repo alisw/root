@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TMemberInspector
+\ingroup Base
 
 Abstract base class for accessing the data-members of a class.
 Classes derived from this class can be given as argument to the
@@ -56,7 +57,7 @@ void TMemberInspector::TParentBuf::Remove(Ssiz_t startingAt)
    fBuf[startingAt] = 0;
 }
 
-ClassImp(TMemberInspector)
+ClassImp(TMemberInspector);
 
 TMemberInspector::TMemberInspector():
    fObjectPointerState(kUnset)

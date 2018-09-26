@@ -73,14 +73,14 @@ TSessionViewer *gSessionViewer = 0;
 
 const char *kConfigFile = ".proofgui.conf";
 
-ClassImp(TQueryDescription)
-ClassImp(TSessionDescription)
-ClassImp(TSessionServerFrame)
-ClassImp(TSessionFrame)
-ClassImp(TSessionQueryFrame)
-ClassImp(TSessionOutputFrame)
-ClassImp(TSessionInputFrame)
-ClassImp(TSessionViewer)
+ClassImp(TQueryDescription);
+ClassImp(TSessionDescription);
+ClassImp(TSessionServerFrame);
+ClassImp(TSessionFrame);
+ClassImp(TSessionQueryFrame);
+ClassImp(TSessionOutputFrame);
+ClassImp(TSessionInputFrame);
+ClassImp(TSessionViewer);
 
 const char *xpm_names[] = {
     "monitor01.xpm",
@@ -5812,14 +5812,7 @@ Bool_t TSessionViewer::ProcessMessage(Long_t msg, Long_t parm1, Long_t)
                   case kHelpAbout:
                      {
 #ifdef R__UNIX
-                        TString rootx;
-# ifdef ROOTBINDIR
-                        rootx = ROOTBINDIR;
-# else
-                        rootx = gSystem->Getenv("ROOTSYS");
-                        if (!rootx.IsNull()) rootx += "/bin";
-# endif
-                        rootx += "/root -a &";
+		         TString rootx = TROOT::GetBinDir() + "/root -a &";
                         gSystem->Exec(rootx);
 #else
 #ifdef WIN32

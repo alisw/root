@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_tree
+/// \notebook
 /// How to write a TClonesArray to a TTree
 ///
 /// The following tests can be run
@@ -34,7 +35,7 @@ void tclwrite(Int_t split)
 // Generate a Tree with a TClonesArray
 // The array can be split or not
    TFile f("tcl.root","recreate");
-   f.SetCompressionLevel(1); //try level 2 also
+   f.SetCompressionLevel(4); //try level 2 also
    TTree T("T","test tcl");
    TClonesArray *arr = new TClonesArray("TLine");
    TClonesArray &ar = *arr;

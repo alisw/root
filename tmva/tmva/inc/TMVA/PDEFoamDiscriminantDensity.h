@@ -32,9 +32,7 @@
 #ifndef ROOT_TMVA_PDEFoamDiscriminantDensity
 #define ROOT_TMVA_PDEFoamDiscriminantDensity
 
-#ifndef ROOT_TMVA_PDEFoamDensityBase
 #include "TMVA/PDEFoamDensityBase.h"
-#endif
 
 namespace TMVA
 {
@@ -58,7 +56,7 @@ namespace TMVA
       virtual Double_t Density(std::vector<Double_t> &Xarg, Double_t &event_density);
 
       ClassDef(PDEFoamDiscriminantDensity, 1) //Class for Discriminant density
-   };  //end of PDEFoamDiscriminantDensity
+         };  //end of PDEFoamDiscriminantDensity
 
 }  // namespace TMVA
 

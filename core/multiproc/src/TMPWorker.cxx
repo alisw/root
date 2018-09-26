@@ -1,9 +1,24 @@
-#include "TMPWorker.h"
+/* @(#)root/multiproc:$Id$ */
+// Author: Enrico Guiraud July 2015
+// Modified: G Ganis Jan 2017
+
+/*************************************************************************
+ * Copyright (C) 1995-2000, Rene Brun and Fons Rademakers.               *
+ * All rights reserved.                                                  *
+ *                                                                       *
+ * For the licensing terms see $ROOTSYS/LICENSE.                         *
+ * For the list of contributors see $ROOTSYS/README/CREDITS.             *
+ *************************************************************************/
+
 #include "MPCode.h"
 #include "MPSendRecv.h"
+#include "TEnv.h"
+#include "TError.h"
+#include "TMPWorker.h"
 #include "TSystem.h"
-#include <string>
 #include <memory> //unique_ptr
+#include <string>
+
 #include <iostream>
 
 //////////////////////////////////////////////////////////////////////////
@@ -29,21 +44,6 @@
 ///
 //////////////////////////////////////////////////////////////////////////
 
-
-
-//////////////////////////////////////////////////////////////////////////
-/// Class constructor.
-/// Note that this does not set variables like fPid or fS (worker's socket).\n
-/// These operations are handled by the Init method, which is called after
-/// forking.\n
-/// This separation is in place because the instantiation of a worker
-/// must be done once _before_ forking, while the initialization of the
-/// members must be done _after_ forking by each of the children processes.
-TMPWorker::TMPWorker() : fS(), fPid(0), fNWorker(0)
-{
-}
-
-
 //////////////////////////////////////////////////////////////////////////
 /// This method is called by children processes right after forking.
 /// Initialization of worker properties that must be delayed until after
@@ -57,6 +57,7 @@ void TMPWorker::Init(int fd, unsigned workerN)
    fS.reset(new TSocket(fd, "MPsock")); //TSocket's constructor with this signature seems much faster than TSocket(int fd)
    fPid = getpid();
    fNWorker = workerN;
+   fId = "W" + std::to_string(GetNWorker()) + "|P" + std::to_string(GetPid());
 }
 
 
@@ -65,7 +66,7 @@ void TMPWorker::Run()
    while(true) {
       MPCodeBufPair msg = MPRecv(fS.get());
       if (msg.first == MPCode::kRecvError) {
-         std::cerr << "Lost connection to client\n";
+         Error("TMPWorker::Run", "Lost connection to client\n");
          gSystem->Exit(0);
       }
 
@@ -89,21 +90,30 @@ void TMPWorker::HandleInput(MPCodeBufPair &msg)
 {
    unsigned code = msg.first;
 
-   std::string reply = "S" + std::to_string(fNWorker);
+   std::string reply = fId;
    if (code == MPCode::kMessage) {
       //general message, ignore it
       reply += ": ok";
-      MPSend(fS.get(), MPCode::kMessage, reply.data());
+      MPSend(fS.get(), MPCode::kMessage, reply.c_str());
    } else if (code == MPCode::kError) {
       //general error, ignore it
       reply += ": ko";
-      MPSend(fS.get(), MPCode::kMessage, reply.data());
+      MPSend(fS.get(), MPCode::kMessage, reply.c_str());
    } else if (code == MPCode::kShutdownOrder || code == MPCode::kFatalError) {
       //client is asking the server to shutdown or client is dying
-      MPSend(fS.get(), MPCode::kShutdownNotice, reply.data());
+      MPSend(fS.get(), MPCode::kShutdownNotice, reply.c_str());
       gSystem->Exit(0);
    } else {
       reply += ": unknown code received. code=" + std::to_string(code);
-      MPSend(fS.get(), MPCode::kError, reply.data());
+      MPSend(fS.get(), MPCode::kError, reply.c_str());
    }
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// Error sender
+
+void TMPWorker::SendError(const std::string& errmsg, unsigned int errcode)
+{
+   std::string reply = fId + ": " + errmsg;
+   MPSend(GetSocket(), errcode, reply.c_str());
 }

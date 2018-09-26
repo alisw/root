@@ -40,10 +40,6 @@
 #include "rpdconn.h"
 #include "rpdpriv.h"
 
-#ifdef R__GLOBALSTL
-namespace std { using ::string; }
-#endif
-
 static int gType = 0;
 static int gDebug = 0;
 static FILE *gLogger = 0;
@@ -637,10 +633,16 @@ int exportsock(rpdunix *conn)
 
    // Make sure it is outside the standard I/O range
    if (d == 0 || d == 1 || d == 2) {
-      int fd, natt = 1000;
-      while (natt > 0 && (fd = dup(d)) <= 2) { natt--; }
+      int fd = -1;
+      int natt = 1000;
+      while (natt > 0 && (fd = dup(d)) <= 2) {
+         if (fd >= 0 && fd != d) close(fd);
+         fd = -1;
+         natt--;
+      }
       if (natt <= 0 && fd <= 2) {
          Info("exportsock: ERROR: no free filedescriptor!");
+         close(d);
          return -1;
       }
       close(d);

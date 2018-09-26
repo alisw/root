@@ -26,14 +26,14 @@ namespace llvm {
 ///
 struct MachinePostDominatorTree : public MachineFunctionPass {
 private:
-  DominatorTreeBase<MachineBasicBlock> *DT;
+ PostDomTreeBase<MachineBasicBlock> *DT;
 
 public:
   static char ID;
 
   MachinePostDominatorTree();
 
-  ~MachinePostDominatorTree();
+  ~MachinePostDominatorTree() override;
 
   FunctionPass *createMachinePostDominatorTreePass();
 

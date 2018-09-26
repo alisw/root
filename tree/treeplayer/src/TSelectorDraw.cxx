@@ -36,7 +36,7 @@ A specialized TSelector for TTree::Draw.
 #include "TClass.h"
 #include "TColor.h"
 
-ClassImp(TSelectorDraw)
+ClassImp(TSelectorDraw);
 
 const Int_t kCustomHistogram = BIT(17);
 
@@ -99,7 +99,7 @@ TSelectorDraw::~TSelectorDraw()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Called everytime a loop on the tree(s) starts.
+/// Called every time a loop on the tree(s) starts.
 
 void TSelectorDraw::Begin(TTree *tree)
 {
@@ -119,7 +119,7 @@ void TSelectorDraw::Begin(TTree *tree)
 
    TString  opt, abrt;
    char *hdefault = (char *)"htemp";
-   char *varexp;
+   char *varexp = nullptr;
    Int_t i, j, hkeep;
    opt = option;
    opt.ToLower();
@@ -239,7 +239,7 @@ void TSelectorDraw::Begin(TTree *tree)
 
          // parse things that follow the name of the histo between '(' and ')'.
          // At this point hname contains the name of the specified histogram.
-         //   Now the syntax is exended to handle an hname of the following format
+         //   Now the syntax is extended to handle an hname of the following format
          //   hname(nBIN [[,[xlow]][,xhigh]],...)
          //   so enclosed in brackets is the binning information, xlow, xhigh, and
          //   the same for the other dimensions
@@ -376,6 +376,7 @@ void TSelectorDraw::Begin(TTree *tree)
          if (!fOldHistogram && oldObject && !oldObject->InheritsFrom(TH1::Class())) {
             abrt.Form("An object of type '%s' has the same name as the requested histo (%s)", oldObject->IsA()->GetName(), hname);
             Abort(abrt);
+            delete[] varexp;
             return;
          }
          if (fOldHistogram && !hnameplus) fOldHistogram->Reset();  // reset unless adding is wanted
@@ -398,6 +399,7 @@ void TSelectorDraw::Begin(TTree *tree)
                abrt.Form("An object of type '%s' has the same name as the requested event list (%s)",
                          oldObject->IsA()->GetName(), hname);
                Abort(abrt);
+               delete[] varexp;
                return;
             }
             if (!enlist) {
@@ -447,7 +449,7 @@ void TSelectorDraw::Begin(TTree *tree)
                      // We have been asked to reset the input list!!
                      // Let's set it aside for now ...
                      Abort("Input and output lists are the same!");
-                     delete [] varexp;
+                     delete[] varexp;
                      return;
                   }
                   evlist->Reset();
@@ -477,12 +479,17 @@ void TSelectorDraw::Begin(TTree *tree)
    if (!CompileVariables(varexp, realSelection.GetTitle())) {
       abrt.Form("Variable compilation failed: {%s,%s}", varexp, realSelection.GetTitle());
       Abort(abrt);
-      delete [] varexp;
+      delete[] varexp;
       return;
    }
-   if (fDimension > 4 && !(optpara || optcandle || opt5d)) {
+   if (fDimension > 4 && !(optpara || optcandle || opt5d || opt.Contains("goff"))) {
       Abort("Too many variables. Use the option \"para\", \"gl5d\" or \"candle\" to display more than 4 variables.");
-      delete [] varexp;
+      delete[] varexp;
+      return;
+   }
+   if (fDimension < 2 && (optpara || optcandle)) {
+      Abort("The options \"para\" and \"candle\" require at least 2 variables.");
+      delete[] varexp;
       return;
    }
 
@@ -525,6 +532,7 @@ void TSelectorDraw::Begin(TTree *tree)
       gROOT->MakeDefCanvas();
       if (!gPad) {
          Abort("Creation of default canvas failed");
+         delete[] varexp;
          return;
       }
    }
@@ -561,7 +569,12 @@ void TSelectorDraw::Begin(TTree *tree)
          hist    = fOldHistogram;
          fNbins[0] = hist->GetXaxis()->GetNbins();
       } else {
-         hist = new TH1F(hname, htitle.Data(), fNbins[0], fVmin[0], fVmax[0]);
+         TString precision = gEnv->GetValue("Hist.Precision.1D", "float");
+         if (precision.Contains("float")) {
+            hist = new TH1F(hname, htitle.Data(), fNbins[0], fVmin[0], fVmax[0]);
+         } else {
+            hist = new TH1D(hname, htitle.Data(), fNbins[0], fVmin[0], fVmax[0]);
+         }
          hist->SetLineColor(fTree->GetLineColor());
          hist->SetLineWidth(fTree->GetLineWidth());
          hist->SetLineStyle(fTree->GetLineStyle());
@@ -663,11 +676,16 @@ void TSelectorDraw::Begin(TTree *tree)
          fObject = hp;
 
       } else {
-         TH2F *h2;
+         TH2 *h2;
          if (fOldHistogram) {
             h2 = (TH2F*)fOldHistogram;
          } else {
-            h2 = new TH2F(hname, htitle.Data(), fNbins[1], fVmin[1], fVmax[1], fNbins[0], fVmin[0], fVmax[0]);
+            TString precision = gEnv->GetValue("Hist.Precision.2D", "float");
+            if (precision.Contains("float")) {
+               h2 = new TH2F(hname, htitle.Data(), fNbins[1], fVmin[1], fVmax[1], fNbins[0], fVmin[0], fVmax[0]);
+            } else {
+               h2 = new TH2D(hname, htitle.Data(), fNbins[1], fVmin[1], fVmax[1], fNbins[0], fVmin[0], fVmax[0]);
+            }
             h2->SetLineColor(fTree->GetLineColor());
             h2->SetLineWidth(fTree->GetLineWidth());
             h2->SetLineStyle(fTree->GetLineStyle());
@@ -712,8 +730,7 @@ void TSelectorDraw::Begin(TTree *tree)
          if (fDimension == 3 && opt.Contains("prof")) {
             fNbins[1] = gEnv->GetValue("Hist.Binning.3D.Profy", 20);
             fNbins[2] = gEnv->GetValue("Hist.Binning.3D.Profx", 20);
-         }
-         if (fDimension == 3 && opt.Contains("col")) {
+         } else if (fDimension == 3 && opt.Contains("col")) {
             fNbins[0] = gEnv->GetValue("Hist.Binning.2D.y", 40);
             fNbins[1] = gEnv->GetValue("Hist.Binning.2D.x", 40);
          }
@@ -829,11 +846,16 @@ void TSelectorDraw::Begin(TTree *tree)
          fObject = h2;
          fAction = 33;
       } else {
-         TH3F *h3;
+         TH3 *h3;
          if (fOldHistogram) {
             h3 = (TH3F*)fOldHistogram;
          } else {
-            h3 = new TH3F(hname, htitle.Data(), fNbins[2], fVmin[2], fVmax[2], fNbins[1], fVmin[1], fVmax[1], fNbins[0], fVmin[0], fVmax[0]);
+            TString precision = gEnv->GetValue("Hist.Precision.3D", "float");
+            if (precision.Contains("float")) {
+               h3 = new TH3F(hname, htitle.Data(), fNbins[2], fVmin[2], fVmax[2], fNbins[1], fVmin[1], fVmax[1], fNbins[0], fVmin[0], fVmax[0]);
+            } else {
+               h3 = new TH3D(hname, htitle.Data(), fNbins[2], fVmin[2], fVmax[2], fNbins[1], fVmin[1], fVmax[1], fNbins[0], fVmin[0], fVmax[0]);
+            }
             h3->SetLineColor(fTree->GetLineColor());
             h3->SetLineWidth(fTree->GetLineWidth());
             h3->SetLineStyle(fTree->GetLineStyle());
@@ -884,8 +906,8 @@ void TSelectorDraw::Begin(TTree *tree)
       else if (opt5d) fAction = 8;
       else            fAction = 6;
    }
-   if (hkeep) delete [] varexp;
-   if (hnamealloc) delete [] hnamealloc;
+   if (varexp) delete[] varexp;
+   if (hnamealloc) delete[] hnamealloc;
    for (i = 0; i < fValSize; ++i)
       fVarMultiple[i] = kFALSE;
    fSelectMultiple = kFALSE;
@@ -939,7 +961,7 @@ void TSelectorDraw::ClearFormula()
 ///     varexp = x  simplest case: draw a 1-Dim distribution of column named x
 ///            = sqrt(x)         : draw distribution of sqrt(x)
 ///            = x*y/z
-///            = y:sqrt(x) 2-Dim dsitribution of y versus sqrt(x)
+///            = y:sqrt(x) 2-Dim distribution of y versus sqrt(x)
 ///
 /// selection is an expression with a combination of the columns
 ///
@@ -975,14 +997,17 @@ Bool_t TSelectorDraw::CompileVariables(const char *varexp, const char *selection
    nch = strlen(varexp);
    if (nch == 0) {
       fDimension = 0;
-      fManager = new TTreeFormulaManager();
-      if (fSelect) fManager->Add(fSelect);
+      if (fSelect) {
+         fManager = fSelect->GetManager();
+      }
       fTree->ResetBit(TTree::kForceRead);
 
-      fManager->Sync();
+      if (fManager) {
+         fManager->Sync();
 
-      if (fManager->GetMultiplicity() == -1) fTree->SetBit(TTree::kForceRead);
-      if (fManager->GetMultiplicity() >= 1) fMultiplicity = fManager->GetMultiplicity();
+         if (fManager->GetMultiplicity() == -1) fTree->SetBit(TTree::kForceRead);
+         if (fManager->GetMultiplicity() >= 1) fMultiplicity = fManager->GetMultiplicity();
+      }
 
       return kTRUE;
    }
@@ -1032,7 +1057,7 @@ Bool_t TSelectorDraw::CompileVariables(const char *varexp, const char *selection
 /// By default TTree::Draw creates the arrays obtained
 /// with all GetVal and GetW with a length corresponding to the
 /// parameter fEstimate. By default fEstimate=10000 and can be modified
-/// via TTree::SetEstimate. A possible recipee is to do
+/// via TTree::SetEstimate. A possible recipe is to do
 ///
 ///     tree->SetEstimate(tree->GetEntries());
 ///
@@ -1433,7 +1458,7 @@ void TSelectorDraw::TakeAction()
       h2->SetEntries(fNfill);
       h2->SetMinimum(fVmin[2]);
       h2->SetMaximum(fVmax[2]);
-      // Fill the graphs acording to the color
+      // Fill the graphs according to the color
       for (i = 0; i < fNfill; i++) {
          col = Int_t(ncolors * ((fVal[2][i] - fVmin[2]) / (fVmax[2] - fVmin[2])));
          if (col < 0) col = 0;

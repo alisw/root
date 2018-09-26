@@ -52,10 +52,10 @@ namespace TMVA{
 
       RQ_OBJECT("StatDialogBDT")
 
-   public:
+         public:
 
       StatDialogBDT(TString dataset, const TGWindow* p, TString wfile, 
-                     TString methName = "BDT", Int_t itree = 0 );
+                    TString methName = "BDT", Int_t itree = 0 );
       virtual ~StatDialogBDT() {
          TMVA::DecisionTreeNode::fgIsTraining=false;
          fThis = 0;
@@ -114,7 +114,7 @@ namespace TMVA{
    };
    // ========================================================================================
 
-   static std::vector<TControlBar*> BDT_Global__cbar;
+   extern std::vector<TControlBar*> BDT_Global__cbar;
 
    // intermediate GUI
    void BDT(TString dataset, const TString& fin = "TMVA.root" );

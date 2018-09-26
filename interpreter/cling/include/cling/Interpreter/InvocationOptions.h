@@ -13,17 +13,74 @@
 #include <string>
 #include <vector>
 
+namespace clang {
+  class LangOptions;
+}
+
 namespace cling {
+
+  ///\brief Class that stores options that are used by both cling and
+  /// clang::CompilerInvocation.
+  ///
+  class CompilerOptions {
+  public:
+    /// \brief Construct CompilerOptions from given arguments. When argc & argv
+    /// are 0, all arguments are saved into Remaining to pass to clang. If argc
+    /// or argv is 0, caller is must fill in Remaining with any arguments that
+    /// should be passed to clang.
+    ///
+    CompilerOptions(int argc = 0, const char* const *argv = nullptr);
+
+    ///\brief Parse argc, and argv into our variables.
+    ///
+    ///\param [in] argc - argument count
+    ///\param [in] argv - arguments
+    ///\param [out] Inputs - save all arguments that are inputs/files here
+    ///
+    void Parse(int argc, const char* const argv[],
+               std::vector<std::string>* Inputs = nullptr);
+
+    ///\brief By default clang will try to set up an Interpreter with features
+    /// that match how it was compiled.  There are cases; however, where the
+    /// client is asking for something so specific (i.e './cling -std=gnu++11'
+    /// or './cling -x c') that this shouldn't be done.  This will return false
+    /// in those cases.
+    ///
+    bool DefaultLanguage(const clang::LangOptions* = nullptr) const;
+
+    unsigned Language : 1;
+    unsigned ResourceDir : 1;
+    unsigned SysRoot : 1;
+    unsigned NoBuiltinInc : 1;
+    unsigned NoCXXInc : 1;
+    unsigned StdVersion : 1;
+    unsigned StdLib : 1;
+    unsigned HasOutput : 1;
+    unsigned Verbose : 1;
+    unsigned CxxModules : 1;
+    unsigned CUDA : 1;
+    /// \brief The output path of any C++ PCMs we're building on demand.
+    /// Equal to ModuleCachePath in the HeaderSearchOptions.
+    std::string CachePath;
+    // If not empty, the name of the module we're currently compiling.
+    std::string ModuleName;
+    /// \brief Custom path of the CUDA toolkit
+    std::string CUDAPath;
+    /// \brief Architecture level of the CUDA gpu. Necessary for the
+    /// NVIDIA fatbinary tool.
+    std::string CUDAGpuArch;
+    /// \brief Contains arguments, which will passed to the nvidia tool
+    /// fatbinary.
+    std::vector<std::string> CUDAFatbinaryArgs;
+
+    ///\brief The remaining arguments to pass to clang.
+    ///
+    std::vector<const char*> Remaining;
+  };
+
   class InvocationOptions {
   public:
-    InvocationOptions():
-      ErrorOut(false), NoLogo(false), ShowVersion(false), Verbose(false),
-      Help(false), MetaString(".") {}
-    bool ErrorOut;
-    bool NoLogo;
-    bool ShowVersion;
-    bool Verbose;
-    bool Help;
+    InvocationOptions(int argc, const char* const argv[]);
 
     /// \brief A line starting with this string is assumed to contain a
     ///        directive for the MetaProcessor. Defaults to "."
@@ -32,12 +89,21 @@ namespace cling {
     std::vector<std::string> LibsToLoad;
     std::vector<std::string> LibSearchPath;
     std::vector<std::string> Inputs;
+    CompilerOptions CompilerOpts;
 
-    static InvocationOptions CreateFromArgs(int argc, const char* const argv[],
-                                            std::vector<unsigned>& leftoverArgs
-                                            /* , Diagnostic &Diags */);
+    unsigned ErrorOut : 1;
+    unsigned NoLogo : 1;
+    unsigned ShowVersion : 1;
+    unsigned Help : 1;
+    unsigned NoRuntime : 1;
+    bool Verbose() const { return CompilerOpts.Verbose; }
 
-    void PrintHelp();
+    static void PrintHelp();
+
+    // Interactive means no input (or one input that's "-")
+    bool IsInteractive() const {
+      return Inputs.empty() || (Inputs.size() == 1 && Inputs[0] == "-");
+    }
   };
 }
 

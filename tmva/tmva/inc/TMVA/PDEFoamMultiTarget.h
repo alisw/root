@@ -32,9 +32,7 @@
 #ifndef ROOT_TMVA_PDEFoamMultiTarget
 #define ROOT_TMVA_PDEFoamMultiTarget
 
-#ifndef ROOT_TMVA_PDEFoamEvent
 #include "TMVA/PDEFoamEvent.h"
-#endif
 
 namespace TMVA
 {
@@ -64,7 +62,7 @@ namespace TMVA
 
       // ---------- ROOT class definition
       ClassDef(PDEFoamMultiTarget, 1) // Tree of PDEFoamCells
-   }; // end of PDEFoamMultiTarget
+         }; // end of PDEFoamMultiTarget
 
 }  // namespace TMVA
 

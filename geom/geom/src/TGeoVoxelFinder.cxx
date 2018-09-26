@@ -26,14 +26,13 @@ Full description with examples and pictures
 #include "TBuffer.h"
 #include "TObject.h"
 #include "TMath.h"
-#include "TThread.h"
 #include "TGeoMatrix.h"
 #include "TGeoBBox.h"
 #include "TGeoNode.h"
 #include "TGeoManager.h"
 #include "TGeoStateInfo.h"
 
-ClassImp(TGeoVoxelFinder)
+ClassImp(TGeoVoxelFinder);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor

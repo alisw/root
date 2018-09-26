@@ -87,7 +87,7 @@ namespace {
          return 0;
       }
 
-      args = Py_BuildValue( (char*)"sO{}", name.c_str(), pybases );
+      args = Py_BuildValue( (char*)"sO{}", Cppyy::GetName(name).c_str(), pybases );
       PyObject* pyclass = ((PyTypeObject*)pymeta)->tp_new( (PyTypeObject*)pymeta, args, NULL );
       Py_DECREF( args );
       Py_DECREF( pymeta );
@@ -170,51 +170,6 @@ namespace {
          }
       }
    } initSTLTypes_;
-
-   Bool_t LoadDictionaryForSTLType( const std::string& tname, void* /* klass */ )
-   {
-   // if name is of a known STL class, tell CINT to load the dll(s), always reset klass
-
-      std::string sub = tname.substr( 0, tname.find( "<" ) );
-      if ( gSTLTypes.find( sub ) != gSTLTypes.end() ) {
-
-      // strip std:: part as needed to form proper file name
-         if ( sub.substr( 0, 5 ) == "std::" )
-            sub = sub.substr( 5, std::string::npos );
-
-      // tell CINT to go for it
-         gROOT->ProcessLine( (std::string( "#include <" ) + sub + ">").c_str() );
-
-      // prevent second attempt to load by erasing name
-         gSTLTypes.erase( gSTLTypes.find( sub ) );
-         gSTLTypes.erase( gSTLTypes.find( "std::" + sub ) );
-
-         return kTRUE;
-
-      } else if ( gSTLExceptions.find( sub ) != gSTLExceptions.end() ) {
-      // removal is required or the dictionary can't be updated properly
-         // TODO: WORK HERE if ( klass != 0 )
-	 //            TClass::RemoveClass( (TClass*)klass );
-
-      // load stdexcept, which contains all std exceptions
-         gROOT->ProcessLine( "#include <stdexcept>" );
-         gSTLExceptions.clear();   // completely done with std exceptions
-
-      // <stdexcept> will load <exception> for the std::exception base class
-         std::set< std::string >::iterator excpos = gSTLTypes.find( "exception" );
-         if ( excpos != gSTLTypes.end() ) {
-            gSTLTypes.erase( excpos );
-            gSTLTypes.erase( gSTLTypes.find( "std::exception" ) );
-         }
-
-         return kTRUE;
-      }
-
-   // this point is only reached if this is not an STL class, notify that no
-   // changes were made
-      return kFALSE;
-   }
-
 } // unnamed namespace
 
 
@@ -568,7 +523,8 @@ PyObject* PyROOT::CreateScopeProxy( const std::string& scope_name, PyObject* par
 // determine complete scope name, if a python parent has been given
    std::string scName = "";
    if ( parent ) {
-      PyObject* pyparent = PyObject_GetAttr( parent, PyStrings::gName );
+      PyObject* pyparent = PyObject_GetAttr( parent, PyStrings::gCppName );
+      if ( ! pyparent ) pyparent = PyObject_GetAttr( parent, PyStrings::gName );
       if ( ! pyparent ) {
          PyErr_Format( PyExc_SystemError, "given scope has no name for %s", name.c_str() );
          return 0;
@@ -587,15 +543,6 @@ PyObject* PyROOT::CreateScopeProxy( const std::string& scope_name, PyObject* par
 // retrieve ROOT class (this verifies name, and is therefore done first)
    const std::string& lookup = parent ? (scName+"::"+name) : name;
    Cppyy::TCppScope_t klass = Cppyy::GetScope( lookup );
-
-   if ( ! (Bool_t)klass || Cppyy::GetNumMethods( klass ) == 0 ) {
-   // special action for STL classes to enforce loading dict lib
-   // TODO: LoadDictionaryForSTLType should not be necessary with Cling
-      if ( LoadDictionaryForSTLType( name, (void*)klass /* TODO: VERY WRONG */ ) ) {
-      // lookup again, we (may) now have a full dictionary
-         klass = Cppyy::GetScope( lookup );
-      }
-   }
 
    if ( ! (Bool_t)klass && gInterpreter->CheckClassTemplate( lookup.c_str() ) ) {
    // a "naked" templated class is requested: return callable proxy for instantiations
@@ -695,7 +642,7 @@ PyObject* PyROOT::CreateScopeProxy( const std::string& scope_name, PyObject* par
    const std::string& actual = Cppyy::GetFinalName( klass );
 
 // first try to retrieve an existing class representation
-   PyObject* pyactual = PyROOT_PyUnicode_FromString( actual.c_str() );
+   PyObject* pyactual = PyROOT_PyUnicode_FromString( Cppyy::GetName(actual).c_str() );
    PyObject* pyclass = force ? 0 : PyObject_GetAttr( parent, pyactual );
 
    Bool_t bClassFound = pyclass ? kTRUE : kFALSE;
@@ -719,17 +666,15 @@ PyObject* PyROOT::CreateScopeProxy( const std::string& scope_name, PyObject* par
          // something failed in building the dictionary
             Py_DECREF( pyclass );
             pyclass = 0;
-         } else
+         } else {
             PyObject_SetAttr( parent, pyactual, pyclass );
+         }
       }
 
    }
 
    if ( pyclass && name != actual )     // class exists, but is typedef-ed: simply map reference
       PyObject_SetAttrString( parent, const_cast< char* >( name.c_str() ), pyclass );
-
-   Py_DECREF( pyactual );
-   Py_DECREF( parent );
 
    if ( pyclass && ! bClassFound ) {
    // store a ref from ROOT TClass to new python class
@@ -739,6 +684,32 @@ PyObject* PyROOT::CreateScopeProxy( const std::string& scope_name, PyObject* par
       PyObject_SetAttrString( pyclass, "__scope__", PyROOT_PyUnicode_FromString( scName.c_str() ) );
    }
 
+   // add __cppname__ to keep the C++ name of the class/scope
+   PyObject_SetAttr( pyclass, PyStrings::gCppName, PyROOT_PyUnicode_FromString( actual.c_str() ) );
+
+   // add __module__  (see https://docs.python.org/3/c-api/typeobj.html#c.PyTypeObject.tp_name) 
+   std::string module;
+   if( parent == gRootModule) {
+      module = "ROOT";
+   } else {
+      PyObject* _name_ =  PyObject_GetAttr(parent, PyStrings::gName);
+      PyObject* _module_ =  PyObject_GetAttr(parent, PyStrings::gModule);
+      if(_module_) {
+         module = PyROOT_PyUnicode_AsString(_module_);
+         module += ".";
+         Py_DECREF(_module_);
+      }
+      if(_name_) {
+         module += PyROOT_PyUnicode_AsString(_name_);
+         Py_DECREF(_name_);
+      }
+   }
+   PyObject_SetAttr( pyclass, PyStrings::gModule, PyROOT_PyUnicode_FromString( module.c_str()) );
+
+   Py_DECREF( pyactual );
+   Py_DECREF( parent );
+
+
    if ( ! bClassFound ) {               // add python-style features to newly minted classes
       if ( ! Pythonize( pyclass, actual ) ) {
          Py_XDECREF( pyclass );
@@ -747,7 +718,7 @@ PyObject* PyROOT::CreateScopeProxy( const std::string& scope_name, PyObject* par
    }
 
 
-   if ( pyclass && Cppyy::IsNamespace( klass ) && actual != "ROOT" ) {
+   if ( pyclass && actual != "ROOT" ) {
    // add to sys.modules to allow importing from this module
       std::string pyfullname = lookup;
       std::string::size_type pos = pyfullname.find( "::" );

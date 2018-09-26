@@ -55,7 +55,7 @@
 // The ROOT HTML widget. A derivate of TGView.
 //_____________________________________________________________________________
 
-ClassImp(TGHtml)
+ClassImp(TGHtml);
 
 int HtmlTraceMask = 0; //HtmlTrace_Table1 | HtmlTrace_Table4;
 int HtmlDepth = 0;
@@ -72,6 +72,8 @@ int HtmlDepth = 0;
 
 TGHtml::TGHtml(const TGWindow *p, int w, int h, int id) : TGView(p, w, h, id)
 {
+   SetBit(kIsHtmlView);
+
    int i;
 
    fExiting = 0;

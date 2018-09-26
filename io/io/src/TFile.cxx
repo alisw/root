@@ -71,7 +71,7 @@ End_Macro
 The structure of a directory is shown in TDirectoryFile::TDirectoryFile
 */
 
-#include "RConfig.h"
+#include <ROOT/RConfig.h>
 
 #ifdef R__LINUX
 // for posix_fadvise
@@ -132,6 +132,7 @@ The structure of a directory is shown in TDirectoryFile::TDirectoryFile
 #include "TSchemaRuleSet.h"
 #include "TThreadSlots.h"
 #include "TGlobal.h"
+#include "ROOT/RMakeUnique.hxx"
 
 using std::sqrt;
 
@@ -147,10 +148,14 @@ Bool_t   TFile::fgCacheFileForce = kFALSE;
 Bool_t   TFile::fgCacheFileDisconnected = kTRUE;
 UInt_t   TFile::fgOpenTimeout = TFile::kEternalTimeout;
 Bool_t   TFile::fgOnlyStaged = 0;
+#ifdef R__USE_IMT
+ROOT::TRWSpinLock TFile::fgRwLock;
+ROOT::Internal::RConcurrentHashColl TFile::fgTsSIHashes;
+#endif
 
 const Int_t kBEGIN = 100;
 
-ClassImp(TFile)
+ClassImp(TFile);
 
 //*-*x17 macros/layout_file
 // Needed to add the "fake" global gFile to the list of globals.
@@ -160,7 +165,7 @@ AddPseudoGlobals() {
    // User "gCling" as synonym for "libCore static initialization has happened".
    // This code here must not trigger it.
    TGlobalMappedFunction::Add(new TGlobalMappedFunction("gFile", "TFile*",
-                                 (TGlobalMappedFunction::GlobalFunc_t)&TFile::CurrentFile));
+            (TGlobalMappedFunction::GlobalFunc_t)((void*)&TFile::CurrentFile)));
 }
 } gAddPseudoGlobals;
 }
@@ -520,7 +525,7 @@ TFile::TFile(const char *fname1, Option_t *option, const char *ftitle, Int_t com
 zombie:
    // error in file opening occurred, make this object a zombie
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfClosedObjects()->Add(this);
    }
    MakeZombie();
@@ -542,6 +547,17 @@ TFile::~TFile()
 {
    Close();
 
+   // In case where the TFile is still open at 'tear-down' time the order of operation will be
+   // call Close("nodelete")
+   // then later call delete TFile
+   // which means that at this point we might still have object held and those
+   // might requires a 'valid' TFile object in their desctructor (for example,
+   // TTree call's GetReadCache which expects a non-null fCacheReadMap).
+   // So delete the objects (if any) now.
+
+   if (fList)
+      fList->Delete("slow");
+
    SafeDelete(fAsyncHandle);
    SafeDelete(fCacheRead);
    SafeDelete(fCacheReadMap);
@@ -553,7 +569,7 @@ TFile::~TFile()
    SafeDelete(fOpenPhases);
 
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfClosedObjects()->Remove(this);
       gROOT->GetUUIDs()->RemoveUUID(GetUniqueID());
    }
@@ -836,7 +852,7 @@ void TFile::Init(Bool_t create)
    }
 
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfFiles()->Add(this);
       gROOT->GetUUIDs()->AddUUID(fUUID,this);
    }
@@ -850,12 +866,15 @@ void TFile::Init(Bool_t create)
          if (fSeekInfo > fBEGIN) {
             ReadStreamerInfo();
             if (IsZombie()) {
-               R__LOCKGUARD2(gROOTMutex);
+               R__LOCKGUARD(gROOTMutex);
                gROOT->GetListOfFiles()->Remove(this);
                goto zombie;
             }
          } else if (fVersion != gROOT->GetVersionInt() && fVersion > 30000) {
-            Warning("Init","no StreamerInfo found in %s therefore preventing schema evolution when reading this file.",GetName());
+            // Don't complain about missing streamer info for empty files.
+            if (fKeys->GetSize()) {
+               Warning("Init","no StreamerInfo found in %s therefore preventing schema evolution when reading this file.",GetName());
+            }
          }
       }
    }
@@ -873,7 +892,7 @@ void TFile::Init(Bool_t create)
 
 zombie:
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfClosedObjects()->Add(this);
    }
    // error in file opening occurred, make this object a zombie
@@ -932,7 +951,7 @@ void TFile::Close(Option_t *option)
    // If gDirectory points to this object or any of the nested
    // TDirectoryFile, TDirectoryFile::Close will induce the proper cd.
    fMustFlush = kFALSE; // Make sure there is only one Flush.
-   TDirectoryFile::Close();
+   TDirectoryFile::Close(option);
 
    if (IsWritable()) {
       TFree *f1 = (TFree*)fFree->First();
@@ -979,7 +998,7 @@ void TFile::Close(Option_t *option)
    pidDeleted.Delete();
 
    if (!IsZombie()) {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfFiles()->Remove(this);
       gROOT->GetListOfBrowsers()->RecursiveRemove(this);
       gROOT->GetListOfClosedObjects()->Add(this);
@@ -1300,54 +1319,83 @@ const TList *TFile::GetStreamerInfoCache()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// See documentation of GetStreamerInfoList for more details.
+/// This is an internal method which returns the list of streamer infos and also
+/// information about the success of the operation.
+
+std::pair<TList *, Int_t> TFile::GetStreamerInfoListImpl(bool lookupSICache)
+{
+   if (fIsPcmFile) return {nullptr, 1}; // No schema evolution for ROOT PCM files.
+
+   TList *list = 0;
+   if (fSeekInfo) {
+      TDirectory::TContext ctxt(this); // gFile and gDirectory used in ReadObj
+      auto key = std::make_unique<TKey>(this);
+      std::vector<char> buffer(fNbytesInfo+1);
+      auto buf = buffer.data();
+      Seek(fSeekInfo);
+      if (ReadBuffer(buf,fNbytesInfo)) {
+         // ReadBuffer returns kTRUE in case of failure.
+         Warning("GetRecordHeader","%s: failed to read the StreamerInfo data from disk.",
+                 GetName());
+         return {nullptr, 1};
+      }
+
+#ifdef R__USE_IMT
+      if (lookupSICache) {
+         if (!fgTsSIHashes.Insert(buf,fNbytesInfo)) {
+            if (gDebug > 0) Info("GetStreamerInfo", "The streamer info record for file %s has already been treated, skipping it.", GetName());
+            return {nullptr, 0};
+         }
+      }
+#else
+      (void) lookupSICache;
+#endif
+      key->ReadKeyBuffer(buf);
+      list = dynamic_cast<TList*>(key->ReadObjWithBuffer(buffer.data()));
+      if (list) list->SetOwner();
+   } else {
+      list = (TList*)Get("StreamerInfo"); //for versions 2.26 (never released)
+   }
+
+   // Before giving up, try to invoke GetStreamerInfoList, in case we are
+   // in a call stack which started from an inherited class such as TXMLFile or
+   // TSQLFile
+
+   if (!list) list = GetStreamerInfoList();
+
+   if (list == 0) {
+      Info("GetStreamerInfoList", "cannot find the StreamerInfo record in file %s",
+           GetName());
+      return {nullptr, 1};
+   }
+
+   return {list, 0};
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Read the list of TStreamerInfo objects written to this file.
 ///
 /// The function returns a TList. It is the user's responsibility
 /// to delete the list created by this function.
 ///
+/// Note the list, in addition to TStreamerInfo object, contains sometimes
+/// a TList named 'listOfRules' and containing the schema evolution rules
+/// related to the file's content.
+///
 /// Using the list, one can access additional information, e.g.:
 /// ~~~{.cpp}
 /// TFile f("myfile.root");
 /// auto list = f.GetStreamerInfoList();
-/// auto info = (TStreamerInfo*)list->FindObject("MyClass");
-/// auto classversionid = info->GetClassVersion();
+/// auto info = dynamic_cast<TStreamerInfo*>(list->FindObject("MyClass"));
+/// if (info) auto classversionid = info->GetClassVersion();
 /// delete list;
 /// ~~~
 ///
 
 TList *TFile::GetStreamerInfoList()
 {
-   if (fIsPcmFile) return 0; // No schema evolution for ROOT PCM files.
-
-   TList *list = 0;
-   if (fSeekInfo) {
-      TDirectory::TContext ctxt(this); // gFile and gDirectory used in ReadObj
-      TKey *key = new TKey(this);
-      char *buffer = new char[fNbytesInfo+1];
-      char *buf    = buffer;
-      Seek(fSeekInfo);
-      if (ReadBuffer(buf,fNbytesInfo)) {
-         // ReadBuffer returns kTRUE in case of failure.
-         Warning("GetRecordHeader","%s: failed to read the StreamerInfo data from disk.",
-                 GetName());
-         return 0;
-      }
-      key->ReadKeyBuffer(buf);
-      list = dynamic_cast<TList*>(key->ReadObjWithBuffer(buffer));
-      if (list) list->SetOwner();
-      delete [] buffer;
-      delete key;
-   } else {
-      list = (TList*)Get("StreamerInfo"); //for versions 2.26 (never released)
-   }
-
-   if (list == 0) {
-      Info("GetStreamerInfoList", "cannot find the StreamerInfo record in file %s",
-           GetName());
-      return 0;
-   }
-
-   return list;
+   return GetStreamerInfoListImpl(/*lookupSICache*/ false).first;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1443,9 +1491,22 @@ void TFile::MakeFree(Long64_t first, Long64_t last)
 ///     20010404/150443  At:403130    N=4548      StreamerInfo   CX =  3.65
 ///     20010404/150443  At:407678    N=86        FreeSegments
 ///     20010404/150443  At:407764    N=1         END
+///
+/// If the parameter opt contains "forComp", the Date/Time is ommitted
+/// and the decompressed size is also printed.
+///
+///    Record_Adress Logical_Record_Length  Key_Length Object_Record_Length ClassName  CompressionFactor
+///
+/// Example of output
+///
 
-void TFile::Map()
+
+void TFile::Map(Option_t *opt)
 {
+   TString options(opt);
+   options.ToLower();
+   bool forComp = options.Contains("forcomp");
+
    Short_t  keylen,cycle;
    UInt_t   datime;
    Int_t    nbytes,date,time,objlen,nwheader;
@@ -1461,6 +1522,8 @@ void TFile::Map()
 
    char header[kBEGIN];
    char classname[512];
+
+   unsigned char nDigits = std::log10(fEND) + 1;
 
    while (idcur < fEND) {
       Seek(idcur);
@@ -1506,15 +1569,29 @@ void TFile::Map()
       if (idcur == fSeekInfo) strlcpy(classname,"StreamerInfo",512);
       if (idcur == fSeekKeys) strlcpy(classname,"KeysList",512);
       TDatime::GetDateTime(datime, date, time);
-      if (objlen != nbytes-keylen) {
-         Float_t cx = Float_t(objlen+keylen)/Float_t(nbytes);
-         Printf("%d/%06d  At:%lld  N=%-8d  %-14s CX = %5.2f",date,time,idcur,nbytes,classname,cx);
+      if (!forComp) {
+         if (objlen != nbytes - keylen) {
+            Float_t cx = Float_t(objlen + keylen) / Float_t(nbytes);
+            Printf("%d/%06d  At:%-*lld  N=%-8d  %-14s CX = %5.2f", date, time, nDigits + 1, idcur, nbytes, classname,
+                   cx);
+         } else {
+            Printf("%d/%06d  At:%-*lld  N=%-8d  %-14s", date, time, nDigits + 1, idcur, nbytes, classname);
+         }
       } else {
-         Printf("%d/%06d  At:%lld  N=%-8d  %-14s",date,time,idcur,nbytes,classname);
+         // Printing to help compare two files.
+         if (objlen != nbytes - keylen) {
+            Float_t cx = Float_t(objlen + keylen) / Float_t(nbytes);
+            Printf("At:%-*lld  N=%-8d K=%-3d O=%-8d  %-14s CX = %5.2f", nDigits+1, idcur, nbytes, keylen, objlen, classname, cx);
+         } else {
+            Printf("At:%-*lld  N=%-8d K=%-3d O=%-8d  %-14s CX =  1", nDigits+1, idcur, nbytes, keylen, objlen, classname);
+         }
       }
       idcur += nbytes;
    }
-   Printf("%d/%06d  At:%lld  N=%-8d  %-14s",date,time,idcur,1,"END");
+   if (!forComp)
+      Printf("%d/%06d  At:%-*lld  N=%-8d  %-14s",date,time, nDigits+1, idcur,1,"END");
+   else
+      Printf("At:%-*lld  N=%-8d K=    O=          %-14s", nDigits+1, idcur,1,"END");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1697,7 +1774,7 @@ Bool_t TFile::ReadBuffers(char *buf, Long64_t *pos, Int_t *len, Int_t nbuf)
             fgBytesRead     -= extra;
             n = 0;
          }
-         curbegin = pos[i];
+         curbegin = i < nbuf ? pos[i] : 0;
       }
    }
    if (buf2) delete [] buf2;
@@ -1795,23 +1872,37 @@ TProcessID  *TFile::ReadProcessID(UShort_t pidf)
       //file->Error("ReadProcessID","Cannot find %s in file %s",pidname,file->GetName());
       return pid;
    }
-      //check that a similar pid is not already registered in fgPIDs
+
+   //check that a similar pid is not already registered in fgPIDs
    TObjArray *pidslist = TProcessID::GetPIDs();
    TIter next(pidslist);
    TProcessID *p;
+   bool found = false;
+   R__RWLOCK_ACQUIRE_READ(fgRwLock);
    while ((p = (TProcessID*)next())) {
       if (!strcmp(p->GetTitle(),pid->GetTitle())) {
-         delete pid;
-         pids->AddAtAndExpand(p,pidf);
-         p->IncrementCount();
-         return p;
+         found = true;
+         break;
       }
    }
+   R__RWLOCK_RELEASE_READ(fgRwLock);
+
+   if (found) {
+      delete pid;
+      pids->AddAtAndExpand(p,pidf);
+      p->IncrementCount();
+      return p;
+   }
+
    pids->AddAtAndExpand(pid,pidf);
    pid->IncrementCount();
+
+   R__RWLOCK_ACQUIRE_WRITE(fgRwLock);
    pidslist->Add(pid);
    Int_t ind = pidslist->IndexOf(pid);
    pid->SetUniqueID((UInt_t)ind);
+   R__RWLOCK_RELEASE_WRITE(fgRwLock);
+
    return pid;
 }
 
@@ -2116,8 +2207,8 @@ void TFile::SetCompressionAlgorithm(Int_t algorithm)
 {
    if (algorithm < 0 || algorithm >= ROOT::kUndefinedCompressionAlgorithm) algorithm = 0;
    if (fCompress < 0) {
-      // if the level is not defined yet use 1 as a default
-      fCompress = 100 * algorithm + 1;
+      // if the level is not defined yet use 4 as a default (was 1 for ZLIB)
+      fCompress = 100 * algorithm + 4;
    } else {
       int level = fCompress % 100;
       fCompress = 100 * algorithm + level;
@@ -2181,7 +2272,7 @@ void TFile::SetCacheRead(TFileCacheRead *cache, TObject* tree, ECacheAction acti
          // The only addition to fCacheReadMap is via an interface that takes
          // a TFileCacheRead* so the C-cast is safe.
          TFileCacheRead* tpf = (TFileCacheRead *)fCacheReadMap->GetValue(tree);
-         fCacheReadMap->RemoveEntry(tree);
+         fCacheReadMap->Remove(tree);
          if (tpf && (tpf->GetFile() == this) && (action != kDoNotDisconnect)) tpf->SetFile(0, action);
       }
    }
@@ -2354,34 +2445,65 @@ Int_t TFile::WriteBufferViaCache(const char *buf, Int_t len)
 void TFile::WriteFree()
 {
    //*-* Delete old record if it exists
-   if (fSeekFree != 0){
+   if (fSeekFree != 0) {
       MakeFree(fSeekFree, fSeekFree + fNbytesFree -1);
    }
 
-   Int_t nbytes = 0;
-   TFree *afree;
-   TIter next (fFree);
-   while ((afree = (TFree*) next())) {
-      nbytes += afree->Sizeof();
-   }
-   if (!nbytes) return;
+   Bool_t largeFile = (fEND > TFile::kStartBigFile);
 
-   TKey *key    = new TKey(fName,fTitle,IsA(),nbytes,this);
-   if (key->GetSeekKey() == 0) {
+   auto createKey = [this]() {
+      Int_t nbytes = 0;
+      TFree *afree;
+      TIter next (fFree);
+      while ((afree = (TFree*) next())) {
+         nbytes += afree->Sizeof();
+      }
+      if (!nbytes) return (TKey*)nullptr;
+
+      TKey *key = new TKey(fName,fTitle,IsA(),nbytes,this);
+
+      if (key->GetSeekKey() == 0) {
+         delete key;
+         return (TKey*)nullptr;
+      }
+      return key;
+   };
+
+   TKey *key = createKey();
+   if (!key) return;
+
+   if (!largeFile && (fEND > TFile::kStartBigFile)) {
+      // The free block list is large enough to bring the file to larger
+      // than 2Gb, the references/offsets are now 64bits in the output
+      // so we need to redo the calculattion since the list of free block
+      // information will not fit in the original size.
+      key->Delete();
       delete key;
-      return;
+
+      key = createKey();
+      if (!key) return;
    }
+
+   Int_t nbytes = key->GetObjlen();
    char *buffer = key->GetBuffer();
    char *start = buffer;
 
-   next.Reset();
+   TIter next (fFree);
+   TFree *afree;
    while ((afree = (TFree*) next())) {
+      // We could 'waste' time here and double check that
+      //   (buffer+afree->Sizeof() < (start+nbytes)
       afree->FillBuffer(buffer);
    }
-   if ( (buffer-start)!=nbytes ) {
-      // Most likely one of the 'free' segment was used to store this
-      // TKey, so we had one less TFree to store than we planned.
-      memset(buffer,0,nbytes-(buffer-start));
+   auto actualBytes = buffer-start;
+   if ( actualBytes != nbytes ) {
+      if (actualBytes < nbytes) {
+         // Most likely one of the 'free' segment was used to store this
+         // TKey, so we had one less TFree to store than we planned.
+         memset(buffer,0,nbytes-actualBytes);
+      } else {
+         Error("WriteFree","The free block list TKey wrote more data than expected (%d vs %ld). Most likely there has been an out-of-bound write.",nbytes,(long int)actualBytes);
+      }
    }
    fNbytesFree = key->GetNbytes();
    fSeekFree   = key->GetSeekKey();
@@ -2824,7 +2946,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
          fprintf(fpMAKE,"genreflex %sProjectHeaders.h -o %sProjectDict.cxx --comments --iocomments %s ",subdirname.Data(),subdirname.Data(),gSystem->GetIncludePath());
          path.Form("%s/%sSelection.xml",clean_dirname.Data(),subdirname.Data());
       } else {
-         fprintf(fpMAKE,"rootcint -f %sProjectDict.cxx -c %s ",subdirname.Data(),gSystem->GetIncludePath());
+         fprintf(fpMAKE,"rootcint -v1 -f %sProjectDict.cxx -c %s ", subdirname.Data(), gSystem->GetIncludePath());
          path.Form("%s/%sLinkDef.h",clean_dirname.Data(),subdirname.Data());
       }
    } else {
@@ -2892,7 +3014,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
          std::vector<std::string> inside;
          int nestedLoc;
          TClassEdit::GetSplit( info->GetName(), inside, nestedLoc, TClassEdit::kLong64 );
-         Int_t stlkind =  TClassEdit::STLKind(inside[0].c_str());
+         Int_t stlkind =  TClassEdit::STLKind(inside[0]);
          TClass *key = TClass::GetClass(inside[1].c_str());
          if (key) {
             TString what;
@@ -3047,11 +3169,7 @@ void TFile::MakeProject(const char *dirname, const char * /*classes*/,
          return;
       }
       // Get Makefile.arch
-#ifdef ROOTETCDIR
-      TString mkarchsrc = TString::Format("%s/Makefile.arch", ROOTETCDIR);
-#else
-      TString mkarchsrc("$(ROOTSYS)/etc/Makefile.arch");
-#endif
+      TString mkarchsrc = TString::Format("%s/Makefile.arch", TROOT::GetEtcDir().Data());
       if (gSystem->ExpandPathName(mkarchsrc))
          Warning("MakeProject", "problems expanding '%s'", mkarchsrc.Data());
       TString mkarchdst = TString::Format("%s/Makefile.arch", clean_dirname.Data());
@@ -3382,9 +3500,11 @@ Int_t TFile::MakeProjectParProofInf(const char *pack, const char *proofinf)
 
 void TFile::ReadStreamerInfo()
 {
-   TList *list = GetStreamerInfoList();
+   auto listRetcode = GetStreamerInfoListImpl(/*lookupSICache*/ true);
+   TList *list = listRetcode.first;
+   auto retcode = listRetcode.second;
    if (!list) {
-      MakeZombie();
+      if (retcode) MakeZombie();
       return;
    }
 
@@ -3563,8 +3683,13 @@ void TFile::WriteStreamerInfo()
    if (!fWritable) return;
    if (!fClassIndex) return;
    if (fIsPcmFile) return; // No schema evolution for ROOT PCM files.
-   //no need to update the index if no new classes added to the file
-   if (fClassIndex->fArray[0] == 0) return;
+   if (fClassIndex->fArray[0] == 0
+       && fSeekInfo != 0) {
+      // No need to update the index if no new classes added to the file
+      // but write once an empty StreamerInfo list to mark that there is no need
+      // for StreamerInfos in this file.
+      return;
+   }
    if (gDebug > 0) Info("WriteStreamerInfo", "called for file %s",GetName());
 
    SafeDelete(fInfoCache);
@@ -3613,10 +3738,6 @@ void TFile::WriteStreamerInfo()
       list.Add(&listOfRules);
    }
 
-   // always write with compression on
-   Int_t compress = fCompress;
-   fCompress = 1;
-
    //free previous StreamerInfo record
    if (fSeekInfo) MakeFree(fSeekInfo,fSeekInfo+fNbytesInfo-1);
    //Create new key
@@ -3628,7 +3749,6 @@ void TFile::WriteStreamerInfo()
    key.WriteFile(0);
 
    fClassIndex->fArray[0] = 0;
-   fCompress = compress;
 
    list.RemoveLast(); // remove the listOfRules.
 }
@@ -3846,6 +3966,8 @@ TFile *TFile::OpenFromCache(const char *name, Option_t *, const char *ftitle,
 /// file for reading through the file cache. The file will be downloaded to
 /// the cache and opened from there. If the download fails, it will be opened remotely.
 /// The file will be downloaded to the directory specified by SetCacheFileDir().
+///
+/// *The caller is responsible for deleting the pointer.*
 
 TFile *TFile::Open(const char *url, Option_t *options, const char *ftitle,
                    Int_t compress, Int_t netopt)
@@ -4367,7 +4489,7 @@ void TFile::IncrementFileCounter() { fgFileCounter++; }
 /// Sets the directory where to locally stage/cache remote files.
 /// If the directory is not writable by us return kFALSE.
 
-Bool_t TFile::SetCacheFileDir(const char *cachedir, Bool_t operatedisconnected,
+Bool_t TFile::SetCacheFileDir(std::string_view cachedir, Bool_t operatedisconnected,
                               Bool_t forcecacheread )
 {
    TString cached = cachedir;
@@ -4378,7 +4500,7 @@ Bool_t TFile::SetCacheFileDir(const char *cachedir, Bool_t operatedisconnected,
       // try to create it
       gSystem->mkdir(cached, kTRUE);
       if (gSystem->AccessPathName(cached, kFileExists)) {
-         ::Error("TFile::SetCacheFileDir", "no sufficient permissions on cache directory %s or cannot create it", cachedir);
+         ::Error("TFile::SetCacheFileDir", "no sufficient permissions on cache directory %s or cannot create it", TString(cachedir).Data());
          fgCacheFileDir = "";
          return kFALSE;
       }
@@ -4653,7 +4775,7 @@ TFile::EAsyncOpenStatus TFile::GetAsyncOpenStatus(const char* name)
    }
 
    // Check also the list of files open
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
    TSeqCollection *of = gROOT->GetListOfFiles();
    if (of && (of->GetSize() > 0)) {
       TIter nxf(of);
@@ -4700,7 +4822,7 @@ const TUrl *TFile::GetEndpointUrl(const char* name)
    }
 
    // Check also the list of files open
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
    TSeqCollection *of = gROOT->GetListOfFiles();
    if (of && (of->GetSize() > 0)) {
       TIter nxf(of);

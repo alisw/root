@@ -9,27 +9,27 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/**                                                                   
+/**
 \class TFileCacheWrite TFileCacheWrite.cxx
 \ingroup IO
-A cache when writing files over the network      
-                                                                   
-A caching system to speed up network I/O, i.e. when there is       
-no operating system caching support (like the buffer cache for     
-local disk I/O). The cache makes sure that every I/O is done with  
-a (large) fixed length buffer thereby avoiding many small I/O's.   
-Currently the write cache system is used by the classes TNetFile,  
-TXNetFile and TWebFile (via TFile::WriteBuffers()).                
-                                                                   
+A cache when writing files over the network
+
+A caching system to speed up network I/O, i.e. when there is
+no operating system caching support (like the buffer cache for
+local disk I/O). The cache makes sure that every I/O is done with
+a (large) fixed length buffer thereby avoiding many small I/O's.
+Currently the write cache system is used by the classes TNetFile,
+TXNetFile and TWebFile (via TFile::WriteBuffers()).
+
 The write cache is automatically created when writing a remote file
-(created in TFile::Open()).                                        
+(created in TFile::Open()).
 */
 
 
 #include "TFile.h"
 #include "TFileCacheWrite.h"
 
-ClassImp(TFileCacheWrite)
+ClassImp(TFileCacheWrite);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default Constructor.
@@ -133,6 +133,7 @@ Int_t TFileCacheWrite::WriteBuffer(const char *buf, Long64_t pos, Int_t len)
       if (len >= fBufferSize) {
          //buffer larger than the cache itself: direct write to file
          fRecursive = kTRUE;
+         fFile->Seek(pos); // Flush may have changed this
          if (fFile->WriteBuffer(buf,len)) return -1;  // failure
          fRecursive = kFALSE;
          return 1;

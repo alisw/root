@@ -21,12 +21,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 class TDataMember;
 
@@ -44,7 +40,7 @@ private:
    TRealData& operator=(const TRealData& rhs);  // Copying TRealData in not allowed.
 
 public:
-   enum {
+   enum EStatusBits {
       kTransient = BIT(14)  // The member is transient.
    };
 

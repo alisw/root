@@ -18,7 +18,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include "RConfigure.h"
-#include "RConfig.h"
+#include <ROOT/RConfig.h>
 #include "TUnixSystem.h"
 #include "TROOT.h"
 #include "TError.h"
@@ -262,12 +262,12 @@ namespace {
    struct ut_name {
       template<typename U = T, typename std::enable_if<std::is_member_pointer<decltype(&U::ut_name)>::value, int>::type = 0>
       static char getValue(U* ue, int) {
-	 return ue->ut_name[0];
+         return ue->ut_name[0];
       }
 
       template<typename U = T, typename std::enable_if<std::is_member_pointer<decltype(&U::ut_user)>::value, int>::type = 0>
       static char getValue(U* ue, long) {
-	 return ue->ut_user[0];
+         return ue->ut_user[0];
       }
    };
 
@@ -458,7 +458,9 @@ static const char *GetExePath()
 
 static void SetRootSys()
 {
-#ifndef ROOTPREFIX
+#ifdef ROOTPREFIX
+   if (gSystem->Getenv("ROOTIGNOREPREFIX")) {
+#endif
    void *addr = (void *)SetRootSys;
    Dl_info info;
    if (dladdr(addr, &info) && info.dli_fname && info.dli_fname[0]) {
@@ -471,8 +473,8 @@ static void SetRootSys()
          gSystem->Setenv("ROOTSYS", gSystem->DirName(rs));
       }
    }
-#else
-   return;
+#ifdef ROOTPREFIX
+   }
 #endif
 }
 #endif
@@ -497,10 +499,12 @@ static void DylibAdded(const struct mach_header *mh, intptr_t /* vmaddr_slide */
 
    TString lib = _dyld_get_image_name(i++);
 
-   TRegexp sovers = "libCore\\.[0-9]+\\.*[0-9]*\\.so";
-   TRegexp dyvers = "libCore\\.[0-9]+\\.*[0-9]*\\.dylib";
+   TRegexp sovers = "libCore\\.[0-9]+\\.*[0-9]*\\.*[0-9]*\\.so";
+   TRegexp dyvers = "libCore\\.[0-9]+\\.*[0-9]*\\.*[0-9]*\\.dylib";
 
-#ifndef ROOTPREFIX
+#ifdef ROOTPREFIX
+   if (gSystem->Getenv("ROOTIGNOREPREFIX")) {
+#endif
 #if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
    // first loaded is the app so set ROOTSYS to app bundle
    if (i == 1) {
@@ -526,6 +530,8 @@ static void DylibAdded(const struct mach_header *mh, intptr_t /* vmaddr_slide */
       }
    }
 #endif
+#ifdef ROOTPREFIX
+   }
 #endif
 
    // when libSystem.B.dylib is loaded we have finished loading all dylibs
@@ -558,7 +564,7 @@ static void DylibAdded(const struct mach_header *mh, intptr_t /* vmaddr_slide */
 }
 #endif
 
-ClassImp(TUnixSystem)
+ClassImp(TUnixSystem);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -599,11 +605,11 @@ Bool_t TUnixSystem::Init()
    UnixSignal(kSigSegmentationViolation, SigHandler);
    UnixSignal(kSigIllegalInstruction,    SigHandler);
    UnixSignal(kSigSystem,                SigHandler);
-   UnixSignal(kSigPipe,                  SigHandler);
    UnixSignal(kSigAlarm,                 SigHandler);
    UnixSignal(kSigUrgent,                SigHandler);
    UnixSignal(kSigFloatingException,     SigHandler);
    UnixSignal(kSigWindowChanged,         SigHandler);
+   UnixSignal(kSigUser2,                 SigHandler);
 
 #if defined(R__MACOSX)
    // trap loading of all dylibs to register dylib name,
@@ -613,13 +619,8 @@ Bool_t TUnixSystem::Init()
    SetRootSys();
 #endif
 
-#ifndef ROOTPREFIX
-   gRootDir = Getenv("ROOTSYS");
-   if (gRootDir == 0)
-      gRootDir= "/usr/local/root";
-#else
-   gRootDir = ROOTPREFIX;
-#endif
+   // This is a fallback in case TROOT::GetRootSys() can't determine ROOTSYS
+   gRootDir = "/usr/local/root";
 
    return kFALSE;
 }
@@ -672,7 +673,7 @@ void TUnixSystem::SetDisplay()
                   Warning("SetDisplay", "DISPLAY not set, setting it to %s",
                           utmp_entry->ut_host);
                } else {
-                  char disp[64];
+                  char disp[260];
                   snprintf(disp, sizeof(disp), "%s:0.0", utmp_entry->ut_host);
                   Setenv("DISPLAY", disp);
                   Warning("SetDisplay", "DISPLAY not set, setting it to %s",
@@ -681,14 +682,21 @@ void TUnixSystem::SetDisplay()
             }
 #ifndef UTMP_NO_ADDR
             else if (utmp_entry->ut_addr) {
-               struct hostent *he;
-               if ((he = gethostbyaddr((const char*)&utmp_entry->ut_addr,
-                                       sizeof(utmp_entry->ut_addr), AF_INET))) {
-                  char disp[64];
-                  snprintf(disp, sizeof(disp), "%s:0.0", he->h_name);
-                  Setenv("DISPLAY", disp);
+
+               struct sockaddr_in addr;
+               addr.sin_family = AF_INET;
+               addr.sin_port = 0;
+               memcpy(&addr.sin_addr, &utmp_entry->ut_addr, sizeof(addr.sin_addr));
+               memset(&addr.sin_zero[0], 0, sizeof(addr.sin_zero));
+               struct sockaddr *sa = (struct sockaddr *) &addr;    // input
+
+               char hbuf[NI_MAXHOST + 4];
+               if (getnameinfo(sa, sizeof(struct sockaddr), hbuf, sizeof(hbuf), nullptr, 0, NI_NAMEREQD) == 0) {
+                  assert( strlen(hbuf) < NI_MAXHOST );
+                  strcat(hbuf, ":0.0");
+                  Setenv("DISPLAY", hbuf);
                   Warning("SetDisplay", "DISPLAY not set, setting it to %s",
-                          disp);
+                          hbuf);
                }
             }
 #endif
@@ -1411,12 +1419,30 @@ const char *TUnixSystem::WorkingDirectory()
    R__LOCKGUARD2(gSystemMutex);
 
    static char cwd[kMAXPATHLEN];
+   FillWithCwd(cwd);
+   fWdpath = cwd;
+
+   return fWdpath.Data();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+/// Return working directory.
+
+std::string TUnixSystem::GetWorkingDirectory() const
+{
+   char cwd[kMAXPATHLEN];
+   FillWithCwd(cwd);
+   return std::string(cwd);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+/// Fill buffer with current working directory.
+
+void TUnixSystem::FillWithCwd(char *cwd) const
+{
    if (::getcwd(cwd, kMAXPATHLEN) == 0) {
-      fWdpath = "/";
       Error("WorkingDirectory", "getcwd() failed");
    }
-   fWdpath = cwd;
-   return fWdpath.Data();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1425,6 +1451,17 @@ const char *TUnixSystem::WorkingDirectory()
 const char *TUnixSystem::HomeDirectory(const char *userName)
 {
    return UnixHomedirectory(userName);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+/// Return the user's home directory.
+
+std::string TUnixSystem::GetHomeDirectory(const char *userName) const
+{
+   char path[kMAXPATHLEN], mydir[kMAXPATHLEN] = { '\0' };
+   auto res = UnixHomedirectory(userName, path, mydir);
+   if (res) return std::string(res);
+   else return std::string();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1691,11 +1728,7 @@ expand:
    path.ReplaceAll("$(","$");
    path.ReplaceAll(")","");
 
-   if ((p = ExpandFileName(path))) {
-      path = p;
-      return kFALSE;
-   }
-   return kTRUE;
+   return ExpandFileName(path);
 }
 #endif
 
@@ -2154,17 +2187,21 @@ extern "C" {
   typedef CSTypeRef CSSymbolRef;
 
   CSSymbolicatorRef CSSymbolicatorCreateWithPid(pid_t pid);
+  CSSymbolRef CSSymbolicatorGetSymbolWithAddressAtTime(CSSymbolicatorRef cs, vm_address_t addr, uint64_t time);
   CSSourceInfoRef CSSymbolicatorGetSourceInfoWithAddressAtTime(CSSymbolicatorRef cs, vm_address_t addr, uint64_t time);
-  CSSymbolRef CSSourceInfoGetSymbol(CSSourceInfoRef info);
   const char* CSSymbolGetName(CSSymbolRef sym);
-  CSSymbolOwnerRef CSSourceInfoGetSymbolOwner(CSSourceInfoRef info);
+  CSSymbolOwnerRef CSSymbolGetSymbolOwner(CSSymbolRef sym);
   const char* CSSymbolOwnerGetPath(CSSymbolOwnerRef symbol);
   const char* CSSourceInfoGetPath(CSSourceInfoRef info);
   int CSSourceInfoGetLineNumber(CSSourceInfoRef info);
 }
 
+bool CSTypeRefIdValid(CSTypeRef ref) {
+   return ref.csCppData || ref.csCppObj;
+}
+
 void macosx_backtrace() {
-  void* addrlist[kMAX_BACKTRACE_DEPTH];
+void* addrlist[kMAX_BACKTRACE_DEPTH];
   // retrieve current stack addresses
   int numstacks = backtrace( addrlist, sizeof( addrlist ) / sizeof( void* ));
 
@@ -2173,22 +2210,30 @@ void macosx_backtrace() {
   // skip TUnixSystem::Backtrace(), macosx_backtrace()
   static const int skipFrames = 2;
   for (int i = skipFrames; i < numstacks; ++i) {
-    CSSourceInfoRef sourceInfo
-    = CSSymbolicatorGetSourceInfoWithAddressAtTime(symbolicator,
-                                                   (vm_address_t)addrlist[i],
-                                                   0x80000000u /*"now"*/);
+    // No debug info, try to get at least the symbol name.
+    CSSymbolRef sym = CSSymbolicatorGetSymbolWithAddressAtTime(symbolicator,
+                                                               (vm_address_t)addrlist[i],
+                                                               0x80000000u);
+    CSSymbolOwnerRef symOwner = CSSymbolGetSymbolOwner(sym);
 
-    CSSymbolOwnerRef symOwner = CSSourceInfoGetSymbolOwner(sourceInfo);
     if (const char* libPath = CSSymbolOwnerGetPath(symOwner)) {
       printf("[%s]", libPath);
     } else {
       printf("[<unknown binary>]");
     }
 
-    CSSymbolRef sym = CSSourceInfoGetSymbol(sourceInfo);
     if (const char* symname = CSSymbolGetName(sym)) {
-      printf(" %s %s:%d", symname, CSSourceInfoGetPath(sourceInfo),
-             (int)CSSourceInfoGetLineNumber(sourceInfo));
+      printf(" %s", symname);
+    }
+
+    CSSourceInfoRef sourceInfo
+      = CSSymbolicatorGetSourceInfoWithAddressAtTime(symbolicator,
+                                                     (vm_address_t)addrlist[i],
+                                                     0x80000000u /*"now"*/);
+    if (const char* sourcePath = CSSourceInfoGetPath(sourceInfo)) {
+      printf(" %s:%d", sourcePath, (int)CSSourceInfoGetLineNumber(sourceInfo));
+    } else {
+      printf(" (no debug info)");
     }
     printf("\n");
   }
@@ -2210,22 +2255,17 @@ void TUnixSystem::StackTrace()
       if (AccessPathName(gdbscript, kReadPermission)) {
          fprintf(stderr, "Root.StacktraceScript %s does not exist\n", gdbscript.Data());
          gdbscript = "";
-      } else {
-         gdbscript += " ";
       }
    }
    if (gdbscript == "") {
-#ifdef ROOTETCDIR
-      gdbscript.Form("%s/gdb-backtrace.sh", ROOTETCDIR);
-#else
-      gdbscript.Form("%s/etc/gdb-backtrace.sh", Getenv("ROOTSYS"));
-#endif
+      gdbscript = "gdb-backtrace.sh";
+      gSystem->PrependPathName(TROOT::GetEtcDir(), gdbscript);
       if (AccessPathName(gdbscript, kReadPermission)) {
          fprintf(stderr, "Error in <TUnixSystem::StackTrace> script %s is missing\n", gdbscript.Data());
          return;
       }
-      gdbscript += " ";
    }
+   gdbscript += " ";
 
    TString gdbmess = gEnv->GetValue("Root.StacktraceMessage", "");
    gdbmess = gdbmess.Strip();
@@ -2970,70 +3010,64 @@ void TUnixSystem::ResetTimer(TTimer *ti)
 
 TInetAddress TUnixSystem::GetHostByName(const char *hostname)
 {
-   struct hostent *host_ptr;
-   const char     *host;
-   int             type;
-   UInt_t          addr;    // good for 4 byte addresses
-
-   // Note that http://linux.die.net/man/3/gethostbyaddr
-   // claims:
-   //   The gethostbyname*() and gethostbyaddr*() functions are obsolete.
-   //   Applications should use getaddrinfo(3) and getnameinfo(3) instead.
-
-   // gethostbyaddr return the address of static data, we need to insure
-   // exclusive access ... the 'right' solution is to switch to getaddrinfo
-
-   R__LOCKGUARD(gROOTMutex);
-
-#ifdef HASNOT_INETATON
-   if ((addr = (UInt_t)inet_addr(hostname)) != INADDR_NONE) {
-#else
-   struct in_addr ad;
-   if (inet_aton(hostname, &ad)) {
-      memcpy(&addr, &ad.s_addr, sizeof(ad.s_addr));
+   TInetAddress ia;
+   struct addrinfo hints;
+   struct addrinfo *result, *rp;
+   memset(&hints, 0, sizeof(struct addrinfo));
+   hints.ai_family = AF_INET;       // only IPv4
+   hints.ai_socktype = 0;           // any socket type
+   hints.ai_protocol = 0;           // any protocol
+   hints.ai_flags = AI_CANONNAME;   // get canonical name
+#ifdef R__MACOSX
+   // Anything ending on ".local" causes a 5 second delay in getaddrinfo().
+   // See e.g. https://apple.stackexchange.com/questions/175320/why-is-my-hostname-resolution-taking-so-long
+   // Only reasonable solution: remove the "domain" part if it's ".local".
+   size_t lenHostname = strlen(hostname);
+   std::string hostnameWithoutLocal{hostname};
+   if (lenHostname > 6 && !strcmp(hostname + lenHostname - 6, ".local")) {
+      hostnameWithoutLocal.erase(lenHostname - 6);
+      hostname = hostnameWithoutLocal.c_str();
+   }
 #endif
-      type = AF_INET;
-      if ((host_ptr = gethostbyaddr((const char *)&addr,
-                                    sizeof(addr), AF_INET))) {
-         host = host_ptr->h_name;
-         TInetAddress a(host, ntohl(addr), type);
-         UInt_t addr2;
-         Int_t  i;
-         for (i = 1; host_ptr->h_addr_list[i]; i++) {
-            memcpy(&addr2, host_ptr->h_addr_list[i], host_ptr->h_length);
-            a.AddAddress(ntohl(addr2));
-         }
-         for (i = 0; host_ptr->h_aliases[i]; i++)
-            a.AddAlias(host_ptr->h_aliases[i]);
-         return a;
+
+   // obsolete gethostbyname() replaced by getaddrinfo()
+   int rc = getaddrinfo(hostname, nullptr, &hints, &result);
+   if (rc != 0) {
+      if (rc == EAI_NONAME) {
+         if (gDebug > 0) Error("GetHostByName", "unknown host '%s'", hostname);
+         ia.fHostname = "UnNamedHost";
       } else {
-         host = "UnNamedHost";
+         Error("GetHostByName", "getaddrinfo failed for '%s': %s", hostname, gai_strerror(rc));
+         ia.fHostname = "UnknownHost";
       }
-   } else if ((host_ptr = gethostbyname(hostname))) {
-      // Check the address type for an internet host
-      if (host_ptr->h_addrtype != AF_INET) {
-         Error("GetHostByName", "%s is not an internet host\n", hostname);
-         return TInetAddress();
-      }
-      memcpy(&addr, host_ptr->h_addr, host_ptr->h_length);
-      host = host_ptr->h_name;
-      type = host_ptr->h_addrtype;
-      TInetAddress a(host, ntohl(addr), type);
-      UInt_t addr2;
-      Int_t  i;
-      for (i = 1; host_ptr->h_addr_list[i]; i++) {
-         memcpy(&addr2, host_ptr->h_addr_list[i], host_ptr->h_length);
-         a.AddAddress(ntohl(addr2));
-      }
-      for (i = 0; host_ptr->h_aliases[i]; i++)
-         a.AddAlias(host_ptr->h_aliases[i]);
-      return a;
-   } else {
-      if (gDebug > 0) Error("GetHostByName", "unknown host %s", hostname);
-      return TInetAddress(hostname, 0, -1);
+      return ia;
    }
 
-   return TInetAddress(host, ntohl(addr), type);
+   std::string hostcanon(result->ai_canonname ? result->ai_canonname : hostname);
+   ia.fHostname = hostcanon.data();
+   ia.fFamily = result->ai_family;
+   ia.fAddresses[0] = ntohl(((struct sockaddr_in *)(result->ai_addr))->sin_addr.s_addr);
+   // with getaddrinfo() no way to get list of aliases for a hostname
+   if (hostcanon.compare(hostname) != 0) ia.AddAlias(hostname);
+
+   // check on numeric hostname
+   char tmp[sizeof(struct in_addr)];
+   if (inet_pton(AF_INET, hostcanon.data(), tmp) == 1) {
+      char hbuf[NI_MAXHOST];
+      if (getnameinfo(result->ai_addr, result->ai_addrlen, hbuf, sizeof(hbuf), nullptr, 0, 0) == 0)
+         ia.fHostname = hbuf;
+   }
+
+   // check other addresses (if exist)
+   rp = result->ai_next;
+   for (; rp != nullptr; rp = rp->ai_next) {
+      UInt_t arp = ntohl(((struct sockaddr_in *)(rp->ai_addr))->sin_addr.s_addr);
+      if ( !(std::find(ia.fAddresses.begin(), ia.fAddresses.end(), arp) != ia.fAddresses.end()) )
+         ia.AddAddress(arp);
+   }
+
+   freeaddrinfo(result);
+   return ia;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3041,7 +3075,7 @@ TInetAddress TUnixSystem::GetHostByName(const char *hostname)
 
 TInetAddress TUnixSystem::GetSockName(int sock)
 {
-   struct sockaddr_in addr;
+   struct sockaddr addr;
 #if defined(USE_SIZE_T)
    size_t len = sizeof(addr);
 #elif defined(USE_SOCKLEN_T)
@@ -3050,28 +3084,26 @@ TInetAddress TUnixSystem::GetSockName(int sock)
    int len = sizeof(addr);
 #endif
 
-   if (getsockname(sock, (struct sockaddr *)&addr, &len) == -1) {
-      SysError("GetSockName", "getsockname");
-      return TInetAddress();
+   TInetAddress ia;
+   if (getsockname(sock, &addr, &len) == -1) {
+      SysError("GetSockName", "getsockname failed");
+      return ia;
    }
 
-   struct hostent *host_ptr;
-   const char *hostname;
-   int         family;
-   UInt_t      iaddr;
+   if (addr.sa_family != AF_INET) return ia; // only IPv4
+   ia.fFamily = addr.sa_family;
+   struct sockaddr_in *addrin = (struct sockaddr_in *)&addr;
+   ia.fPort = ntohs(addrin->sin_port);
+   ia.fAddresses[0] = ntohl(addrin->sin_addr.s_addr);
 
-   if ((host_ptr = gethostbyaddr((const char *)&addr.sin_addr,
-                                 sizeof(addr.sin_addr), AF_INET))) {
-      memcpy(&iaddr, host_ptr->h_addr, host_ptr->h_length);
-      hostname = host_ptr->h_name;
-      family   = host_ptr->h_addrtype;
-   } else {
-      memcpy(&iaddr, &addr.sin_addr, sizeof(addr.sin_addr));
-      hostname = "????";
-      family   = AF_INET;
-   }
+   char hbuf[NI_MAXHOST];
+   if (getnameinfo(&addr, sizeof(struct sockaddr), hbuf, sizeof(hbuf), nullptr, 0, 0) != 0) {
+      Error("GetSockName", "getnameinfo failed");
+      ia.fHostname = "????";
+   } else
+      ia.fHostname = hbuf;
 
-   return TInetAddress(hostname, ntohl(iaddr), family, ntohs(addr.sin_port));
+   return ia;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3079,7 +3111,7 @@ TInetAddress TUnixSystem::GetSockName(int sock)
 
 TInetAddress TUnixSystem::GetPeerName(int sock)
 {
-   struct sockaddr_in addr;
+   struct sockaddr addr;
 #if defined(USE_SIZE_T)
    size_t len = sizeof(addr);
 #elif defined(USE_SOCKLEN_T)
@@ -3088,28 +3120,26 @@ TInetAddress TUnixSystem::GetPeerName(int sock)
    int len = sizeof(addr);
 #endif
 
-   if (getpeername(sock, (struct sockaddr *)&addr, &len) == -1) {
-      SysError("GetPeerName", "getpeername");
-      return TInetAddress();
+   TInetAddress ia;
+   if (getpeername(sock, &addr, &len) == -1) {
+      SysError("GetPeerName", "getpeername failed");
+      return ia;
    }
 
-   struct hostent *host_ptr;
-   const char *hostname;
-   int         family;
-   UInt_t      iaddr;
+   if (addr.sa_family != AF_INET) return ia; // only IPv4
+   ia.fFamily = addr.sa_family;
+   struct sockaddr_in *addrin = (struct sockaddr_in *)&addr;
+   ia.fPort = ntohs(addrin->sin_port);
+   ia.fAddresses[0] = ntohl(addrin->sin_addr.s_addr);
 
-   if ((host_ptr = gethostbyaddr((const char *)&addr.sin_addr,
-                                 sizeof(addr.sin_addr), AF_INET))) {
-      memcpy(&iaddr, host_ptr->h_addr, host_ptr->h_length);
-      hostname = host_ptr->h_name;
-      family   = host_ptr->h_addrtype;
-   } else {
-      memcpy(&iaddr, &addr.sin_addr, sizeof(addr.sin_addr));
-      hostname = "????";
-      family   = AF_INET;
-   }
+   char hbuf[NI_MAXHOST];
+   if (getnameinfo(&addr, sizeof(struct sockaddr), hbuf, sizeof(hbuf), nullptr, 0, 0) != 0) {
+      Error("GetPeerName", "getnameinfo failed");
+      ia.fHostname = "????";
+   } else
+      ia.fHostname = hbuf;
 
-   return TInetAddress(hostname, ntohl(iaddr), family, ntohs(addr.sin_port));
+   return ia;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3627,6 +3657,10 @@ void TUnixSystem::DispatchSignals(ESignals sig)
    case kSigWindowChanged:
       Gl_windowchanged();
       break;
+   case kSigUser2:
+      Break("TUnixSystem::DispatchSignals", "%s: printing stacktrace", UnixSigname(sig));
+      StackTrace();
+      // Intentional fall-through; pass the signal to handlers (or terminate):
    default:
       fSignals->Set(sig);
       fSigcnt++;
@@ -3876,13 +3910,20 @@ int TUnixSystem::UnixSelect(Int_t nfds, TFdSet *readready, TFdSet *writeready,
 const char *TUnixSystem::UnixHomedirectory(const char *name)
 {
    static char path[kMAXPATHLEN], mydir[kMAXPATHLEN] = { '\0' };
-   struct passwd *pw;
+   return UnixHomedirectory(name, path, mydir);
+}
 
+////////////////////////////////////////////////////////////////////////////
+/// Returns the user's home directory.
+
+const char *TUnixSystem::UnixHomedirectory(const char *name, char *path, char *mydir)
+{
+   struct passwd *pw;
    if (name) {
       pw = getpwnam(name);
       if (pw) {
          strncpy(path, pw->pw_dir, kMAXPATHLEN-1);
-         path[sizeof(path)-1] = '\0';
+         path[kMAXPATHLEN-1] = '\0';
          return path;
       }
    } else {
@@ -3891,11 +3932,11 @@ const char *TUnixSystem::UnixHomedirectory(const char *name)
       pw = getpwuid(getuid());
       if (pw && pw->pw_dir) {
          strncpy(mydir, pw->pw_dir, kMAXPATHLEN-1);
-         mydir[sizeof(mydir)-1] = '\0';
+         mydir[kMAXPATHLEN-1] = '\0';
          return mydir;
       } else if (gSystem->Getenv("HOME")) {
          strncpy(mydir, gSystem->Getenv("HOME"), kMAXPATHLEN-1);
-         mydir[sizeof(mydir)-1] = '\0';
+         mydir[kMAXPATHLEN-1] = '\0';
          return mydir;
       }
    }
@@ -4038,8 +4079,6 @@ int TUnixSystem::UnixFSstat(const char *path, Long_t *id, Long_t *bsize,
          *id = 0x6969;
       else if (!strcmp(statfsbuf.f_fstypename, MOUNT_MSDOS))
          *id = 0x4d44;
-      else if (!strcmp(statfsbuf.f_fstypename, MOUNT_PROCFS))
-         *id = 0x9fa0;
       else if (!strcmp(statfsbuf.f_fstypename, MOUNT_EXT2FS))
          *id = 0xef53;
       else if (!strcmp(statfsbuf.f_fstypename, MOUNT_CD9660))
@@ -4278,8 +4317,9 @@ int TUnixSystem::UnixTcpService(int port, Bool_t reuse, int backlog,
    } else {
       int bret;
       do {
-         inserver.sin_port = htons(tryport++);
+         inserver.sin_port = htons(tryport);
          bret = ::bind(sock, (struct sockaddr*) &inserver, sizeof(inserver));
+         tryport++;
       } while (bret < 0 && GetErrno() == EADDRINUSE && tryport < kSOCKET_MAXPORT);
       if (bret < 0) {
          ::SysError("TUnixSystem::UnixTcpService", "bind (port scan)");
@@ -4339,8 +4379,9 @@ int TUnixSystem::UnixUdpService(int port, int backlog)
    } else {
       int bret;
       do {
-         inserver.sin_port = htons(tryport++);
+         inserver.sin_port = htons(tryport);
          bret = ::bind(sock, (struct sockaddr*) &inserver, sizeof(inserver));
+         tryport++;
       } while (bret < 0 && GetErrno() == EADDRINUSE && tryport < kSOCKET_MAXPORT);
       if (bret < 0) {
          ::SysError("TUnixSystem::UnixUdpService", "bind (port scan)");
@@ -4546,11 +4587,7 @@ static const char *DynamicPath(const char *newpath = 0, Bool_t reset = kFALSE)
       TString rdynpath = gEnv->GetValue("Root.DynamicPath", (char*)0);
       rdynpath.ReplaceAll(": ", ":");  // in case DynamicPath was extended
       if (rdynpath.IsNull()) {
-#ifdef ROOTLIBDIR
-         rdynpath = ".:"; rdynpath += ROOTLIBDIR;
-#else
-         rdynpath = ".:"; rdynpath += gRootDir; rdynpath += "/lib";
-#endif
+         rdynpath = ".:"; rdynpath += TROOT::GetLibDir();
       }
       TString ldpath;
 #if defined (R__AIX)
@@ -4571,16 +4608,9 @@ static const char *DynamicPath(const char *newpath = 0, Bool_t reset = kFALSE)
       else {
          dynpath = ldpath; dynpath += ":"; dynpath += rdynpath;
       }
-
-#ifdef ROOTLIBDIR
-      if (!dynpath.Contains(ROOTLIBDIR)) {
-         dynpath += ":"; dynpath += ROOTLIBDIR;
+      if (!dynpath.Contains(TROOT::GetLibDir())) {
+         dynpath += ":"; dynpath += TROOT::GetLibDir();
       }
-#else
-      if (!dynpath.Contains(TString::Format("%s/lib", gRootDir))) {
-         dynpath += ":"; dynpath += gRootDir; dynpath += "/lib";
-      }
-#endif
       if (gCling) {
          dynpath += ":"; dynpath += gCling->GetSTLIncludePath();
       } else

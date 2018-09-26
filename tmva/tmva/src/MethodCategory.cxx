@@ -30,13 +30,17 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//__________________________________________________________________________
-//
-// This class is meant to allow categorisation of the data. For different //
-// categories, different classifiers may be booked and different variab-  //
-// les may be considered. The aim is to account for the difference that   //
-// is due to different locations/angles.                                  //
-////////////////////////////////////////////////////////////////////////////////
+/*! \class TMVA::MethodCategory
+\ingroup TMVA
+
+Class for categorizing the phase space
+
+This class is meant to allow categorisation of the data. For different
+categories, different classifiers may be booked and different variables
+may be considered. The aim is to account for the difference that
+is due to different locations/angles.
+*/
+
 
 #include "TMVA/MethodCategory.h"
 
@@ -74,7 +78,7 @@
 
 REGISTER_METHOD(Category)
 
-ClassImp(TMVA::MethodCategory)
+ClassImp(TMVA::MethodCategory);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// standard constructor
@@ -82,9 +86,8 @@ ClassImp(TMVA::MethodCategory)
    TMVA::MethodCategory::MethodCategory( const TString& jobName,
                                          const TString& methodTitle,
                                          DataSetInfo& theData,
-                                         const TString& theOption,
-                                         TDirectory* theTargetDir )
-   : TMVA::MethodCompositeBase( jobName, Types::kCategory, methodTitle, theData, theOption, theTargetDir ),
+                                         const TString& theOption )
+   : TMVA::MethodCompositeBase( jobName, Types::kCategory, methodTitle, theData, theOption),
    fCatTree(0),
    fDataSetManager(NULL)
 {
@@ -94,9 +97,8 @@ ClassImp(TMVA::MethodCategory)
 /// constructor from weight file
 
 TMVA::MethodCategory::MethodCategory( DataSetInfo& dsi,
-                                      const TString& theWeightFile,
-                                      TDirectory* theTargetDir )
-   : TMVA::MethodCompositeBase( Types::kCategory, dsi, theWeightFile, theTargetDir ),
+                                      const TString& theWeightFile)
+   : TMVA::MethodCompositeBase( Types::kCategory, dsi, theWeightFile),
      fCatTree(0),
      fDataSetManager(NULL)
 {
@@ -145,7 +147,7 @@ TMVA::IMethod* TMVA::MethodCategory::AddMethod( const TCut& theCut,
                                                 const TString& theTitle,
                                                 const TString& theOptions )
 {
-   std::string addedMethodName = std::string(Types::Instance().GetMethodName(theMethod));
+   std::string addedMethodName(Types::Instance().GetMethodName(theMethod).Data());
 
    Log() << kINFO << "Adding sub-classifier: " << addedMethodName << "::" << theTitle << Endl;
 
@@ -156,10 +158,15 @@ TMVA::IMethod* TMVA::MethodCategory::AddMethod( const TCut& theCut,
    MethodBase *method = (dynamic_cast<MethodBase*>(addedMethod));
    if(method==0) return 0;
 
+   if(fModelPersistence) method->SetWeightFileDir(fFileDir);
+   method->SetModelPersistence(fModelPersistence);
    method->SetAnalysisType( fAnalysisType );
    method->SetupMethod();
    method->ParseOptions();
    method->ProcessSetup();
+   method->SetFile(fFile);
+   method->SetSilentFile(IsSilentFile());
+
 
    // set or create correct method base dir for added method
    const TString dirName(Form("Method_%s",method->GetMethodTypeName().Data()));
@@ -212,10 +219,10 @@ TMVA::DataSetInfo& TMVA::MethodCategory::CreateCategoryDSI(const TCut& theCut,
    // copy the targets and spectators from the old dsi to the new dsi
    std::vector<VariableInfo>::iterator itrVarInfo;
 
-   for (itrVarInfo = oldDSI.GetTargetInfos().begin(); itrVarInfo != oldDSI.GetTargetInfos().end(); itrVarInfo++)
+   for (itrVarInfo = oldDSI.GetTargetInfos().begin(); itrVarInfo != oldDSI.GetTargetInfos().end(); ++itrVarInfo)
       dsi->AddTarget(*itrVarInfo);
 
-   for (itrVarInfo = oldDSI.GetSpectatorInfos().begin(); itrVarInfo != oldDSI.GetSpectatorInfos().end(); itrVarInfo++)
+   for (itrVarInfo = oldDSI.GetSpectatorInfos().begin(); itrVarInfo != oldDSI.GetSpectatorInfos().end(); ++itrVarInfo)
       dsi->AddSpectator(*itrVarInfo);
 
    // split string that contains the variables into tiny little pieces
@@ -230,12 +237,12 @@ TMVA::DataSetInfo& TMVA::MethodCategory::CreateCategoryDSI(const TCut& theCut,
    Bool_t found = kFALSE;
 
    // iterate over all variables in 'variables' and add them
-   for (itrVariables = variables.begin(); itrVariables != variables.end(); itrVariables++) {
+   for (itrVariables = variables.begin(); itrVariables != variables.end(); ++itrVariables) {
       counter=0;
 
       // check the variables of the old dsi for the variable that we want to add
-      for (itrVarInfo = oldDSI.GetVariableInfos().begin(); itrVarInfo != oldDSI.GetVariableInfos().end(); itrVarInfo++) {
-         if((*itrVariables==itrVarInfo->GetLabel()) ) { // || (*itrVariables==itrVarInfo->GetExpression())) { 
+      for (itrVarInfo = oldDSI.GetVariableInfos().begin(); itrVarInfo != oldDSI.GetVariableInfos().end(); ++itrVarInfo) {
+         if((*itrVariables==itrVarInfo->GetLabel()) ) { // || (*itrVariables==itrVarInfo->GetExpression())) {
             // don't compare the expression, since the user might take two times the same expression, but with different labels
             // and apply different transformations to the variables.
             dsi->AddVariable(*itrVarInfo);
@@ -244,9 +251,9 @@ TMVA::DataSetInfo& TMVA::MethodCategory::CreateCategoryDSI(const TCut& theCut,
          }
          counter++;
       }
-      
+
       // check the spectators of the old dsi for the variable that we want to add
-      for (itrVarInfo = oldDSI.GetSpectatorInfos().begin(); itrVarInfo != oldDSI.GetSpectatorInfos().end(); itrVarInfo++) {
+      for (itrVarInfo = oldDSI.GetSpectatorInfos().begin(); itrVarInfo != oldDSI.GetSpectatorInfos().end(); ++itrVarInfo) {
          if((*itrVariables==itrVarInfo->GetLabel()) ) { // || (*itrVariables==itrVarInfo->GetExpression())) {
             // don't compare the expression, since the user might take two times the same expression, but with different labels
             // and apply different transformations to the variables.
@@ -278,7 +285,7 @@ TMVA::DataSetInfo& TMVA::MethodCategory::CreateCategoryDSI(const TCut& theCut,
    // set classes and cuts
    UInt_t nClasses=oldDSI.GetNClasses();
    TString className;
-  
+
    for (UInt_t i=0; i<nClasses; i++) {
       className = oldDSI.GetClassInfo(i)->GetName();
       dsi->AddClass(className);
@@ -295,7 +302,7 @@ TMVA::DataSetInfo& TMVA::MethodCategory::CreateCategoryDSI(const TCut& theCut,
 
    DataSetInfo& dsiReference= (*dsi);
 
-   return dsiReference;  
+   return dsiReference;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -336,7 +343,7 @@ void TMVA::MethodCategory::InitCircularTree(const DataSetInfo& dsi)
       // The add-then-remove can lead to  a problem if gDirectory points to the same directory (for example
       // gROOT) in the current thread and another one (and both try to add to the directory at the same time).
       TDirectory::TContext ctxt(nullptr);
-      fCatTree = new TTree(Form("Circ%s",GetMethodName().Data()),"Circlar Tree for categorization");
+      fCatTree = new TTree(Form("Circ%s",GetMethodName().Data()),"Circular Tree for categorization");
       fCatTree->SetCircular(1);
    }
 
@@ -418,7 +425,7 @@ void TMVA::MethodCategory::Train()
 
       // variable ranking
       Log() << kINFO << "Begin ranking of input variables..." << Endl;
-      for (itrMethod = fMethods.begin(); itrMethod != fMethods.end(); itrMethod++) {
+      for (itrMethod = fMethods.begin(); itrMethod != fMethods.end(); ++itrMethod) {
          MethodBase* mva = dynamic_cast<MethodBase*>(*itrMethod);
          if (mva && mva->Data()->GetNTrainingEvents() >= MinNoTrainingEvents) {
             const Ranking* ranking = (*itrMethod)->CreateRanking();
@@ -440,8 +447,6 @@ void TMVA::MethodCategory::AddWeightsXMLTo( void* parent ) const
    void* wght = gTools().AddChild(parent, "Weights");
    gTools().AddAttr( wght, "NSubMethods", fMethods.size() );
    void* submethod(0);
-
-   std::vector<IMethod*>::iterator itrMethod;
 
    // iterate over methods and write them to XML file
    for (UInt_t i=0; i<fMethods.size(); i++) {
@@ -530,7 +535,7 @@ void TMVA::MethodCategory::ReadWeightsFromXML( void* wghtnode )
 ////////////////////////////////////////////////////////////////////////////////
 /// process user options
 
-void TMVA::MethodCategory::ProcessOptions() 
+void TMVA::MethodCategory::ProcessOptions()
 {
 }
 
@@ -545,18 +550,18 @@ void TMVA::MethodCategory::GetHelpMessage() const
    Log() << Endl;
    Log() << gTools().Color("bold") << "--- Short description:" << gTools().Color("reset") << Endl;
    Log() << Endl;
-   Log() << "This method allows to define different categories of events. The" <<Endl;  
-   Log() << "categories are defined via cuts on the variables. For each" << Endl; 
+   Log() << "This method allows to define different categories of events. The" <<Endl;
+   Log() << "categories are defined via cuts on the variables. For each" << Endl;
    Log() << "category, a different classifier and set of variables can be" <<Endl;
    Log() << "specified. The categories which are defined for this method must" << Endl;
    Log() << "be disjoint." << Endl;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// no ranking 
+/// no ranking
 
 const TMVA::Ranking* TMVA::MethodCategory::CreateRanking()
-{ 
+{
    return 0;
 }
 
@@ -566,7 +571,7 @@ Bool_t TMVA::MethodCategory::PassesCut( const Event* ev, UInt_t methodIdx )
 {
    // if it's not a simple 'spectator' variable (0 or 1) that the categories are defined by
    // (but rather some 'formula' (i.e. eta>0), then this formulas are stored in fCatTree and that
-   // one will be evaluated.. (the formulae return 'true' or 'false' 
+   // one will be evaluated.. (the formulae return 'true' or 'false'
    if (fCatTree) {
       if (methodIdx>=fCatFormulas.size()) {
          Log() << kFATAL << "Large method index " << methodIdx << ", number of category formulas = "
@@ -574,7 +579,7 @@ Bool_t TMVA::MethodCategory::PassesCut( const Event* ev, UInt_t methodIdx )
       }
       TTreeFormula* f = fCatFormulas[methodIdx];
       return f->EvalInstance(0) > 0.5;
-   } 
+   }
    // otherwise, it simply looks if "variable == true"  ("greater 0.5 to be "sure" )
    else {
 
@@ -633,7 +638,7 @@ Double_t TMVA::MethodCategory::GetMvaValue( Double_t* err, Double_t* errUpper )
 ////////////////////////////////////////////////////////////////////////////////
 /// returns the mva value of the right sub-classifier
 
-const std::vector<Float_t> &TMVA::MethodCategory::GetRegressionValues() 
+const std::vector<Float_t> &TMVA::MethodCategory::GetRegressionValues()
 {
    if (fMethods.empty()) return MethodBase::GetRegressionValues();
 

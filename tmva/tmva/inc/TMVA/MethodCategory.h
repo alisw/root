@@ -42,13 +42,9 @@
 #include <iosfwd>
 #include <vector>
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
 
-#ifndef ROOT_TMVA_MethodCompositeBase
 #include "TMVA/MethodCompositeBase.h"
-#endif
 
 namespace TMVA {
 
@@ -56,8 +52,11 @@ namespace TMVA {
    class Reader;   // DSMTEST
    class MethodBoost;   // DSMTEST
    class DataSetManager;  // DSMTEST
-
+   namespace Experimental {
+   class Classification;
+   }
    class MethodCategory : public MethodCompositeBase {
+      friend class Experimental::Classification;
 
    public :
 
@@ -65,12 +64,10 @@ namespace TMVA {
       MethodCategory( const TString& jobName,
                       const TString& methodTitle,
                       DataSetInfo& theData,
-                      const TString& theOption = "",
-                      TDirectory* theTargetDir = NULL );
+                      const TString& theOption = "" );
 
       MethodCategory( DataSetInfo& dsi,
-                      const TString& theWeightFile,
-                      TDirectory* theTargetDir = NULL );
+                      const TString& theWeightFile );
 
       virtual ~MethodCategory( void );
 
@@ -136,7 +133,7 @@ namespace TMVA {
       friend class Reader;  // DSMTEST
       friend class MethodBoost;  // DSMTEST
 
-      ClassDef(MethodCategory,0)
+      ClassDef(MethodCategory,0);
    };
 }
 

@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /* \class TPRegexp
+\ingroup Base
 
 C++ Wrapper for the "Perl Compatible Regular Expressions" library
  The PCRE lib can be found at: http://www.pcre.org/
@@ -24,6 +25,9 @@ found at : http://perldoc.perl.org/perlre.html
 #include "TObjString.h"
 #include "TError.h"
 
+#ifdef R__WIN32
+#define PCRE_STATIC
+#endif
 #include <pcre.h>
 
 #include <vector>
@@ -37,7 +41,7 @@ struct PCREPriv_t {
 };
 
 
-ClassImp(TPRegexp)
+ClassImp(TPRegexp);
 
 Bool_t TPRegexp::fgThrowAtCompileError = kFALSE;
 
@@ -953,7 +957,7 @@ During construction no match is done, use NextToken() to get the first
 and all subsequent tokens.
 */
 
-ClassImp(TStringToken)
+ClassImp(TStringToken);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.

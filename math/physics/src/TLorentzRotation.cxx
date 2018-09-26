@@ -129,10 +129,9 @@ operator of the TLorentzVector class.:
 ~~~
 */
 
-#include "TError.h"
 #include "TLorentzRotation.h"
 
-ClassImp(TLorentzRotation)
+ClassImp(TLorentzRotation);
 
 TLorentzRotation::TLorentzRotation()
   : fxx(1.0), fxy(0.0), fxz(0.0), fxt(0.0),

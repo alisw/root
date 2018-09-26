@@ -32,9 +32,7 @@
 #ifndef ROOT_TMVA_PDEFoamEventDensity
 #define ROOT_TMVA_PDEFoamEventDensity
 
-#ifndef ROOT_TMVA_PDEFoamDensityBase
 #include "TMVA/PDEFoamDensityBase.h"
-#endif
 
 namespace TMVA
 {
@@ -54,7 +52,7 @@ namespace TMVA
       virtual Double_t Density(std::vector<Double_t> &Xarg, Double_t &event_density);
 
       ClassDef(PDEFoamEventDensity, 1) //Class for Event density
-   };  //end of PDEFoamEventDensity
+         };  //end of PDEFoamEventDensity
 
 }  // namespace TMVA
 

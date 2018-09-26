@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_graphics
+/// \notebook
 /// This macro draws all the high definition palettes available in ROOT.
 /// It generates a png file for each palette and one pdf file, with a table of
 /// content, containing all the palettes
@@ -103,5 +104,6 @@ void palettes() {
    draw_palette(kCopper, "Copper");
    draw_palette(kGistEarth, "Gist Earth");
    draw_palette(kViridis, "Viridis");
+   draw_palette(kCividis, "Cividis");
 }
 

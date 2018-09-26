@@ -20,9 +20,12 @@
 #include "TVirtualPadEditor.h"
 #include "TColor.h"
 
-ClassImp(TAttText)
+ClassImp(TAttText);
 
 /** \class TAttText
+\ingroup Base
+\ingroup GraphicsAtt
+
 Text Attributes class.
 
 This class is used (in general by secondary inheritance)
@@ -76,18 +79,6 @@ Begin_Macro(source)
 textalign.C
 End_Macro
 
-## <a name="T2"></a> Text Angle
-
-Text angle in degrees.
-The text angle of any class inheriting from `TAttText` can
-be changed using the method `SetTextAngle` and retrieved using the
-method `GetTextAngle`.
-The following picture shows the text angle:
-
-Begin_Macro
-textangle.C
-End_Macro
-
 Mnemonic constants are available:
 
 ~~~ {.cpp}
@@ -101,6 +92,18 @@ They allow to write:
 object->SetTextAlign(kHAlignLeft+kVAlignTop);
 ~~~
 
+## <a name="T2"></a> Text Angle
+
+Text angle in degrees.
+The text angle of any class inheriting from `TAttText` can
+be changed using the method `SetTextAngle` and retrieved using the
+method `GetTextAngle`.
+The following picture shows the text angle:
+
+Begin_Macro(source)
+textangle.C
+End_Macro
+
 ## <a name="T3"></a> Text Color
 
 The text color is a color index (integer) pointing in the ROOT
@@ -112,8 +115,9 @@ The following table shows the first 50 default colors.
 
 Begin_Macro
 {
-   TCanvas *c = new TCanvas("c","Text colors",0,0,500,200);
+   TCanvas *c = new TCanvas("c","Fill Area colors",0,0,500,200);
    c->DrawColorTable();
+   return c;
 }
 End_Macro
 

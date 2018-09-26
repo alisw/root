@@ -1,4 +1,4 @@
-// @(#)root/tmva $Id$ 
+// @(#)root/tmva $Id$
 // Author: Andraes Hoecker, Kamil Kraszewski, Maciej Kruk
 
 /**********************************************************************************
@@ -18,21 +18,22 @@
  *                                                                                *
  * Copyright (c) 2008:                                                            *
  *      IFJ-Krakow, Poland                                                        *
- *      CERN, Switzerland                                                         * 
- *      MPI-K Heidelberg, Germany                                                 * 
+ *      CERN, Switzerland                                                         *
+ *      MPI-K Heidelberg, Germany                                                 *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_______________________________________________________________________
-//                                                                      
-// Fitter using a Simulated Annealing Algorithm
-//_______________________________________________________________________
+/*! \class TMVA::SimulatedAnnealingFitter
+\ingroup TMVA
+Fitter using a Simulated Annealing Algorithm
+*/
 
 #include "TMVA/SimulatedAnnealingFitter.h"
 
+#include "TMVA/Configurable.h"
 #include "TMVA/FitterBase.h"
 #include "TMVA/Interval.h"
 #include "TMVA/MsgLogger.h"
@@ -42,16 +43,16 @@
 #include "Rtypes.h"
 #include "TString.h"
 
-ClassImp(TMVA::SimulatedAnnealingFitter)
+ClassImp(TMVA::SimulatedAnnealingFitter);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
 
-TMVA::SimulatedAnnealingFitter::SimulatedAnnealingFitter( IFitterTarget& target, 
-                                                          const TString& name, 
-                                                          const std::vector<Interval*>& ranges, 
-                                                          const TString& theOption ) 
-   : TMVA::FitterBase( target, name, ranges, theOption )
+TMVA::SimulatedAnnealingFitter::SimulatedAnnealingFitter( IFitterTarget& target,
+                                                          const TString& name,
+                                                          const std::vector<Interval*>& ranges,
+                                                          const TString& theOption )
+: TMVA::FitterBase( target, name, ranges, theOption )
 {
    // default parameters settings for Simulated Annealing algorithm
    DeclareOptions();
@@ -59,18 +60,19 @@ TMVA::SimulatedAnnealingFitter::SimulatedAnnealingFitter( IFitterTarget& target,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// declare SA options
+/// declare SA options.
+///
+///  - MaxCalls                 <int>      maximum number of calls for simulated annealing
+///  - TemperatureGradient      <float>    temperature gradient for simulated annealing
+///  - UseAdaptiveTemperature   <bool>     use of adaptive temperature for simulated annealing
+///  - InitialTemperature       <float>    initial temperature for simulated annealing
+///  - MinTemperature           <float>    minimum temperature for simulated annealing
+///  - Eps                      <int>      number of epochs for simulated annealing
+///  - NFunLoops                <int>      number of loops for simulated annealing
+///  - NEps                     <int>      number of epochs for simulated annealing
 
-void TMVA::SimulatedAnnealingFitter::DeclareOptions() 
+void TMVA::SimulatedAnnealingFitter::DeclareOptions()
 {
-   // MaxCalls                 <int>      maximum number of calls for simulated annealing
-   // TemperatureGradient      <float>    temperature gradient for simulated annealing
-   // UseAdaptiveTemperature   <bool>     use of adaptive temperature for simulated annealing
-   // InitialTemperature       <float>    initial temperature for simulated annealing
-   // MinTemperature           <float>    minimum temperature for simulated annealing 
-   // Eps                      <int>      number of epochs for simulated annealing
-   // NFunLoops                <int>      number of loops for simulated annealing      
-   // NEps                     <int>      number of epochs for simulated annealing
 
    // default settings
    fMaxCalls                = 100000;
@@ -85,9 +87,9 @@ void TMVA::SimulatedAnnealingFitter::DeclareOptions()
    fUseDefaultTemperature   = kFALSE;
 
    DeclareOptionRef(fMaxCalls,               "MaxCalls",              "Maximum number of minimisation calls");
-   DeclareOptionRef(fInitialTemperature,     "InitialTemp",           "Initial temperature");  
-   DeclareOptionRef(fMinTemperature,         "MinTemp",               "Mimimum temperature");
-   DeclareOptionRef(fEps,                    "Eps",                   "Epsilon");  
+   DeclareOptionRef(fInitialTemperature,     "InitialTemp",           "Initial temperature");
+   DeclareOptionRef(fMinTemperature,         "MinTemp",               "Minimum temperature");
+   DeclareOptionRef(fEps,                    "Eps",                   "Epsilon");
    DeclareOptionRef(fTemperatureScale,       "TempScale",             "Temperature scale");
    DeclareOptionRef(fAdaptiveSpeed,          "AdaptiveSpeed",         "Adaptive speed");
    DeclareOptionRef(fTemperatureAdaptiveStep,"TempAdaptiveStep",      "Step made in each generation temperature adaptive");
@@ -119,7 +121,7 @@ void TMVA::SimulatedAnnealingFitter::SetParameters( Int_t    maxCalls,
 {
    fMaxCalls                 = maxCalls;
    fInitialTemperature       = initialTemperature;
-   fMinTemperature           = minTemperature; 
+   fMinTemperature           = minTemperature;
    fEps                      = eps;
    fKernelTemperatureS       = kernelTemperatureS;
    fTemperatureScale         = temperatureScale;
@@ -133,15 +135,20 @@ void TMVA::SimulatedAnnealingFitter::SetParameters( Int_t    maxCalls,
 
 Double_t TMVA::SimulatedAnnealingFitter::Run( std::vector<Double_t>& pars )
 {
-   Log() << kINFO << "<SimulatedAnnealingFitter> Optimisation, please be patient ... " << Endl;
+   Log() << kHEADER << "<SimulatedAnnealingFitter> Optimisation, please be patient ... " << Endl;
    Log() << kINFO << "(progress timing may be inaccurate for SA)" << Endl;
 
    SimulatedAnnealing sa( GetFitterTarget(), fRanges );
 
    // set driving parameters
    sa.SetOptions( fMaxCalls, fInitialTemperature, fMinTemperature, fEps, fKernelTemperatureS,
-                  fTemperatureScale, fAdaptiveSpeed, fTemperatureAdaptiveStep, 
+                  fTemperatureScale, fAdaptiveSpeed, fTemperatureAdaptiveStep,
                   fUseDefaultScale, fUseDefaultTemperature );
+
+  if (fIPyMaxIter){
+     *fIPyMaxIter = fMaxCalls;
+     sa.SetIPythonInteractive(fExitFromTraining, fIPyCurrentIter);
+   }
    // minimise
    Double_t fcn = sa.Minimize( pars );
 

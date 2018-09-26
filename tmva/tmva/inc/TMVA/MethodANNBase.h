@@ -42,35 +42,17 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 #include <vector>
-#ifndef ROOT_TTree
 #include "TTree.h"
-#endif
-#ifndef ROOT_TObjArray
 #include "TObjArray.h"
-#endif
-#ifndef ROOT_TRandom3
 #include "TRandom3.h"
-#endif
-#ifndef ROOT_TMatrix
 #include "TMatrix.h"
-#endif
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
-#ifndef ROOT_TMVA_TActivation
 #include "TMVA/TActivation.h"
-#endif
-#ifndef ROOT_TMVA_TNeuron
 #include "TMVA/TNeuron.h"
-#endif
-#ifndef ROOT_TMVA_TNeuronInput
 #include "TMVA/TNeuronInput.h"
-#endif
 
 class TH1;
 class TH1F;
@@ -78,40 +60,39 @@ class TH1F;
 namespace TMVA {
 
    class MethodANNBase : public MethodBase {
-      
+
    public:
-      
+
       // constructors dictated by subclassing off of MethodBase
       MethodANNBase( const TString& jobName,
                      Types::EMVA methodType,
                      const TString& methodTitle,
-                     DataSetInfo& theData, 
-                     const TString& theOption,
-                     TDirectory* theTargetDir );
-      
+                     DataSetInfo& theData,
+                     const TString& theOption );
+
       MethodANNBase( Types::EMVA methodType,
                      DataSetInfo& theData,
-                     const TString& theWeightFile, 
-                     TDirectory* theTargetDir );
-      
+                     const TString& theWeightFile);
+
       virtual ~MethodANNBase();
-      
+
       // this does the real initialization work
       void InitANNBase();
-      
+
       // setters for subclasses
       void SetActivation(TActivation* activation) {
-         if (fActivation != NULL) delete fActivation; fActivation = activation;
+         if (fActivation != nullptr) delete fActivation;
+         fActivation = activation;
       }
       void SetNeuronInputCalculator(TNeuronInput* inputCalculator) {
-         if (fInputCalculator != NULL) delete fInputCalculator;
+         if (fInputCalculator != nullptr) delete fInputCalculator;
          fInputCalculator = inputCalculator;
       }
-      
+
       // this will have to be overridden by every subclass
       virtual void Train() = 0;
-      
-      // print network, for debugging  
+
+      // print network, for debugging
       virtual void PrintNetwork() const;
 
 
@@ -121,9 +102,9 @@ namespace TMVA {
       // std::vector<float> layerValues;
       // mlp->GetLayerActivation (2, std::back_inserter(layerValues));
       // ... do now something with the layerValues
-      // 
+      //
       template <typename WriteIterator>
-      void GetLayerActivation (size_t layer, WriteIterator writeIterator);
+         void GetLayerActivation (size_t layer, WriteIterator writeIterator);
 
       using MethodBase::ReadWeightsFromStream;
 
@@ -133,51 +114,51 @@ namespace TMVA {
 
       // read weights from file
       virtual void ReadWeightsFromStream( std::istream& istr );
-      
+
       // calculate the MVA value
       virtual Double_t GetMvaValue( Double_t* err = 0, Double_t* errUpper = 0 );
 
       virtual const std::vector<Float_t> &GetRegressionValues();
 
       virtual const std::vector<Float_t> &GetMulticlassValues();
-      
+
       // write method specific histos to target file
       virtual void WriteMonitoringHistosToFile() const;
-     
+
       // ranking of input variables
       const Ranking* CreateRanking();
 
       // the option handling methods
       virtual void DeclareOptions();
       virtual void ProcessOptions();
-      
+
       Bool_t Debug() const;
 
       enum EEstimator      { kMSE=0,kCE};
 
+      TObjArray*    fNetwork;         // TObjArray of TObjArrays representing network
 
    protected:
 
       virtual void MakeClassSpecific( std::ostream&, const TString& ) const;
-      
+
       std::vector<Int_t>* ParseLayoutString( TString layerSpec );
       virtual void        BuildNetwork( std::vector<Int_t>* layout, std::vector<Double_t>* weights=NULL,
                                         Bool_t fromFile = kFALSE );
       void     ForceNetworkInputs( const Event* ev, Int_t ignoreIndex = -1 );
       Double_t GetNetworkOutput() { return GetOutputNeuron()->GetActivationValue(); }
-      
+
       // debugging utilities
       void     PrintMessage( TString message, Bool_t force = kFALSE ) const;
       void     ForceNetworkCalculations();
       void     WaitForKeyboard();
-      
+
       // accessors
       Int_t    NumCycles()  { return fNcycles;   }
       TNeuron* GetInputNeuron (Int_t index)       { return (TNeuron*)fInputLayer->At(index); }
       TNeuron* GetOutputNeuron(Int_t index = 0)   { return fOutputNeurons.at(index); }
-      
+
       // protected variables
-      TObjArray*    fNetwork;         // TObjArray of TObjArrays representing network
       TObjArray*    fSynapses;        // array of pointers to synapses, no structural data
       TActivation*  fActivation;      // activation function to be used for hidden layers
       TActivation*  fOutput;          // activation function to be used for output layers, depending on estimator
@@ -193,14 +174,14 @@ namespace TMVA {
       // monitoring histograms
       TH1F* fEstimatorHistTrain; // monitors convergence of training sample
       TH1F* fEstimatorHistTest;  // monitors convergence of independent test sample
-      
+
       // monitoring histograms (not available for regression)
       void CreateWeightMonitoringHists( const TString& bulkname, std::vector<TH1*>* hv = 0 ) const;
-      std::vector<TH1*> fEpochMonHistS; // epoch monitoring hitograms for signal
-      std::vector<TH1*> fEpochMonHistB; // epoch monitoring hitograms for background
-      std::vector<TH1*> fEpochMonHistW; // epoch monitoring hitograms for weights
+      std::vector<TH1*> fEpochMonHistS; // epoch monitoring histograms for signal
+      std::vector<TH1*> fEpochMonHistB; // epoch monitoring histograms for background
+      std::vector<TH1*> fEpochMonHistW; // epoch monitoring histograms for weights
 
-      
+
       // general
       TMatrixD           fInvHessian;           // zjh
       bool               fUseRegulator;         // zjh
@@ -215,25 +196,25 @@ namespace TMVA {
 
 
    private:
-      
+
       // helper functions for building network
       void BuildLayers(std::vector<Int_t>* layout, Bool_t from_file = false);
-      void BuildLayer(Int_t numNeurons, TObjArray* curLayer, TObjArray* prevLayer, 
+      void BuildLayer(Int_t numNeurons, TObjArray* curLayer, TObjArray* prevLayer,
                       Int_t layerIndex, Int_t numLayers, Bool_t from_file = false);
       void AddPreLinks(TNeuron* neuron, TObjArray* prevLayer);
-     
+
       // helper functions for weight initialization
       void InitWeights();
       void ForceWeights(std::vector<Double_t>* weights);
-      
+
       // helper functions for deleting network
       void DeleteNetwork();
       void DeleteNetworkLayer(TObjArray*& layer);
-      
+
       // debugging utilities
       void PrintLayer(TObjArray* layer) const;
       void PrintNeuron(TNeuron* neuron) const;
-      
+
       // private variables
       TObjArray*              fInputLayer;      // cache this for fast access
       std::vector<TNeuron*>   fOutputNeurons;   // cache this for fast access
@@ -241,33 +222,33 @@ namespace TMVA {
 
       // some static flags
       static const Bool_t fgDEBUG      = kTRUE;  // debug flag
-    
-      ClassDef(MethodANNBase,0) // Base class for TMVA ANNs
+
+      ClassDef(MethodANNBase,0); // Base class for TMVA ANNs
    };
 
 
 
-    template <typename WriteIterator>
-    inline void MethodANNBase::GetLayerActivation (size_t layerNumber, WriteIterator writeIterator)
-    {
-	// get the activation values of the nodes in layer "layer"
-	// write the node activation values into the writeIterator
-        // assumes, that the network has been computed already (by calling
-	// "GetRegressionValues")
+   template <typename WriteIterator>
+      inline void MethodANNBase::GetLayerActivation (size_t layerNumber, WriteIterator writeIterator)
+      {
+         // get the activation values of the nodes in layer "layer"
+         // write the node activation values into the writeIterator
+         // assumes, that the network has been computed already (by calling
+         // "GetRegressionValues")
 
-	if (layerNumber >= (size_t)fNetwork->GetEntriesFast())
-	    return;
+         if (layerNumber >= (size_t)fNetwork->GetEntriesFast())
+            return;
 
-	TObjArray* layer = (TObjArray*)fNetwork->At(layerNumber);
-	UInt_t nNodes    = layer->GetEntriesFast();
-	for (UInt_t iNode = 0; iNode < nNodes; iNode++) 
-	{
-	    (*writeIterator) = ((TNeuron*)layer->At(iNode))->GetActivationValue();
-	    ++writeIterator;
-	}
-    }
+         TObjArray* layer = (TObjArray*)fNetwork->At(layerNumber);
+         UInt_t nNodes    = layer->GetEntriesFast();
+         for (UInt_t iNode = 0; iNode < nNodes; iNode++)
+            {
+               (*writeIterator) = ((TNeuron*)layer->At(iNode))->GetActivationValue();
+               ++writeIterator;
+            }
+      }
 
-   
+
 } // namespace TMVA
 
 #endif

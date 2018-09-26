@@ -688,9 +688,10 @@ void THtml::TFileSysDir::Recurse(TFileSysDB* db, const char* path)
             subdir->Recurse(db, entryPath);
          } else {
             int delen = strlen(direntry);
-            // only .cxx and .h are taken
+            // only .cxx and .h, .hxx are taken
             if (strcmp(direntry + delen - 4, ".cxx")
-                && strcmp(direntry + delen - 2, ".h"))
+                && strcmp(direntry + delen - 2, ".h")
+                && strcmp(direntry + delen - 4, ".hxx"))
                continue;
             TFileSysEntry* entry = new TFileSysEntry(direntry, this);
             db->GetEntries().Add(entry);
@@ -1203,7 +1204,7 @@ to process directives.</p>
 END_HTML */
 ////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(THtml)
+ClassImp(THtml);
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a THtml object.
 /// In case output directory does not exist an error
@@ -1348,18 +1349,7 @@ const char* THtml::GetEtcDir() const
    R__LOCKGUARD(GetMakeClassMutex());
 
    fPathInfo.fEtcDir = "html";
-
-#ifdef ROOTETCDIR
-   gSystem->PrependPathName(ROOTETCDIR, fPathInfo.fEtcDir);
-#else
-   gSystem->PrependPathName("etc", fPathInfo.fEtcDir);
-# ifdef ROOTPREFIX
-   gSystem->PrependPathName(ROOTPREFIX, fPathInfo.fEtcDir);
-# else
-   if (getenv("ROOTSYS"))
-      gSystem->PrependPathName(getenv("ROOTSYS"), fPathInfo.fEtcDir);
-# endif
-#endif
+   gSystem->PrependPathName(TROOT::GetEtcDir(), fPathInfo.fEtcDir);
 
    return fPathInfo.fEtcDir;
 }
@@ -1567,7 +1557,7 @@ void THtml::CreateListOfClasses(const char* filter)
 
    fDocEntityInfo.fClassFilter = filter;
 
-   // start from begining
+   // start from beginning
    gClassTable->Init();
    if (filter && (!filter[0] || !strcmp(filter, "*")))
       filter = ".*";
@@ -1586,6 +1576,8 @@ void THtml::CreateListOfClasses(const char* filter)
       const char *cname = 0;
       if (i < 0) cname = "TObject";
       else cname = gClassTable->Next();
+      if (!cname)
+         continue;
 
       if (i >= 0 && !strcmp(cname, "TObject")) {
          // skip the second iteration on TObject
@@ -1596,6 +1588,8 @@ void THtml::CreateListOfClasses(const char* filter)
       if (strstr(cname, "__gnu_cxx::")) continue;
       // Work around ROOT-6016
       if (!strcmp(cname, "timespec")) continue;
+      // "tuple"s are synthetic in the interpreter
+      if (!strncmp(cname, "tuple<", 6)) continue;
 
       // get class & filename - use TROOT::GetClass, as we also
       // want those classes without decl file name!
@@ -1666,12 +1660,7 @@ void THtml::CreateListOfClasses(const char* filter)
                   if (posSpace != std::string::npos)
                      lib.erase(posSpace);
                   if (rootLibs.find(lib) == rootLibs.end()) {
-#ifdef ROOTLIBDIR
-                     TString rootlibdir = ROOTLIBDIR;
-#else
-                     TString rootlibdir = "lib";
-                     gSystem->PrependPathName(gRootDir, rootlibdir);
-#endif
+                     TString rootlibdir = TROOT::GetLibDir();
                      TString sLib(lib);
                      if (sLib.Index('.') == -1) {
                         sLib += ".";
@@ -2072,8 +2061,7 @@ const char* THtml::GetHtmlFileName(const char* classname) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*Return pointer to class with name*-*-*-*-*-*-*-*-*-*-*-*-*
-///*-*      =================================
+/// Return pointer to class with name.
 
 TClass *THtml::GetClass(const char *name1) const
 {
@@ -2082,8 +2070,6 @@ TClass *THtml::GetClass(const char *name1) const
    if (strstr(name1,"ROOT::")==name1) {
       Bool_t ret = kTRUE;
       if (!strncmp(name1 + 6,"Math", 4))   ret = kFALSE;
-      if (!strncmp(name1 + 6,"Reflex", 6)) ret = kFALSE;
-      if (!strncmp(name1 + 6,"Cintex", 6)) ret = kFALSE;
       if (ret) return 0;
    }
 
@@ -2213,39 +2199,7 @@ Bool_t THtml::IsNamespace(const TClass*cl)
 
 void THtml::LoadAllLibs()
 {
-   TEnv* mapfile = gInterpreter->GetMapfile();
-   if (!mapfile || !mapfile->GetTable()) return;
-
-   std::set<std::string> loadedlibs;
-   std::set<std::string> failedlibs;
-
-   TEnvRec* rec = 0;
-   TIter iEnvRec(mapfile->GetTable());
-   while ((rec = (TEnvRec*) iEnvRec())) {
-      TString libs = rec->GetValue();
-      TString lib;
-      Ssiz_t pos = 0;
-      while (libs.Tokenize(lib, pos)) {
-         // check that none of the libs failed to load
-         if (failedlibs.find(lib.Data()) != failedlibs.end()) {
-            // don't load it or any of its dependencies
-            libs = "";
-            break;
-         }
-      }
-      pos = 0;
-      while (libs.Tokenize(lib, pos)) {
-         // ignore libCore - it's already loaded
-         if (lib.BeginsWith("libCore"))
-            continue;
-
-         if (loadedlibs.find(lib.Data()) == loadedlibs.end()) {
-            // just load the first library - TSystem will do the rest.
-            gSystem->Load(lib);
-            loadedlibs.insert(lib.Data());
-         }
-      }
-   }
+   gSystem->LoadAllLibraries();
 }
 
 

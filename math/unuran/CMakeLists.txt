@@ -3,6 +3,9 @@
 ############################################################################
 
 #---Define package related variables-----------------------------------------------------------------
+
+if(builtin_unuran)
+
 set(UNR_SRCDIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(UNR_VERSION "1.8.0-root")
 set(UNR_TARNAME "unuran-${UNR_VERSION}")
@@ -47,11 +50,14 @@ endif()
 
 #---We need to disable some warnings-------------------------------------------------------------------
 string(REPLACE -Wall "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-if(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
-  add_definitions(-Wno-parentheses-equality)
+if(${CMAKE_CXX_COMPILER_ID} MATCHES Clang)
+  ROOT_ADD_C_FLAG(CMAKE_C_FLAGS -Wno-parentheses-equality)
+endif()
+if(${CMAKE_CXX_COMPILER_ID} MATCHES GNU)
+  ROOT_ADD_C_FLAG(CMAKE_C_FLAGS -Wno-maybe-uninitialized)
 endif()
 
-include_directories(BEFORE ${UNR_UNTARDIR} ${UNR_UNTARDIR}/src ${UNR_UNTARDIR}/src/utils)
+include_directories(BEFORE SYSTEM ${UNR_UNTARDIR} ${UNR_UNTARDIR}/src ${UNR_UNTARDIR}/src/utils)
 add_definitions(-DHAVE_CONFIG_H)
 set(unrsources ${UNR_UNTARDIR}/src/utils/*.c
                ${UNR_UNTARDIR}/src/methods/*.c
@@ -62,8 +68,17 @@ set(unrsources ${UNR_UNTARDIR}/src/utils/*.c
                ${UNR_UNTARDIR}/src/tests/*.c
                ${UNR_UNTARDIR}/src/uniform/*.c
                ${UNR_UNTARDIR}/src/urng/*.c )
+set(unrconfig ${UNR_UNTARDIR}/config.h)
 
-ROOT_GENERATE_DICTIONARY(G__Unuran *.h MODULE Unuran LINKDEF LinkDef.h)
+else()
 
-ROOT_LINKER_LIBRARY(Unuran *.cxx ${unrsources} G__Unuran.cxx ${UNR_UNTARDIR}/config.h  LIBRARIES Core DEPENDENCIES Hist MathCore)
-ROOT_INSTALL_HEADERS()
+include_directories(SYSTEM ${UNURAN_INCLUDE_DIRS})
+set(unrsources)
+set(unrconfig)
+
+endif()
+
+ROOT_STANDARD_LIBRARY_PACKAGE(Unuran
+                              SOURCES *.cxx ${unrsources} ${unrconfig}
+                              LIBRARIES ${UNURAN_LIBRARIES}
+                              DEPENDENCIES Core Hist MathCore)

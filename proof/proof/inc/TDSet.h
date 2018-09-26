@@ -42,9 +42,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
 
 class TChain;
 class TCollection;
@@ -140,6 +138,8 @@ public:
    Int_t            Lookup(Bool_t force = kFALSE);
    void             SetLookedUp() { SetBit(kHasBeenLookedUp); }
    TFileInfo       *GetFileInfo(const char *type = "TTree");
+
+   void             Reset();
 
    Float_t          GetMaxProcTime() const { return fMaxProcTime; }
    void             SetMaxProcTime(Float_t mpt) { fMaxProcTime = mpt; }

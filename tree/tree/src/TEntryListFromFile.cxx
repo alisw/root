@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TEntryListFromFile
+\ingroup tree
+
 Manages entry lists from different files, when they are not loaded
 in memory at the same time.
 
@@ -37,7 +39,7 @@ list.
 #include "TError.h"
 #include "TTree.h"
 
-ClassImp(TEntryListFromFile)
+ClassImp(TEntryListFromFile);
 
 TEntryListFromFile::TEntryListFromFile(): TEntryList(),
    fListFileName(""), fListName(""), fNFiles(0), fListOffset(0), fFile(0), fFileNames(0)
@@ -83,7 +85,7 @@ TEntryListFromFile::~TEntryListFromFile()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Returns entry #index
+/// Returns entry \#index
 /// See also Next() for a faster alternative
 
 Long64_t TEntryListFromFile::GetEntry(Int_t index)
@@ -224,7 +226,7 @@ Long64_t TEntryListFromFile::Next()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Loads the list #listnumber
+/// Loads the list \#listnumber
 /// This is the only function that can modify fCurrent and fFile data members
 
 Int_t TEntryListFromFile::LoadList(Int_t listnumber)

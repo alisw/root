@@ -22,8 +22,35 @@ etc/allDict.h
 *_dictUmbrella.h
 *_rdict.pcm
 
+# MacOS Xcode
+xcuserdata
+project.xcworkspace
+
+# MacOS metadata
+.DS_Store
+
+# Visual Code
+.vscode/*
+.build
+
+# CLion
+.idea/*
+cmake-build-*/
+
+# QtCreator
+CMakeLists.txt.user
+*.autosave
+
+# Eclipse
+.settings/*
+.cproject
+
+# Vim
+*.swp
+
 # Other Stuff
 *.d
+tags
 
 # /
 /bin
@@ -46,6 +73,7 @@ etc/allDict.h
 /roottest
 /*.mk
 /.project
+/files
 
 # /README/
 /README/ChangeLog
@@ -58,10 +86,14 @@ etc/allDict.h
 /config/Makefile.comp
 
 # /core/base/src/
-core/base/src/RGitCommit.h
+/core/base/src/RGitCommit.h
 
 # /core/lzma/src/
 /core/lzma/src/xz-5.2.1
+
+# /core/lz4/src
+/core/lz4/src/*.tar.gz
+/core/lz4/src/lz4-*
 
 # /core/metautils/src/
 /core/metautils/src/stlLoader_set.cc
@@ -79,17 +111,8 @@ core/base/src/RGitCommit.h
 # /core/pcre/src/
 /core/pcre/src/pcre-8.37
 
-# /core/utils/src/
-/core/utils/src/rootcint_tmp
-/core/utils/src/rootcint_tmp.exp
-/core/utils/src/rootcint_tmp.lib
-/core/utils/src/rootcint_tmp.pdb
-/core/utils/src/rootcint_tmp.cxx
-/core/utils/src/rootcint_tmp.exe
-/core/utils/src/rootcling_tmp
-/core/utils/src/rootcling_tmp.cxx
-/core/utils/src/RStl_tmp.cxx
-/core/utils/src/RConversionRuleParser_tmp.cxx
+# /core/rootcling_stage1/src/
+/core/rootcling_stage1/src/rootcling_stage1
 
 # /documentation/primer/
 /documentation/primer/ROOTPrimer.tex
@@ -183,6 +206,19 @@ core/base/src/RGitCommit.h
 
 # /interpreter/cling/lib/Interpreter/
 /interpreter/cling/lib/Interpreter/cling-compiledata.h
+/interpreter/cling/lib/Interpreter/cling-compiledata.h.in
+
+# /interpreter/cling/...
+/interpreter/cling/CMakeFiles
+/interpreter/cling/Makefile
+/interpreter/cling/cmake_install.cmake
+/interpreter/cling/*/CMakeFiles
+/interpreter/cling/*/Makefile
+/interpreter/cling/*/cmake_install.cmake
+/interpreter/cling/lib/*/CMakeFiles
+/interpreter/cling/lib/*/Makefile
+/interpreter/cling/lib/*/cmake_install.cmake
+/interpreter/cling/lib/cmake
 
 # /interpreter/llvm/
 /interpreter/llvm/obj
@@ -207,6 +243,7 @@ core/base/src/RGitCommit.h
 # /main/src/
 /main/src/roots.sh
 /main/src/proofserv.sh
+/main/src/xproofd.sh
 
 # /math/genetic/test/
 /math/genetic/test/testGAMinimizer
@@ -471,3 +508,8 @@ core/base/src/RGitCommit.h
 /tutorials/tree/cernstaff.root
 /tutorials/tree/staff.root
 /tutorials/tree/basic.root
+
+# TMVA datasets
+/tmva/tmva/test/DNN/CNN/dataset/SingleElectronPt50_FEVTDEBUG_n250k_IMG_CROPS32.root
+/tmva/tmva/test/DNN/CNN/dataset/SinglePhotonPt50_FEVTDEBUG_n250k_IMG_CROPS32.root
+/tmva/tmva/test/DNN/CNN/dataset/tmva_class_example.root

@@ -1,10 +1,16 @@
 set(LLVM_LINK_COMPONENTS
-  ${LLVM_TARGETS_TO_BUILD}
+  AllTargetsAsmParsers
+  AllTargetsDescs
+  AllTargetsInfos
   Core
+  Demangle
   Object
   Support
   )
 
 add_llvm_tool(llvm-nm
   llvm-nm.cpp
+
+  DEPENDS
+  intrinsics_gen
   )

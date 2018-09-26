@@ -36,9 +36,7 @@
 
 #include <vector>
 
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
 
 
 namespace TMVA {
@@ -60,7 +58,7 @@ namespace TMVA {
 
    private:
 
-      ClassDef(IFitterTarget,0) // base class for a fitter "target"
+      ClassDef(IFitterTarget,0); // base class for a fitter "target"
    };
 
 } // namespace TMVA

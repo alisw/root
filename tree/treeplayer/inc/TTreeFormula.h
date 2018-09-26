@@ -23,17 +23,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_v5_TFormula
 #include "v5/TFormula.h"
-#endif
 
-#ifndef ROOT_TLeaf
 #include "TLeaf.h"
-#endif
 
-#ifndef ROOT_TObjArray
 #include "TObjArray.h"
-#endif
 
 #include <string>
 #include <vector>
@@ -66,7 +60,7 @@ class TTreeFormula : public ROOT::v5::TFormula {
 friend class TTreeFormulaManager;
 
 protected:
-   enum {
+   enum EStatusBits {
       kIsCharacter = BIT(12),
       kMissingLeaf = BIT(15), // true if some of the needed leaves are missing in the current TTree
       kIsInteger   = BIT(17), // true if the branch contains an integer variable
@@ -77,7 +71,8 @@ protected:
       kIndexOfEntry, kEntries, kLength, kIteration, kLengthFunc, kSum, kEntryList,
       kTreeMember,
       kIndexOfLocalEntry,
-      kMin, kMax
+      kMin, kMax,
+      kLocalEntries
 
    };
    enum {
@@ -87,6 +82,14 @@ protected:
       kAlternateString = 203,
       kMinIf           = 204,
       kMaxIf           = 205
+   };
+
+   // Helper struct to hold a cache
+   // that can accelerate calculation of the RealIndex.
+   struct RealInstanceCache {
+      Int_t fInstanceCache = 0;
+      Int_t fLocalIndexCache = 0;
+      Int_t fVirtAccumCache = 0;
    };
 
    TTree       *fTree;            //! pointer to Tree
@@ -124,7 +127,9 @@ protected:
    TList                    *fDimensionSetup; //! list of dimension setups, for delayed creation of the dimension information.
    std::vector<std::string>  fAliasesUsed;    //! List of aliases used during the parsing of the expression.
 
-   LongDouble_t*        fConstLD;   // local version of fConsts able to store bigger numbers
+   LongDouble_t*        fConstLD;   //! local version of fConsts able to store bigger numbers
+
+   RealInstanceCache fRealInstanceCache; //! Cache accelerating the GetRealInstance function
 
    TTreeFormula(const char *name, const char *formula, TTree *tree, const std::vector<std::string>& aliases);
    void Init(const char *name, const char *formula);
@@ -205,7 +210,7 @@ public:
    virtual TTree*      GetTree() const {return fTree;}
    virtual void        UpdateFormulaLeaves();
 
-   ClassDef(TTreeFormula,9)  //The Tree formula
+   ClassDef(TTreeFormula, 10);  //The Tree formula
 };
 
 #endif

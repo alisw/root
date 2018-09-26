@@ -19,6 +19,7 @@
 
 
 #pragma link C++ class TAxis-;
+#pragma link C++ class TAxisModLab+;
 #pragma link C++ class TBinomialEfficiencyFitter+;
 #pragma link C++ class TFormula-;
 #pragma link C++ class ROOT::v5::TFormula-;
@@ -36,6 +37,11 @@
 #pragma link C++ class TFormulaParamOrder+;
 #pragma link C++ class std::map<TString,int,TFormulaParamOrder>+;
 #pragma link C++ class TF12+;
+#pragma link C++ class TF1AbsComposition + ;
+#pragma link C++ class TF1Convolution + ;
+#pragma link C++ class TF1NormSum + ;
+#pragma link C++ class std::vector < std::unique_ptr < TF1 >> +;
+#pragma link C++ class std::vector < std::unique_ptr < TF1AbsComposition >> +;
 #pragma link C++ class TF2-;
 #pragma link C++ class TF3-;
 #pragma link C++ class Foption_t+;
@@ -62,6 +68,8 @@
 #pragma link C++ class TH2F-;
 #pragma link C++ class TH2Poly+;
 #pragma link C++ class TH2PolyBin+;
+#pragma link C++ class TProfile2Poly+;
+#pragma link C++ class TProfile2PolyBin+;
 #pragma link C++ class TH2S-;
 #pragma link C++ class TH2I+;
 #pragma link C++ class TH3-;
@@ -116,6 +124,7 @@
 #pragma link C++ class TNDArrayRef<const UShort_t>+;
 */
 #pragma link C++ class THn+;
+#pragma link C++ class THnChain+;
 #pragma link C++ class THnT<Float_t>+;
 //#pragma link C++ class THnT<Float16_t>+;
 #pragma link C++ class THnT<Double_t>+;
@@ -158,10 +167,6 @@
 #pragma link C++ class TVirtualGraphPainter+;
 #pragma link C++ class TVirtualFitter+;
 #pragma link C++ class TBackCompFitter+;
-#pragma link C++ class TUnfold+;
-#pragma link C++ class TUnfoldSys+;
-#pragma link C++ class TUnfoldBinning+;
-#pragma link C++ class TUnfoldDensity+;
 #pragma link C++ class TSVDUnfold+;
 #pragma link C++ class TEfficiency+;
 #pragma link C++ class TKDE+;
@@ -338,5 +343,33 @@
   source="" target="fBinSumw2" \
   code="{ fBinSumw2.Reset(); }"
 
+
+#ifdef ROOT7_RHist
+
+#pragma link C++ class ROOT::Experimental::RH1F+;
+#pragma link C++ class ROOT::Experimental::RH1D+;
+#pragma link C++ class ROOT::Experimental::RH2F+;
+#pragma link C++ class ROOT::Experimental::RH2D+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistImpl<ROOT::Experimental::Detail::RHistData<1,double,vector<double>,ROOT::Experimental::RHistStatContent,ROOT::Experimental::RHistStatUncertainty>,ROOT::Experimental::RAxisEquidistant>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistImpl<ROOT::Experimental::Detail::RHistData<2,double,vector<double>, ROOT::Experimental::RHistStatContent, ROOT::Experimental::RHistStatUncertainty>, ROOT::Experimental::RAxisEquidistant, ROOT::Experimental::RAxisIrregular>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistImplBase<ROOT::Experimental::Detail::RHistData<1,double,vector<double>,ROOT::Experimental::RHistStatContent,ROOT::Experimental::RHistStatUncertainty>>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistImplBase<ROOT::Experimental::Detail::RHistData<2,double,vector<double>,ROOT::Experimental::RHistStatContent,ROOT::Experimental::RHistStatUncertainty>>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistImplPrecisionAgnosticBase<1>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistImplPrecisionAgnosticBase<2>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistImplPrecisionAgnosticBase<3>+;
+#pragma link C++ class ROOT::Experimental::RHistStatContent<1,double>+;
+#pragma link C++ class ROOT::Experimental::RHistStatContent<2,double>+;
+#pragma link C++ class ROOT::Experimental::RHistStatContent<3,double>+;
+#pragma link C++ class ROOT::Experimental::RHistStatUncertainty<1,double>+;
+#pragma link C++ class ROOT::Experimental::RHistStatUncertainty<2,double>+;
+#pragma link C++ class ROOT::Experimental::RHistStatUncertainty<3,double>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistData<1,double,vector<double>,ROOT::Experimental::RHistStatContent,ROOT::Experimental::RHistStatUncertainty>+;
+#pragma link C++ class ROOT::Experimental::Detail::RHistData<2,double,vector<double>,ROOT::Experimental::RHistStatContent,ROOT::Experimental::RHistStatUncertainty>+;
+#pragma link C++ class tuple<ROOT::Experimental::RAxisEquidistant>+;
+#pragma link C++ class tuple<ROOT::Experimental::RAxisEquidistant,ROOT::Experimental::RAxisIrregular>+;
+#pragma link C++ class ROOT::Experimental::RAxisEquidistant+;
+#pragma link C++ class ROOT::Experimental::RAxisIrregular+;
+#pragma link C++ class ROOT::Experimental::RAxisBase+;
+#endif
 
 #endif

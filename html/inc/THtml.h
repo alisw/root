@@ -22,17 +22,13 @@
 //                                                                        //
 ////////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_THashList
 #include "THashList.h"
-#endif
 
-#ifndef ROOT_THashTable
 #include "THashTable.h"
-#endif
 
-#ifndef ROOT_TExMap
 #include "TExMap.h"
-#endif
+
+#include "TROOT.h"
 
 #include <map>
 
@@ -111,6 +107,11 @@ public:
    public:
       TFileSysEntry(const char* name, TFileSysDir* parent):
          fName(name), fParent(parent), fLevel(parent ? parent->GetLevel() + 1 : 0) {}
+      ~TFileSysEntry()
+      {
+         // Required since we overload TObject::Hash.
+         ROOT::CallRecursiveRemoveIfNeeded(*this);
+      }
       const char* GetName() const { return fName; }
       virtual ULong_t Hash() const { return fName.Hash(); }
       virtual void GetFullName(TString& fullname, Bool_t asIncluded) const {

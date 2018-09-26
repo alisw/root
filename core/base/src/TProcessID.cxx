@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TProcessID
+\ingroup Base
+
 A TProcessID identifies a ROOT job in a unique way in time and space.
 The TProcessID title consists of a TUUID object which provides a globally
 unique identifier (for more see TUUID.h).
@@ -51,9 +53,13 @@ of TUUIDs.
 
 TObjArray  *TProcessID::fgPIDs   = 0; //pointer to the list of TProcessID
 TProcessID *TProcessID::fgPID    = 0; //pointer to the TProcessID of the current session
-UInt_t      TProcessID::fgNumber = 0; //Current referenced object instance count
+std::atomic_uint TProcessID::fgNumber(0); //Current referenced object instance count
 TExMap     *TProcessID::fgObjPIDs= 0; //Table (pointer,pids)
-ClassImp(TProcessID)
+ClassImp(TProcessID);
+
+static std::atomic<TProcessID *> gIsValidCache;
+using PIDCacheContent_t = std::pair<Int_t, TProcessID*>;
+static std::atomic<PIDCacheContent_t *> gGetProcessWithUIDCache;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return hash value for this object.
@@ -68,6 +74,15 @@ static inline ULong_t Void_Hash(const void *ptr)
 
 TProcessID::TProcessID()
 {
+   // MSVC doesn't support fSpinLock=ATOMIC_FLAG_INIT; in the class definition
+   // and Apple LLVM version 7.3.0 (clang-703.0.31) warns about:
+   // fLock(ATOMIC_FLAG_INIT)
+   // ^~~~~~~~~~~~~~~~
+   //    c++/v1/atomic:1779:26: note: expanded from macro 'ATOMIC_FLAG_INIT'
+   //  #define ATOMIC_FLAG_INIT {false}
+   // So reset the flag instead.
+   std::atomic_flag_clear( &fLock );
+
    fCount = 0;
    fObjects = 0;
 }
@@ -79,7 +94,17 @@ TProcessID::~TProcessID()
 {
    delete fObjects;
    fObjects = 0;
-   R__LOCKGUARD2(gROOTMutex);
+
+   TProcessID *This = this; // We need a referencable value for the 1st argument
+   gIsValidCache.compare_exchange_strong(This, nullptr);
+
+   auto current = gGetProcessWithUIDCache.load();
+   if (current && current->second == this) {
+      gGetProcessWithUIDCache.compare_exchange_strong(current, nullptr);
+      delete current;
+   }
+
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
    fgPIDs->Remove(this);
 }
 
@@ -88,7 +113,7 @@ TProcessID::~TProcessID()
 
 TProcessID *TProcessID::AddProcessID()
 {
-   R__LOCKGUARD2(gROOTMutex);
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
 
    if (fgPIDs && fgPIDs->GetEntriesFast() >= 65534) {
       if (fgPIDs->GetEntriesFast() == 65534) {
@@ -127,7 +152,7 @@ TProcessID *TProcessID::AddProcessID()
 
 UInt_t TProcessID::AssignID(TObject *obj)
 {
-   R__LOCKGUARD2(gROOTMutex);
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
 
    UInt_t uid = obj->GetUniqueID() & 0xffffff;
    if (obj == fgPID->GetObjectWithID(uid)) return uid;
@@ -164,7 +189,11 @@ UInt_t TProcessID::AssignID(TObject *obj)
 
 void TProcessID::CheckInit()
 {
-   if (!fObjects) fObjects = new TObjArray(100);
+   if (!fObjects) {
+       while (fLock.test_and_set(std::memory_order_acquire));  // acquire lock
+       if (!fObjects) fObjects = new TObjArray(100);
+       fLock.clear(std::memory_order_release);
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,7 +201,7 @@ void TProcessID::CheckInit()
 
 void TProcessID::Cleanup()
 {
-   R__LOCKGUARD2(gROOTMutex);
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
 
    fgPIDs->Delete();
    gROOT->GetListOfCleanups()->Remove(fgPIDs);
@@ -233,16 +262,30 @@ UInt_t TProcessID::GetNProcessIDs()
 
 TProcessID *TProcessID::GetProcessWithUID(UInt_t uid, const void *obj)
 {
-   R__LOCKGUARD2(gROOTMutex);
 
    Int_t pid = (uid>>24)&0xff;
    if (pid==0xff) {
       // Look up the pid in the table (pointer,pid)
       if (fgObjPIDs==0) return 0;
       ULong_t hash = Void_Hash(obj);
+
+      R__READ_LOCKGUARD(ROOT::gCoreMutex);
       pid = fgObjPIDs->GetValue(hash,(Long_t)obj);
+      return (TProcessID*)fgPIDs->At(pid);
+   } else {
+      auto current = gGetProcessWithUIDCache.load();
+      if (current && current->first == pid)
+         return current->second;
+
+      R__READ_LOCKGUARD(ROOT::gCoreMutex);
+      auto res = (TProcessID*)fgPIDs->At(pid);
+
+      auto next = new PIDCacheContent_t(pid, res);
+      auto old = gGetProcessWithUIDCache.exchange(next);
+      delete old;
+
+      return res;
    }
-   return (TProcessID*)fgPIDs->At(pid);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -267,8 +310,8 @@ TProcessID *TProcessID::GetSessionProcessID()
 
 Int_t TProcessID::IncrementCount()
 {
-   if (!fObjects) fObjects = new TObjArray(100);
-   fCount++;
+   CheckInit();
+   ++fCount;
    return fCount;
 }
 
@@ -314,11 +357,20 @@ TObjArray *TProcessID::GetPIDs()
 
 Bool_t TProcessID::IsValid(TProcessID *pid)
 {
-   R__LOCKGUARD2(gROOTMutex);
+   if (gIsValidCache == pid)
+      return kTRUE;
+
+   R__READ_LOCKGUARD(ROOT::gCoreMutex);
 
    if (fgPIDs==0) return kFALSE;
-   if (fgPIDs->IndexOf(pid) >= 0) return kTRUE;
-   if (pid == (TProcessID*)gROOT->GetUUIDs())  return kTRUE;
+   if (fgPIDs->IndexOf(pid) >= 0) {
+      gIsValidCache = pid;
+      return kTRUE;
+   }
+    if (pid == (TProcessID*)gROOT->GetUUIDs()) {
+      gIsValidCache = pid;
+      return kTRUE;
+   }
    return kFALSE;
 }
 
@@ -328,7 +380,7 @@ Bool_t TProcessID::IsValid(TProcessID *pid)
 
 void TProcessID::PutObjectWithID(TObject *obj, UInt_t uid)
 {
-   R__LOCKGUARD_IMT2(gROOTMutex); // Lock for parallel TTree I/O
+   R__LOCKGUARD_IMT(gROOTMutex); // Lock for parallel TTree I/O
 
    if (uid == 0) uid = obj->GetUniqueID() & 0xffffff;
 
@@ -361,6 +413,7 @@ void TProcessID::RecursiveRemove(TObject *obj)
    if (!obj->TestBit(kIsReferenced)) return;
    UInt_t uid = obj->GetUniqueID() & 0xffffff;
    if (obj == GetObjectWithID(uid)) {
+      R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
       if (fgObjPIDs) {
          ULong64_t hash = Void_Hash(obj);
          fgObjPIDs->Remove(hash,(Long64_t)obj);

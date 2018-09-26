@@ -10,7 +10,7 @@
  *************************************************************************/
 
 /************************************************************************/
-/*! \file TGLiteresult.cxx
+/*! \file TGLiteResult.cxx
  */ /*
 
          version number:    $LastChangedRevision: 1678 $
@@ -42,7 +42,7 @@
 // STD
 #include <cstdlib>
 
-ClassImp(TGLiteResult)
+ClassImp(TGLiteResult);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Dump result set.

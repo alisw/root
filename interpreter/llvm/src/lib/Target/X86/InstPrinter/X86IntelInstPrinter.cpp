@@ -14,14 +14,16 @@
 
 #include "X86IntelInstPrinter.h"
 #include "MCTargetDesc/X86BaseInfo.h"
-#include "MCTargetDesc/X86MCTargetDesc.h"
 #include "X86InstComments.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FormattedStream.h"
-#include <cctype>
+#include <cassert>
+#include <cstdint>
+
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -33,7 +35,8 @@ void X86IntelInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
 }
 
 void X86IntelInstPrinter::printInst(const MCInst *MI, raw_ostream &OS,
-                                    StringRef Annot) {
+                                    StringRef Annot,
+                                    const MCSubtargetInfo &STI) {
   const MCInstrDesc &Desc = MII.get(MI->getOpcode());
   uint64_t TSFlags = Desc.TSFlags;
 
@@ -90,8 +93,24 @@ void X86IntelInstPrinter::printSSEAVXCC(const MCInst *MI, unsigned Op,
   }
 }
 
+void X86IntelInstPrinter::printXOPCC(const MCInst *MI, unsigned Op,
+                                     raw_ostream &O) {
+  int64_t Imm = MI->getOperand(Op).getImm();
+  switch (Imm) {
+  default: llvm_unreachable("Invalid xopcc argument!");
+  case 0: O << "lt"; break;
+  case 1: O << "le"; break;
+  case 2: O << "gt"; break;
+  case 3: O << "ge"; break;
+  case 4: O << "eq"; break;
+  case 5: O << "neq"; break;
+  case 6: O << "false"; break;
+  case 7: O << "true"; break;
+  }
+}
+
 void X86IntelInstPrinter::printRoundingControl(const MCInst *MI, unsigned Op,
-                                   raw_ostream &O) {
+                                               raw_ostream &O) {
   int64_t Imm = MI->getOperand(Op).getImm() & 0x3;
   switch (Imm) {
   case 0: O << "{rn-sae}"; break;
@@ -114,12 +133,12 @@ void X86IntelInstPrinter::printPCRelImm(const MCInst *MI, unsigned OpNo,
     // that address in hex.
     const MCConstantExpr *BranchTarget = dyn_cast<MCConstantExpr>(Op.getExpr());
     int64_t Address;
-    if (BranchTarget && BranchTarget->EvaluateAsAbsolute(Address)) {
+    if (BranchTarget && BranchTarget->evaluateAsAbsolute(Address)) {
       O << formatHex((uint64_t)Address);
     }
     else {
       // Otherwise, just print the expression.
-      O << *Op.getExpr();
+      Op.getExpr()->print(O, &MAI);
     }
   }
 }
@@ -133,7 +152,7 @@ void X86IntelInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
     O << formatImm((int64_t)Op.getImm());
   } else {
     assert(Op.isExpr() && "unknown operand kind in printOperand");
-    O << *Op.getExpr();
+    Op.getExpr()->print(O, &MAI);
   }
 }
 
@@ -170,7 +189,7 @@ void X86IntelInstPrinter::printMemReference(const MCInst *MI, unsigned Op,
   if (!DispSpec.isImm()) {
     if (NeedPlus) O << " + ";
     assert(DispSpec.isExpr() && "non-immediate displacement for LEA?");
-    O << *DispSpec.getExpr();
+    DispSpec.getExpr()->print(O, &MAI);
   } else {
     int64_t DispVal = DispSpec.getImm();
     if (DispVal || (!IndexReg.getReg() && !BaseReg.getReg())) {
@@ -228,7 +247,7 @@ void X86IntelInstPrinter::printMemOffset(const MCInst *MI, unsigned Op,
     O << formatImm(DispSpec.getImm());
   } else {
     assert(DispSpec.isExpr() && "non-immediate displacement?");
-    O << *DispSpec.getExpr();
+    DispSpec.getExpr()->print(O, &MAI);
   }
 
   O << ']';
@@ -236,5 +255,8 @@ void X86IntelInstPrinter::printMemOffset(const MCInst *MI, unsigned Op,
 
 void X86IntelInstPrinter::printU8Imm(const MCInst *MI, unsigned Op,
                                      raw_ostream &O) {
+  if (MI->getOperand(Op).isExpr())
+    return MI->getOperand(Op).getExpr()->print(O, &MAI);
+
   O << formatImm(MI->getOperand(Op).getImm() & 0xff);
 }

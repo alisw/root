@@ -27,10 +27,10 @@
 
 #include <string>
 
-extern "C" {
 #if defined(__sun) && defined(__SUNPRO_CC)
 #include <signal.h>
 #endif
+extern "C" {
 #include "def.h"
 }
 
@@ -38,7 +38,7 @@ extern "C" {
 #include <unistd.h>
 #else
 extern "C" int unlink(const char *FILENAME);
-#include "../../core/utils/src/cygpath.h"
+#include "../../core/dictgen/res/cygpath.h"
 #endif
 
 extern "C" int main_orig(int argc, char **argv);

@@ -35,7 +35,21 @@ class LLVM_LIBRARY_VISIBILITY MipsAsmPrinter : public AsmPrinter {
 
   void EmitInstrWithMacroNoAT(const MachineInstr *MI);
 
+  //===------------------------------------------------------------------===//
+  // XRay implementation
+  //===------------------------------------------------------------------===//
+public:
+  // XRay-specific lowering for Mips.
+  void LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI);
+  void LowerPATCHABLE_FUNCTION_EXIT(const MachineInstr &MI);
+  void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI);
+  // Helper function that emits the XRay sleds we've collected for a particular
+  // function.
+  void EmitXRayTable();
+
 private:
+  void EmitSled(const MachineInstr &MI, SledKind Kind);
+
   // tblgen'erated function.
   bool emitPseudoExpansionLowering(MCStreamer &OutStreamer,
                                    const MachineInstr *MI);
@@ -60,27 +74,31 @@ private:
   std::map<const char *, const llvm::Mips16HardFloatInfo::FuncSignature *>
   StubsNeeded;
 
-  void emitInlineAsmStart(const MCSubtargetInfo &StartInfo) const override;
+  void emitInlineAsmStart() const override;
 
   void emitInlineAsmEnd(const MCSubtargetInfo &StartInfo,
                         const MCSubtargetInfo *EndInfo) const override;
 
-  void EmitJal(MCSymbol *Symbol);
+  void EmitJal(const MCSubtargetInfo &STI, MCSymbol *Symbol);
 
-  void EmitInstrReg(unsigned Opcode, unsigned Reg);
+  void EmitInstrReg(const MCSubtargetInfo &STI, unsigned Opcode, unsigned Reg);
 
-  void EmitInstrRegReg(unsigned Opcode, unsigned Reg1, unsigned Reg2);
+  void EmitInstrRegReg(const MCSubtargetInfo &STI, unsigned Opcode,
+                       unsigned Reg1, unsigned Reg2);
 
-  void EmitInstrRegRegReg(unsigned Opcode, unsigned Reg1, unsigned Reg2,
-                          unsigned Reg3);
+  void EmitInstrRegRegReg(const MCSubtargetInfo &STI, unsigned Opcode,
+                          unsigned Reg1, unsigned Reg2, unsigned Reg3);
 
-  void EmitMovFPIntPair(unsigned MovOpc, unsigned Reg1, unsigned Reg2,
-                        unsigned FPReg1, unsigned FPReg2, bool LE);
+  void EmitMovFPIntPair(const MCSubtargetInfo &STI, unsigned MovOpc,
+                        unsigned Reg1, unsigned Reg2, unsigned FPReg1,
+                        unsigned FPReg2, bool LE);
 
-  void EmitSwapFPIntParams(Mips16HardFloatInfo::FPParamVariant, bool LE,
+  void EmitSwapFPIntParams(const MCSubtargetInfo &STI,
+                           Mips16HardFloatInfo::FPParamVariant, bool LE,
                            bool ToFP);
 
-  void EmitSwapFPIntRetval(Mips16HardFloatInfo::FPReturnVariant, bool LE);
+  void EmitSwapFPIntRetval(const MCSubtargetInfo &STI,
+                           Mips16HardFloatInfo::FPReturnVariant, bool LE);
 
   void EmitFPCallStub(const char *, const Mips16HardFloatInfo::FuncSignature *);
 
@@ -94,20 +112,12 @@ public:
   const MipsFunctionInfo *MipsFI;
   MipsMCInstLower MCInstLowering;
 
-  // We initialize the subtarget here and in runOnMachineFunction
-  // since there are certain target specific flags (ABI) that could
-  // reside on the TargetMachine, but are on the subtarget currently
-  // and we need them for the beginning of file output before we've
-  // seen a single function.
   explicit MipsAsmPrinter(TargetMachine &TM,
                           std::unique_ptr<MCStreamer> Streamer)
       : AsmPrinter(TM, std::move(Streamer)), MCP(nullptr),
-        InConstantPool(false), Subtarget(&TM.getSubtarget<MipsSubtarget>()),
-        MCInstLowering(*this) {}
+        InConstantPool(false), MCInstLowering(*this) {}
 
-  const char *getPassName() const override {
-    return "Mips Assembly Printer";
-  }
+  StringRef getPassName() const override { return "Mips Assembly Printer"; }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -126,6 +136,7 @@ public:
   void EmitFunctionEntryLabel() override;
   void EmitFunctionBodyStart() override;
   void EmitFunctionBodyEnd() override;
+  void EmitBasicBlockEnd(const MachineBasicBlock &MBB) override;
   bool isBlockOnlyReachableByFallthrough(
                                    const MachineBasicBlock* MBB) const override;
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
@@ -135,8 +146,6 @@ public:
                              unsigned AsmVariant, const char *ExtraCode,
                              raw_ostream &O) override;
   void printOperand(const MachineInstr *MI, int opNum, raw_ostream &O);
-  void printUnsignedImm(const MachineInstr *MI, int opNum, raw_ostream &O);
-  void printUnsignedImm8(const MachineInstr *MI, int opNum, raw_ostream &O);
   void printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &O);
   void printMemOperandEA(const MachineInstr *MI, int opNum, raw_ostream &O);
   void printFCCOperand(const MachineInstr *MI, int opNum, raw_ostream &O,
@@ -145,6 +154,7 @@ public:
   void EmitStartOfAsmFile(Module &M) override;
   void EmitEndOfAsmFile(Module &M) override;
   void PrintDebugValueComment(const MachineInstr *MI, raw_ostream &OS);
+  void EmitDebugThreadLocal(const MCExpr *Value, unsigned Size) const override;
 };
 }
 

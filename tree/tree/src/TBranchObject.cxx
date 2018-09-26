@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TBranchObject
+\ingroup tree
+
 A Branch for the case of an object.
 */
 
@@ -30,7 +32,7 @@ A Branch for the case of an object.
 #include "TTree.h"
 #include "TVirtualPad.h"
 
-ClassImp(TBranchObject)
+ClassImp(TBranchObject);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for BranchObject.
@@ -167,7 +169,7 @@ void TBranchObject::Browse(TBrowser* b)
 ////////////////////////////////////////////////////////////////////////////////
 /// Loop on all leaves of this branch to fill Basket buffer.
 
-Int_t TBranchObject::Fill()
+Int_t TBranchObject::FillImpl(ROOT::Internal::TBranchIMTHelper *imtHelper)
 {
    Int_t nbytes = 0;
    Int_t nbranches = fBranches.GetEntriesFast();
@@ -177,13 +179,13 @@ Int_t TBranchObject::Fill()
       for (Int_t i = 0; i < nbranches; ++i)  {
          TBranch* branch = (TBranch*) fBranches[i];
          if (!branch->TestBit(kDoNotProcess)) {
-            Int_t bc = branch->Fill();
+            Int_t bc = branch->FillImpl(imtHelper);
             nbytes += bc;
          }
       }
    } else {
       if (!TestBit(kDoNotProcess)) {
-         Int_t bc = TBranch::Fill();
+         Int_t bc = TBranch::FillImpl(imtHelper);
          nbytes += bc;
       }
    }
@@ -304,12 +306,10 @@ void TBranchObject::Reset(Option_t* option)
    }
 }
 
-///______________________________________________________________________________
+////////////////////////////////////////////////////////////////////////////////
+/// Reset a Branch after a Merge operation (drop data but keep customizations)
 void TBranchObject::ResetAfterMerge(TFileMergeInfo *info)
 {
-   // Reset a Branch after a Merge operation (drop data but keep customizations)
-   //
-
    TBranch::ResetAfterMerge(info);
 
    Int_t nbranches = fBranches.GetEntriesFast();
@@ -546,6 +546,9 @@ void TBranchObject::Streamer(TBuffer& R__b)
 {
    if (R__b.IsReading()) {
       R__b.ReadClassBuffer(TBranchObject::Class(), this);
+      // We should rewarn in this process.
+      ResetBit(kWarn);
+      ResetBit(kOldWarn);
    } else {
       TDirectory* dirsav = fDirectory;
       fDirectory = 0;  // to avoid recursive calls

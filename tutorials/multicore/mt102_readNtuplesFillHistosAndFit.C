@@ -1,7 +1,8 @@
 /// \file
 /// \ingroup tutorial_multicore
+/// \notebook
 /// Read n-tuples in distinct workers, fill histograms, merge them and fit.
-/// Knowing that other facilities like TProcPool might be more adequate for
+/// Knowing that other facilities like TProcessExecutor might be more adequate for
 /// this operation, this tutorial complements mc101, reading and merging.
 /// We convey another message with this tutorial: the synergy of ROOT and
 /// STL algorithms is possible.
@@ -9,6 +10,7 @@
 /// \macro_output
 /// \macro_code
 ///
+/// \date January 2016
 /// \author Danilo Piparo
 
 Int_t mt102_readNtuplesFillHistosAndFit()
@@ -37,7 +39,7 @@ Int_t mt102_readNtuplesFillHistosAndFit()
    std::vector<TH1F> histograms;
    auto workerIDs = ROOT::TSeqI(nFiles);
    histograms.reserve(nFiles);
-   for (auto workerID : workerIDs){
+   for (auto workerID : workerIDs) {
       histograms.emplace_back(TH1F(Form("outHisto_%u", workerID), "Random Numbers", 128, -4, 4));
    }
 
@@ -65,16 +67,14 @@ Int_t mt102_readNtuplesFillHistosAndFit()
    }
 
    // Now join them
-   for (auto&& worker : workers) worker.join();
+   for (auto &&worker : workers)
+      worker.join();
 
    // And reduce with a simple lambda
    std::for_each(std::begin(histograms), std::end(histograms),
-                 [&sumHistogram](const TH1F & h) {
-                     sumHistogram.Add(&h);
-                  });
+                 [&sumHistogram](const TH1F &h) { sumHistogram.Add(&h); });
 
-   sumHistogram.Fit("gaus",0);
+   sumHistogram.Fit("gaus", 0);
 
    return 0;
-
 }

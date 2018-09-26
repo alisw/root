@@ -18,6 +18,7 @@
 #include "Fit/BinData.h"
 #include "Fit/UnBinData.h"
 #include "Fit/Chi2FCN.h"
+#include "Fit/PoissonLikelihoodFCN.h"
 #include "HFitInterface.h"
 #include "Math/MinimizerOptions.h"
 #include "Math/Minimizer.h"
@@ -77,7 +78,7 @@ namespace HFit {
    void StoreAndDrawFitFunction(FitObject * h1, TF1 * f1, const ROOT::Fit::DataRange & range, bool, bool, const char *goption);
 
    template <class FitObject>
-   double ComputeChi2(const FitObject & h1, TF1 &f1, bool useRange );
+   double ComputeChi2(const FitObject & h1, TF1 &f1, bool useRange, bool usePL );
 
 
 
@@ -233,7 +234,11 @@ TFitResultPtr HFit::Fit(FitObject * h1, TF1 *f1 , Foption_t & fitOption , const 
    // set the fit function
    // if option grad is specified use gradient
    if ( (linear || fitOption.Gradient) )
-      fitter->SetFunction(ROOT::Math::WrappedMultiTF1(*f1) );
+      fitter->SetFunction(ROOT::Math::WrappedMultiTF1(*f1));
+#ifdef R__HAS_VECCORE      
+   else if(f1->IsVectorized())
+      fitter->SetFunction(static_cast<const ROOT::Math::IParamMultiFunctionTempl<ROOT::Double_v> &>(ROOT::Math::WrappedMultiTF1Templ<ROOT::Double_v>(*f1)));
+#endif
    else
       fitter->SetFunction(static_cast<const ROOT::Math::IParamMultiFunction &>(ROOT::Math::WrappedMultiTF1(*f1) ) );
 
@@ -357,12 +362,11 @@ TFitResultPtr HFit::Fit(FitObject * h1, TF1 *f1 , Foption_t & fitOption , const 
       fitConfig.SetWeightCorrection(weight);
       bool extended = ((fitOption.Like & 4 ) != 4 );
       //if (!extended) Info("HFitImpl","Do a not -extended binned fit");
-      fitok = fitter->LikelihoodFit(*fitdata, extended);
+      fitok = fitter->LikelihoodFit(*fitdata, extended, fitOption.ExecPolicy);
    }
-   else // standard least square fit
-      fitok = fitter->Fit(*fitdata);
-
-
+   else{ // standard least square fit
+      fitok = fitter->Fit(*fitdata, fitOption.ExecPolicy);
+   }
    if ( !fitok  && !fitOption.Quiet )
       Warning("Fit","Abnormal termination of minimization.");
    iret |= !fitok;
@@ -378,10 +382,10 @@ TFitResultPtr HFit::Fit(FitObject * h1, TF1 *f1 , Foption_t & fitOption , const 
       f1->SetNumberFitPoints(fitdata->Size() );
 
       assert((Int_t)fitResult.Parameters().size() >= f1->GetNpar() );
-      f1->SetParameters( const_cast<double*>(&(fitResult.Parameters().front()))); 
-      if ( int( fitResult.Errors().size()) >= f1->GetNpar() ) 
-         f1->SetParErrors( &(fitResult.Errors().front()) ); 
-  
+      f1->SetParameters( const_cast<double*>(&(fitResult.Parameters().front())));
+      if ( int( fitResult.Errors().size()) >= f1->GetNpar() )
+         f1->SetParErrors( &(fitResult.Errors().front()) );
+
 
    }
 
@@ -409,7 +413,7 @@ TFitResultPtr HFit::Fit(FitObject * h1, TF1 *f1 , Foption_t & fitOption , const 
 
       // store result in the backward compatible VirtualFitter
       // in case multi-thread is not enabled
-      if (!gGlobalMutex) { 
+      if (!gGlobalMutex) {
          TVirtualFitter * lastFitter = TVirtualFitter::GetFitter();
          TBackCompFitter * bcfitter = new TBackCompFitter(fitter, fitdata);
          bcfitter->SetFitOption(fitOption);
@@ -421,7 +425,7 @@ TFitResultPtr HFit::Fit(FitObject * h1, TF1 *f1 , Foption_t & fitOption , const 
             // for interpreted FCN functions
             if (lastFitter->GetMethodCall() ) bcfitter->SetMethodCall(lastFitter->GetMethodCall() );
          }
-         
+
          // delete last fitter if it has been created here before
          if (lastFitter) {
             TBackCompFitter * lastBCFitter = dynamic_cast<TBackCompFitter *> (lastFitter);
@@ -586,9 +590,9 @@ void HFit::StoreAndDrawFitFunction(FitObject * h1, TF1 * f1, const ROOT::Fit::Da
       return;
    }
 
-   // delete the function in the list only if 
+   // delete the function in the list only if
    // the function we are fitting is not in that list
-   // If this is the case we re-use that function object and 
+   // If this is the case we re-use that function object and
    // we do not create a new one (if delOldFunction is true)
    bool reuseOldFunction = false;
    if (delOldFunction) {
@@ -677,6 +681,9 @@ void HFit::StoreAndDrawFitFunction(FitObject * h1, TF1 * f1, const ROOT::Fit::Da
 void ROOT::Fit::FitOptionsMake(EFitObjectType type, const char *option, Foption_t &fitOption) {
    //   - Decode list of options into fitOption (used by both TGraph and TH1)
    //  works for both histograms and graph depending on the enum FitObjectType defined in HFit
+   if(ROOT::IsImplicitMTEnabled()) {
+      fitOption.ExecPolicy = ROOT::Fit::ExecutionPolicy::kMultithread;
+   }
 
    if (option == 0) return;
    if (!option[0]) return;
@@ -697,7 +704,22 @@ void ROOT::Fit::FitOptionsMake(EFitObjectType type, const char *option, Foption_
          }
          else
             opt.ReplaceAll("WIDTH","");
-      }            
+      }
+
+      // if (opt.Contains("MULTIPROC")) {
+      //    fitOption.ExecPolicy = ROOT::Fit::kMultiprocess;
+      //    opt.ReplaceAll("MULTIPROC","");
+      // }
+
+      if (opt.Contains("SERIAL")) {
+         fitOption.ExecPolicy = ROOT::Fit::ExecutionPolicy::kSerial;
+         opt.ReplaceAll("SERIAL","");
+      }
+
+      if (opt.Contains("MULTITHREAD")) {
+         fitOption.ExecPolicy = ROOT::Fit::ExecutionPolicy::kMultithread;
+         opt.ReplaceAll("MULTITHREAD","");
+      }
 
       if (opt.Contains("I"))  fitOption.Integral= 1;   // integral of function in the bin (no sense for graph)
       if (opt.Contains("WW")) fitOption.W1      = 2; //all bins have weight=1, even empty bins
@@ -754,8 +776,8 @@ void ROOT::Fit::FitOptionsMake(EFitObjectType type, const char *option, Foption_
    } else {
       if (opt.Contains("W")) fitOption.W1     = 1; // all non-empty bins have weight =1 (for chi2 fit)
    }
-   
-   
+
+
    if (opt.Contains("E")) fitOption.Errors  = 1;
    if (opt.Contains("R")) fitOption.Range   = 1;
    if (opt.Contains("G")) fitOption.Gradient= 1;
@@ -787,9 +809,9 @@ void HFit::CheckGraphFitOptions(Foption_t & foption) {
 TFitResultPtr ROOT::Fit::UnBinFit(ROOT::Fit::UnBinData * data, TF1 * fitfunc, Foption_t & fitOption , const ROOT::Math::MinimizerOptions & minOption) {
    // do unbin fit, ownership of fitdata is passed later to the TBackFitter class
 
-   // create a shared pointer to the fit data to managed it 
-   std::shared_ptr<ROOT::Fit::UnBinData> fitdata(data); 
-   
+   // create a shared pointer to the fit data to managed it
+   std::shared_ptr<ROOT::Fit::UnBinData> fitdata(data);
+
 #ifdef DEBUG
    printf("tree data size is %d \n",fitdata->Size());
    for (unsigned int i = 0; i < fitdata->Size(); ++i) {
@@ -802,7 +824,7 @@ TFitResultPtr ROOT::Fit::UnBinFit(ROOT::Fit::UnBinData * data, TF1 * fitfunc, Fo
    }
 
    // create an empty TFitResult
-   std::shared_ptr<TFitResult> tfr(new TFitResult() );   
+   std::shared_ptr<TFitResult> tfr(new TFitResult() );
    // create the fitter
    std::shared_ptr<ROOT::Fit::Fitter> fitter(new ROOT::Fit::Fitter(tfr) );
    ROOT::Fit::FitConfig & fitConfig = fitter->Config();
@@ -879,7 +901,7 @@ TFitResultPtr ROOT::Fit::UnBinFit(ROOT::Fit::UnBinData * data, TF1 * fitfunc, Fo
    bool extended = (fitOption.Like & 1) == 1;
 
    bool fitok = false;
-   fitok = fitter->LikelihoodFit(fitdata, extended);
+   fitok = fitter->LikelihoodFit(fitdata, extended, fitOption.ExecPolicy);
    if ( !fitok  && !fitOption.Quiet )
       Warning("UnBinFit","Abnormal termination of minimization.");
 
@@ -893,14 +915,14 @@ TFitResultPtr ROOT::Fit::UnBinFit(ROOT::Fit::UnBinData * data, TF1 * fitfunc, Fo
 
       assert(  (Int_t)fitResult.Parameters().size() >= fitfunc->GetNpar() );
       fitfunc->SetParameters( const_cast<double*>(&(fitResult.Parameters().front())));
-      if ( int( fitResult.Errors().size()) >= fitfunc->GetNpar() ) 
-         fitfunc->SetParErrors( &(fitResult.Errors().front()) ); 
-  
+      if ( int( fitResult.Errors().size()) >= fitfunc->GetNpar() )
+         fitfunc->SetParErrors( &(fitResult.Errors().front()) );
+
    }
 
    // store result in the backward compatible VirtualFitter
    // in case not running in a multi-thread enabled mode
-   if (gGlobalMutex) { 
+   if (gGlobalMutex) {
       TVirtualFitter * lastFitter = TVirtualFitter::GetFitter();
       // pass ownership of Fitter and Fitdata to TBackCompFitter (fitter pointer cannot be used afterwards)
       TBackCompFitter * bcfitter = new TBackCompFitter(fitter, fitdata);
@@ -909,10 +931,10 @@ TFitResultPtr ROOT::Fit::UnBinFit(ROOT::Fit::UnBinData * data, TF1 * fitfunc, Fo
       bcfitter->SetFitOption(fitOption);
       //bcfitter->SetObjectFit(fTree);
       bcfitter->SetUserFunc(fitfunc);
-      
+
       if (lastFitter) delete lastFitter;
       TVirtualFitter::SetFitter( bcfitter );
-      
+
       // use old-style for printing the results
       // if (fitOption.Verbose) bcfitter->PrintResults(2,0.);
       // else if (!fitOption.Quiet) bcfitter->PrintResults(1,0.);
@@ -993,19 +1015,20 @@ TFitResultPtr ROOT::Fit::FitObject(THnBase * s1, TF1 *f1 , Foption_t & foption ,
 
 // function to compute the simple chi2 for graphs and histograms
 
-double ROOT::Fit::Chisquare(const TH1 & h1,  TF1 & f1, bool useRange) {
-   return HFit::ComputeChi2(h1,f1,useRange);
+double ROOT::Fit::Chisquare(const TH1 & h1,  TF1 & f1, bool useRange, bool usePL) {
+   return HFit::ComputeChi2(h1,f1,useRange, usePL);
 }
 
 double ROOT::Fit::Chisquare(const TGraph & g, TF1 & f1, bool useRange) {
-   return HFit::ComputeChi2(g,f1, useRange);
+   return HFit::ComputeChi2(g,f1, useRange, false);
 }
 
 template<class FitObject>
-double HFit::ComputeChi2(const FitObject & obj,  TF1  & f1, bool useRange ) {
+double HFit::ComputeChi2(const FitObject & obj,  TF1  & f1, bool useRange, bool usePL ) {
 
    // implement using the fitting classes
    ROOT::Fit::DataOptions opt;
+   if (usePL) opt.fUseEmpty=true; 
    ROOT::Fit::DataRange range;
    // get range of function
    if (useRange) HFit::GetFunctionRange(f1,range);
@@ -1017,6 +1040,11 @@ double HFit::ComputeChi2(const FitObject & obj,  TF1  & f1, bool useRange ) {
       return -1;
    }
    ROOT::Math::WrappedMultiTF1  wf1(f1);
+   if (usePL) {
+      // use the poisson log-lokelihood (Baker-Cousins chi2)
+      ROOT::Fit::PoissonLLFunction nll(data, wf1);
+      return 2.* nll( f1.GetParameters() ) ;
+   }
    ROOT::Fit::Chi2Function chi2(data, wf1);
    return chi2(f1.GetParameters() );
 

@@ -42,13 +42,9 @@
 #include <atomic>
 #endif
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 namespace TMVA {
 
@@ -65,7 +61,8 @@ namespace TMVA {
       kWARNING = 4,
       kERROR   = 5,
       kFATAL   = 6,
-      kSILENT  = 7
+      kSILENT  = 7,
+      kHEADER  = 8
    };
 
    enum HistType { kMVAType = 0, kProbaType = 1, kRarityType = 2, kCompareType = 3 };
@@ -101,13 +98,16 @@ namespace TMVA {
          kPlugins        ,
          kCategory       ,
          kDNN            ,
+         kDL             ,
          kPyRandomForest ,
          kPyAdaBoost     ,
          kPyGTB          ,
+         kPyKeras        ,
          kC50            ,
          kRSNNS          ,
          kRSVM           ,
          kRXGB           ,
+         kCrossValidation,
          kMaxMethod
       };
 

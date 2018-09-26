@@ -15,7 +15,7 @@
 
 A scoped lock based on files.
 
-The RAAI idiom is used: the constructor blocks until lock is obtained. 
+The RAAI idiom is used: the constructor blocks until lock is obtained.
 Lock is released in the destructor.
 Use it in scope-blocks like:
 ~~~{.cpp}
@@ -31,7 +31,7 @@ Use it in scope-blocks like:
 #include "TFile.h"
 #include <time.h>
 
-ClassImp(TLockFile)
+ClassImp(TLockFile);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.

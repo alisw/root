@@ -15,36 +15,28 @@
 #ifndef LLVM_IR_OPERATOR_H
 #define LLVM_IR_OPERATOR_H
 
+#include "llvm/ADT/None.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/Casting.h"
+#include <cstddef>
 
 namespace llvm {
-
-class GetElementPtrInst;
-class BinaryOperator;
-class ConstantExpr;
 
 /// This is a utility class that provides an abstraction for the common
 /// functionality between Instructions and ConstantExprs.
 class Operator : public User {
-private:
+public:
   // The Operator class is intended to be used as a utility, and is never itself
   // instantiated.
-  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
-  void *operator new(size_t s) LLVM_DELETED_FUNCTION;
-  Operator() LLVM_DELETED_FUNCTION;
+  Operator() = delete;
+  ~Operator() = delete;
 
-protected:
-  // NOTE: Cannot use LLVM_DELETED_FUNCTION because it's not legal to delete
-  // an overridden method that's not deleted in the base class. Cannot leave
-  // this unimplemented because that leads to an ODR-violation.
-  ~Operator();
+  void *operator new(size_t s) = delete;
 
-public:
   /// Return the opcode for this Instruction or ConstantExpr.
   unsigned getOpcode() const {
     if (const Instruction *I = dyn_cast<Instruction>(this))
@@ -62,9 +54,9 @@ public:
     return Instruction::UserOp1;
   }
 
-  static inline bool classof(const Instruction *) { return true; }
-  static inline bool classof(const ConstantExpr *) { return true; }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Instruction *) { return true; }
+  static bool classof(const ConstantExpr *) { return true; }
+  static bool classof(const Value *V) {
     return isa<Instruction>(V) || isa<ConstantExpr>(V);
   }
 };
@@ -80,8 +72,9 @@ public:
   };
 
 private:
-  friend class BinaryOperator;
+  friend class Instruction;
   friend class ConstantExpr;
+
   void setHasNoUnsignedWrap(bool B) {
     SubclassOptionalData =
       (SubclassOptionalData & ~NoUnsignedWrap) | (B * NoUnsignedWrap);
@@ -104,19 +97,19 @@ public:
     return (SubclassOptionalData & NoSignedWrap) != 0;
   }
 
-  static inline bool classof(const Instruction *I) {
+  static bool classof(const Instruction *I) {
     return I->getOpcode() == Instruction::Add ||
            I->getOpcode() == Instruction::Sub ||
            I->getOpcode() == Instruction::Mul ||
            I->getOpcode() == Instruction::Shl;
   }
-  static inline bool classof(const ConstantExpr *CE) {
+  static bool classof(const ConstantExpr *CE) {
     return CE->getOpcode() == Instruction::Add ||
            CE->getOpcode() == Instruction::Sub ||
            CE->getOpcode() == Instruction::Mul ||
            CE->getOpcode() == Instruction::Shl;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return (isa<Instruction>(V) && classof(cast<Instruction>(V))) ||
            (isa<ConstantExpr>(V) && classof(cast<ConstantExpr>(V)));
   }
@@ -131,8 +124,9 @@ public:
   };
 
 private:
-  friend class BinaryOperator;
+  friend class Instruction;
   friend class ConstantExpr;
+
   void setIsExact(bool B) {
     SubclassOptionalData = (SubclassOptionalData & ~IsExact) | (B * IsExact);
   }
@@ -149,13 +143,14 @@ public:
            OpC == Instruction::AShr ||
            OpC == Instruction::LShr;
   }
-  static inline bool classof(const ConstantExpr *CE) {
+
+  static bool classof(const ConstantExpr *CE) {
     return isPossiblyExactOpcode(CE->getOpcode());
   }
-  static inline bool classof(const Instruction *I) {
+  static bool classof(const Instruction *I) {
     return isPossiblyExactOpcode(I->getOpcode());
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return (isa<Instruction>(V) && classof(cast<Instruction>(V))) ||
            (isa<ConstantExpr>(V) && classof(cast<ConstantExpr>(V)));
   }
@@ -165,52 +160,60 @@ public:
 class FastMathFlags {
 private:
   friend class FPMathOperator;
-  unsigned Flags;
+
+  unsigned Flags = 0;
+
   FastMathFlags(unsigned F) : Flags(F) { }
 
 public:
+  /// This is how the bits are used in Value::SubclassOptionalData so they
+  /// should fit there too.
   enum {
     UnsafeAlgebra   = (1 << 0),
     NoNaNs          = (1 << 1),
     NoInfs          = (1 << 2),
     NoSignedZeros   = (1 << 3),
-    AllowReciprocal = (1 << 4)
+    AllowReciprocal = (1 << 4),
+    AllowContract   = (1 << 5)
   };
 
-  FastMathFlags() : Flags(0)
-  { }
+  FastMathFlags() = default;
 
   /// Whether any flag is set
-  bool any() { return Flags != 0; }
+  bool any() const { return Flags != 0; }
 
   /// Set all the flags to false
   void clear() { Flags = 0; }
 
   /// Flag queries
-  bool noNaNs()          { return 0 != (Flags & NoNaNs); }
-  bool noInfs()          { return 0 != (Flags & NoInfs); }
-  bool noSignedZeros()   { return 0 != (Flags & NoSignedZeros); }
-  bool allowReciprocal() { return 0 != (Flags & AllowReciprocal); }
-  bool unsafeAlgebra()   { return 0 != (Flags & UnsafeAlgebra); }
+  bool noNaNs() const          { return 0 != (Flags & NoNaNs); }
+  bool noInfs() const          { return 0 != (Flags & NoInfs); }
+  bool noSignedZeros() const   { return 0 != (Flags & NoSignedZeros); }
+  bool allowReciprocal() const { return 0 != (Flags & AllowReciprocal); }
+  bool allowContract() const { return 0 != (Flags & AllowContract); }
+  bool unsafeAlgebra() const   { return 0 != (Flags & UnsafeAlgebra); }
 
   /// Flag setters
   void setNoNaNs()          { Flags |= NoNaNs; }
   void setNoInfs()          { Flags |= NoInfs; }
   void setNoSignedZeros()   { Flags |= NoSignedZeros; }
   void setAllowReciprocal() { Flags |= AllowReciprocal; }
+  void setAllowContract(bool B) {
+    Flags = (Flags & ~AllowContract) | B * AllowContract;
+  }
   void setUnsafeAlgebra() {
     Flags |= UnsafeAlgebra;
     setNoNaNs();
     setNoInfs();
     setNoSignedZeros();
     setAllowReciprocal();
+    setAllowContract(true);
   }
 
   void operator&=(const FastMathFlags &OtherFlags) {
     Flags &= OtherFlags.Flags;
   }
 };
-
 
 /// Utility class for floating point operations which can have
 /// information about relaxed accuracy requirements attached to them.
@@ -231,25 +234,35 @@ private:
       setHasAllowReciprocal(true);
     }
   }
+
   void setHasNoNaNs(bool B) {
     SubclassOptionalData =
       (SubclassOptionalData & ~FastMathFlags::NoNaNs) |
       (B * FastMathFlags::NoNaNs);
   }
+
   void setHasNoInfs(bool B) {
     SubclassOptionalData =
       (SubclassOptionalData & ~FastMathFlags::NoInfs) |
       (B * FastMathFlags::NoInfs);
   }
+
   void setHasNoSignedZeros(bool B) {
     SubclassOptionalData =
       (SubclassOptionalData & ~FastMathFlags::NoSignedZeros) |
       (B * FastMathFlags::NoSignedZeros);
   }
+
   void setHasAllowReciprocal(bool B) {
     SubclassOptionalData =
       (SubclassOptionalData & ~FastMathFlags::AllowReciprocal) |
       (B * FastMathFlags::AllowReciprocal);
+  }
+
+  void setHasAllowContract(bool B) {
+    SubclassOptionalData =
+        (SubclassOptionalData & ~FastMathFlags::AllowContract) |
+        (B * FastMathFlags::AllowContract);
   }
 
   /// Convenience function for setting multiple fast-math flags.
@@ -295,36 +308,49 @@ public:
     return (SubclassOptionalData & FastMathFlags::AllowReciprocal) != 0;
   }
 
+  /// Test whether this operation is permitted to
+  /// be floating-point contracted.
+  bool hasAllowContract() const {
+    return (SubclassOptionalData & FastMathFlags::AllowContract) != 0;
+  }
+
   /// Convenience function for getting all the fast-math flags
   FastMathFlags getFastMathFlags() const {
     return FastMathFlags(SubclassOptionalData);
   }
 
-  /// \brief Get the maximum error permitted by this operation in ULPs.  An
-  /// accuracy of 0.0 means that the operation should be performed with the
-  /// default precision.
+  /// Get the maximum error permitted by this operation in ULPs. An accuracy of
+  /// 0.0 means that the operation should be performed with the default
+  /// precision.
   float getFPAccuracy() const;
 
-  static inline bool classof(const Instruction *I) {
-    return I->getType()->isFPOrFPVectorTy();
+  static bool classof(const Instruction *I) {
+    return I->getType()->isFPOrFPVectorTy() ||
+      I->getOpcode() == Instruction::FCmp;
   }
-  static inline bool classof(const Value *V) {
-    return isa<Instruction>(V) && classof(cast<Instruction>(V));
+
+  static bool classof(const ConstantExpr *CE) {
+    return CE->getType()->isFPOrFPVectorTy() ||
+           CE->getOpcode() == Instruction::FCmp;
+  }
+
+  static bool classof(const Value *V) {
+    return (isa<Instruction>(V) && classof(cast<Instruction>(V))) ||
+           (isa<ConstantExpr>(V) && classof(cast<ConstantExpr>(V)));
   }
 };
-
 
 /// A helper template for defining operators for individual opcodes.
 template<typename SuperClass, unsigned Opc>
 class ConcreteOperator : public SuperClass {
 public:
-  static inline bool classof(const Instruction *I) {
+  static bool classof(const Instruction *I) {
     return I->getOpcode() == Opc;
   }
-  static inline bool classof(const ConstantExpr *CE) {
+  static bool classof(const ConstantExpr *CE) {
     return CE->getOpcode() == Opc;
   }
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return (isa<Instruction>(V) && classof(cast<Instruction>(V))) ||
            (isa<ConstantExpr>(V) && classof(cast<ConstantExpr>(V)));
   }
@@ -343,7 +369,6 @@ class ShlOperator
   : public ConcreteOperator<OverflowingBinaryOperator, Instruction::Shl> {
 };
 
-
 class SDivOperator
   : public ConcreteOperator<PossiblyExactOperator, Instruction::SDiv> {
 };
@@ -357,18 +382,18 @@ class LShrOperator
   : public ConcreteOperator<PossiblyExactOperator, Instruction::LShr> {
 };
 
-
 class ZExtOperator : public ConcreteOperator<Operator, Instruction::ZExt> {};
-
 
 class GEPOperator
   : public ConcreteOperator<Operator, Instruction::GetElementPtr> {
-  enum {
-    IsInBounds = (1 << 0)
-  };
-
   friend class GetElementPtrInst;
   friend class ConstantExpr;
+
+  enum {
+    IsInBounds = (1 << 0),
+    // InRangeIndex: bits 1-6
+  };
+
   void setIsInBounds(bool B) {
     SubclassOptionalData =
       (SubclassOptionalData & ~IsInBounds) | (B * IsInBounds);
@@ -378,6 +403,13 @@ public:
   /// Test whether this is an inbounds GEP, as defined by LangRef.html.
   bool isInBounds() const {
     return SubclassOptionalData & IsInBounds;
+  }
+
+  /// Returns the offset of the index with an inrange attachment, or None if
+  /// none.
+  Optional<unsigned> getInRangeIndex() const {
+    if (SubclassOptionalData >> 1 == 0) return None;
+    return (SubclassOptionalData >> 1) - 1;
   }
 
   inline op_iterator       idx_begin()       { return op_begin()+1; }
@@ -399,6 +431,9 @@ public:
   Type *getPointerOperandType() const {
     return getPointerOperand()->getType();
   }
+
+  Type *getSourceElementType() const;
+  Type *getResultElementType() const;
 
   /// Method to return the address space of the pointer operand.
   unsigned getPointerAddressSpace() const {
@@ -445,36 +480,7 @@ public:
   /// undefined (it is *not* preserved!). The APInt passed into this routine
   /// must be at exactly as wide as the IntPtr type for the address space of the
   /// base GEP pointer.
-  bool accumulateConstantOffset(const DataLayout &DL, APInt &Offset) const {
-    assert(Offset.getBitWidth() ==
-           DL.getPointerSizeInBits(getPointerAddressSpace()) &&
-           "The offset must have exactly as many bits as our pointer.");
-
-    for (gep_type_iterator GTI = gep_type_begin(this), GTE = gep_type_end(this);
-         GTI != GTE; ++GTI) {
-      ConstantInt *OpC = dyn_cast<ConstantInt>(GTI.getOperand());
-      if (!OpC)
-        return false;
-      if (OpC->isZero())
-        continue;
-
-      // Handle a struct index, which adds its field offset to the pointer.
-      if (StructType *STy = dyn_cast<StructType>(*GTI)) {
-        unsigned ElementIdx = OpC->getZExtValue();
-        const StructLayout *SL = DL.getStructLayout(STy);
-        Offset += APInt(Offset.getBitWidth(),
-                        SL->getElementOffset(ElementIdx));
-        continue;
-      }
-
-      // For array or vector indices, scale the index by the size of the type.
-      APInt Index = OpC->getValue().sextOrTrunc(Offset.getBitWidth());
-      Offset += Index * APInt(Offset.getBitWidth(),
-                              DL.getTypeAllocSize(GTI.getIndexedType()));
-    }
-    return true;
-  }
-
+  bool accumulateConstantOffset(const DataLayout &DL, APInt &Offset) const;
 };
 
 class PtrToIntOperator
@@ -489,6 +495,7 @@ public:
   const Value *getPointerOperand() const {
     return getOperand(0);
   }
+
   static unsigned getPointerOperandIndex() {
     return 0U;                      // get index for modifying correct operand
   }
@@ -504,7 +511,21 @@ public:
   }
 };
 
+class BitCastOperator
+    : public ConcreteOperator<Operator, Instruction::BitCast> {
+  friend class BitCastInst;
+  friend class ConstantExpr;
 
-} // End llvm namespace
+public:
+  Type *getSrcTy() const {
+    return getOperand(0)->getType();
+  }
 
-#endif
+  Type *getDestTy() const {
+    return getType();
+  }
+};
+
+} // end namespace llvm
+
+#endif // LLVM_IR_OPERATOR_H

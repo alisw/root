@@ -1,15 +1,20 @@
+/// \file
+/// \ingroup tutorial_geom
+/// The old geometry shapes (see script geodemo.C)
+///
+/// \macro_image
+/// \macro_code
+///
+/// \author Rene Brun
+
 #include "TGeometry.h"
 #include "TGeoManager.h"
 
 void shapes() {
-//The old geometry shapes (see script geodemo.C)
-//To see the output of this macro, click begin_html <a href="gif/shapes.gif" >here</a> end_html
-//Author: Rene Brun
-
    TCanvas *c1 = new TCanvas("glc1","Geometry Shapes",200,10,700,500);
 
    gSystem->Load("libGeom");
-   //delete previous geometry objects in case this script is reexecuted
+   //delete previous geometry objects in case this script is re-executed
    if (gGeoManager) {
       gGeoManager->GetListOfNodes()->Delete();
       gGeoManager->GetListOfShapes()->Delete();
@@ -85,8 +90,8 @@ void shapes() {
    node1->Draw("gl");
    c1->Update();
    //
-   //  Draw the geometry using the OpenGL viewver.
-   //  Note that this viewver may also be invoked from the "View" menu in
+   //  Draw the geometry using the OpenGL viewer.
+   //  Note that this viewer may also be invoked from the "View" menu in
    //  the canvas tool bar
    //
    // once in the viewer, select the Help button

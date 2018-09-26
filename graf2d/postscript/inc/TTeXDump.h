@@ -13,33 +13,23 @@
 #define ROOT_TTeXDump
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TTeXDump                                                             //
-//                                                                      //
-// Tex driver.                                                          //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TVirtualPS
 #include "TVirtualPS.h"
-#endif
 
 class TPoints;
 
 class TTeXDump : public TVirtualPS {
 
 protected:
-   Float_t      fXsize;           //Page size along X
-   Float_t      fYsize;           //Page size along Y
-   Int_t        fType;            //Workstation type used to know if the Tex is open
-   Bool_t       fBoundingBox;     //True when the Tex header is printed
-   Bool_t       fRange;           //True when a range has been defined
-   Float_t      fCurrentRed;      //Current Red component
-   Float_t      fCurrentGreen;    //Current Green component
-   Float_t      fCurrentBlue;     //Current Blue component
-   Float_t      fCurrentAlpha;    //Current Alpha value
-   Float_t      fLineScale;       //Line width scale factor
+   Float_t      fXsize;           ///< Page size along X
+   Float_t      fYsize;           ///< Page size along Y
+   Int_t        fType;            ///< Workstation type used to know if the Tex is open
+   Bool_t       fBoundingBox;     ///< True when the Tex header is printed
+   Bool_t       fRange;           ///< True when a range has been defined
+   Float_t      fCurrentRed;      ///< Current Red component
+   Float_t      fCurrentGreen;    ///< Current Green component
+   Float_t      fCurrentBlue;     ///< Current Blue component
+   Float_t      fCurrentAlpha;    ///< Current Alpha value
+   Float_t      fLineScale;       ///< Line width scale factor
 
 
 public:
@@ -86,7 +76,7 @@ public:
    Float_t XtoTeX(Double_t x);
    Float_t YtoTeX(Double_t y);
 
-   ClassDef(TTeXDump,2)  //Tex driver
+   ClassDef(TTeXDump, 0);  //Tex driver
 };
 
 #endif

@@ -36,9 +36,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TSpline
 #include "TSpline.h"
-#endif
 
 namespace TMVA {
 
@@ -63,7 +61,7 @@ namespace TMVA {
                         Float_t cos1, Float_t cos2, 
                         Float_t cos3 ) const;
   
-      ClassDef(TSpline2,0) //Quadratic interpolation class (using quadrax)
+      ClassDef(TSpline2,0); //Quadratic interpolation class (using quadrax)
    };
 
 } // namespace TMVA

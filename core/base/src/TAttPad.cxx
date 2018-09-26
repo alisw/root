@@ -15,9 +15,12 @@
 #include "TStyle.h"
 #include "TClass.h"
 
-ClassImp(TAttPad)
+ClassImp(TAttPad);
 
 /** \class TAttPad
+\ingroup Base
+\ingroup GraphicsAtt
+
 Manages default Pad attributes. Referenced by TStyle.
 */
 

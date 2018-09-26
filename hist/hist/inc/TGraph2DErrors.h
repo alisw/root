@@ -21,9 +21,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TGraph2D
 #include "TGraph2D.h"
-#endif
 
 class TGraph2DErrors : public TGraph2D {
 
@@ -31,9 +29,9 @@ private:
 
 
 protected:
-   Double_t *fEX; //[fNpoints] array of X errors
-   Double_t *fEY; //[fNpoints] array of Y errors
-   Double_t *fEZ; //[fNpoints] array of Z errors
+   Double_t *fEX; ///<[fNpoints] array of X errors
+   Double_t *fEY; ///<[fNpoints] array of Y errors
+   Double_t *fEZ; ///<[fNpoints] array of Z errors
 
 public:
    TGraph2DErrors();
@@ -55,6 +53,7 @@ public:
    Double_t        GetYminE() const;
    Double_t        GetZmaxE() const;
    Double_t        GetZminE() const;
+   virtual void    Print(Option_t *chopt="") const;
    virtual void    Set(Int_t n);
    virtual void    SetPoint(Int_t i, Double_t x, Double_t y, Double_t z);
    virtual void    SetPointError(Int_t i, Double_t ex, Double_t ey, Double_t ez);

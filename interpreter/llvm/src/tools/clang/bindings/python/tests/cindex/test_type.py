@@ -37,37 +37,44 @@ def test_a_struct():
     assert not fields[0].type.is_const_qualified()
     assert fields[0].type.kind == TypeKind.INT
     assert fields[0].type.get_canonical().kind == TypeKind.INT
+    assert fields[0].type.get_typedef_name() == ''
 
     assert fields[1].spelling == 'b'
     assert not fields[1].type.is_const_qualified()
     assert fields[1].type.kind == TypeKind.TYPEDEF
     assert fields[1].type.get_canonical().kind == TypeKind.INT
     assert fields[1].type.get_declaration().spelling == 'I'
+    assert fields[1].type.get_typedef_name() == 'I'
 
     assert fields[2].spelling == 'c'
     assert not fields[2].type.is_const_qualified()
     assert fields[2].type.kind == TypeKind.LONG
     assert fields[2].type.get_canonical().kind == TypeKind.LONG
+    assert fields[2].type.get_typedef_name() == ''
 
     assert fields[3].spelling == 'd'
     assert not fields[3].type.is_const_qualified()
     assert fields[3].type.kind == TypeKind.ULONG
     assert fields[3].type.get_canonical().kind == TypeKind.ULONG
+    assert fields[3].type.get_typedef_name() == ''
 
     assert fields[4].spelling == 'e'
     assert not fields[4].type.is_const_qualified()
     assert fields[4].type.kind == TypeKind.LONG
     assert fields[4].type.get_canonical().kind == TypeKind.LONG
+    assert fields[4].type.get_typedef_name() == ''
 
     assert fields[5].spelling == 'f'
     assert fields[5].type.is_const_qualified()
     assert fields[5].type.kind == TypeKind.INT
     assert fields[5].type.get_canonical().kind == TypeKind.INT
+    assert fields[5].type.get_typedef_name() == ''
 
     assert fields[6].spelling == 'g'
     assert not fields[6].type.is_const_qualified()
     assert fields[6].type.kind == TypeKind.POINTER
     assert fields[6].type.get_pointee().kind == TypeKind.INT
+    assert fields[6].type.get_typedef_name() == ''
 
     assert fields[7].spelling == 'h'
     assert not fields[7].type.is_const_qualified()
@@ -75,6 +82,7 @@ def test_a_struct():
     assert fields[7].type.get_pointee().kind == TypeKind.POINTER
     assert fields[7].type.get_pointee().get_pointee().kind == TypeKind.POINTER
     assert fields[7].type.get_pointee().get_pointee().get_pointee().kind == TypeKind.INT
+    assert fields[7].type.get_typedef_name() == ''
 
 def test_references():
     """Ensure that a Type maintains a reference to a TranslationUnit."""
@@ -134,7 +142,7 @@ def test_equal():
 
 def test_type_spelling():
     """Ensure Type.spelling works."""
-    tu = get_tu('int c[5]; int i[]; int x; int v[x];')
+    tu = get_tu('int c[5]; void f(int i[]); int x; int v[x];')
     c = get_cursor(tu, 'c')
     i = get_cursor(tu, 'i')
     x = get_cursor(tu, 'x')
@@ -253,7 +261,7 @@ void bar(int a, int b);
 
 def test_element_type():
     """Ensure Type.element_type works."""
-    tu = get_tu('int c[5]; int i[]; int x; int v[x];')
+    tu = get_tu('int c[5]; void f(int i[]); int x; int v[x];')
     c = get_cursor(tu, 'c')
     i = get_cursor(tu, 'i')
     v = get_cursor(tu, 'v')
@@ -363,6 +371,7 @@ def test_offset():
     """Ensure Cursor.get_record_field_offset works in anonymous records"""
     source="""
 struct Test {
+  struct {int a;} typeanon;
   struct {
     int bariton;
     union {
@@ -371,15 +380,23 @@ struct Test {
   };
   int bar;
 };"""
-    tries=[(['-target','i386-linux-gnu'],(4,16,0,32,64)),
-           (['-target','nvptx64-unknown-unknown'],(8,24,0,32,64)),
-           (['-target','i386-pc-win32'],(8,16,0,32,64)),
-           (['-target','msp430-none-none'],(2,14,0,32,64))]
+    tries=[(['-target','i386-linux-gnu'],(4,16,0,32,64,96)),
+           (['-target','nvptx64-unknown-unknown'],(8,24,0,32,64,96)),
+           (['-target','i386-pc-win32'],(8,16,0,32,64,96)),
+           (['-target','msp430-none-none'],(2,14,0,32,64,96))]
     for flags, values in tries:
-        align,total,bariton,foo,bar = values
+        align,total,f1,bariton,foo,bar = values
         tu = get_tu(source)
         teststruct = get_cursor(tu, 'Test')
-        fields = list(teststruct.get_children())
+        children = list(teststruct.get_children())
+        fields = list(teststruct.type.get_fields())
+        assert children[0].kind == CursorKind.STRUCT_DECL
+        assert children[0].spelling != "typeanon"
+        assert children[1].spelling == "typeanon"
+        assert fields[0].kind == CursorKind.FIELD_DECL
+        assert fields[1].kind == CursorKind.FIELD_DECL
+        assert fields[1].is_anonymous()
+        assert teststruct.type.get_offset("typeanon") == f1
         assert teststruct.type.get_offset("bariton") == bariton
         assert teststruct.type.get_offset("foo") == foo
         assert teststruct.type.get_offset("bar") == bar
@@ -395,3 +412,12 @@ def test_decay():
     assert a.kind == TypeKind.INCOMPLETEARRAY
     assert a.element_type.kind == TypeKind.INT
     assert a.get_canonical().kind == TypeKind.INCOMPLETEARRAY
+
+def test_addrspace():
+    """Ensure the address space can be queried"""
+    tu = get_tu('__attribute__((address_space(2))) int testInteger = 3;', 'c')
+
+    testInteger = get_cursor(tu, 'testInteger')
+
+    assert testInteger is not None, "Could not find testInteger."
+    assert testInteger.type.get_address_space() == 2

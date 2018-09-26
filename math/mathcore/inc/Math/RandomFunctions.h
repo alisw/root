@@ -71,7 +71,7 @@ namespace Math {
    public: 
 
       /// class constructor 
-      RandomFunctionsImpl() {}
+      RandomFunctionsImpl() : fBaseEngine(0) {}
 
       void SetEngine(void *r) {
          fBaseEngine = static_cast<TRandomEngine*>(r);
@@ -123,7 +123,7 @@ namespace Math {
       double Uniform(double a);
 
    protected:
-      TRandomEngine * fBaseEngine;
+      TRandomEngine* fBaseEngine;
 
    private:
       // Internal method used by the functions 
@@ -249,12 +249,28 @@ namespace Math {
          static_assert(std::is_fundamental<Engine>::value,"Error: Gamma() requires a GSL Engine type");
          return 0;
       }
+      double Beta( double , double ) {
+         static_assert(std::is_fundamental<Engine>::value,"Error: Beta() requires a GSL Engine type");
+         return 0;
+      }
       double LogNormal(double, double) {
          static_assert(std::is_fundamental<Engine>::value,"Error: LogNormal() requires a GSL Engine type");
          return 0;
       }
       double ChiSquare(double) {
          static_assert(std::is_fundamental<Engine>::value,"Error: ChiSquare() requires a GSL Engine type");
+         return 0;
+      }
+      double Rayleigh( double ) {
+         static_assert(std::is_fundamental<Engine>::value,"Error: Rayleigh() requires a GSL Engine type");
+         return 0;
+      }
+      double Logistic( double ) {
+         static_assert(std::is_fundamental<Engine>::value,"Error: Logistic() requires a GSL Engine type");
+         return 0;
+      }
+      double Pareto( double , double ) {
+         static_assert(std::is_fundamental<Engine>::value,"Error: Pareto() requires a GSL Engine type");
          return 0;
       }
       double FDist(double, double) {

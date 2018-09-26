@@ -31,20 +31,18 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_____________________________________________________________________
-//
-// PDEFoamTargetDensity
-//
-// This is a concrete implementation of PDEFoam.  Density(...)
-// estimates the target density (target number: fTarget) at a given
-// phase-space point using range-searching.
-// _____________________________________________________________________
-
+/*! \class TMVA::PDEFoamTargetDensity
+\ingroup TMVA
+This is a concrete implementation of PDEFoam.  Density(...)
+estimates the target density (target number: fTarget) at a given
+phase-space point using range-searching.
+*/
 
 #include "TMVA/PDEFoamTargetDensity.h"
 
 #include "TMVA/BinarySearchTree.h"
 #include "TMVA/MsgLogger.h"
+#include "TMVA/PDEFoamDensityBase.h"
 #include "TMVA/Types.h"
 #include "TMVA/Volume.h"
 
@@ -53,17 +51,17 @@
 #include <cmath>
 #include <vector>
 
-ClassImp(TMVA::PDEFoamTargetDensity)
+ClassImp(TMVA::PDEFoamTargetDensity);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TMVA::PDEFoamTargetDensity::PDEFoamTargetDensity()
-   : PDEFoamDensityBase()
+: PDEFoamDensityBase()
    , fTarget(0)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
-/// User construcor
+/// User constructor
 ///
 /// Parameters:
 ///

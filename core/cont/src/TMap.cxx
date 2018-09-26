@@ -25,7 +25,7 @@ Both key and value must inherit from TObject.
 #include "TBrowser.h"
 #include "TRegexp.h"
 
-ClassImp(TMap)
+ClassImp(TMap);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// TMap ctor. See THashTable for a description of the arguments.
@@ -438,6 +438,15 @@ Class used by TMap to store (key,value) pairs.
 */
 
 ////////////////////////////////////////////////////////////////////////////////
+/// TPair destructor.
+
+TPair::~TPair()
+{
+   // Required since we overload TObject::Hash.
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Browse the pair.
 
 void TPair::Browse(TBrowser *b)
@@ -455,7 +464,7 @@ void TPair::Browse(TBrowser *b)
 Iterator of map.
 */
 
-ClassImp(TMapIter)
+ClassImp(TMapIter);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a map iterator. Use dir to specify the desired iteration direction.

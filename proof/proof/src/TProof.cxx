@@ -110,7 +110,7 @@ char TProofMergePrg::fgCr[4] = {'-', '\\', '|', '/'};
 TList   *TProof::fgProofEnvList = 0;          // List of env vars for proofserv
 TPluginHandler *TProof::fgLogViewer = 0;      // Log viewer handler
 
-ClassImp(TProof)
+ClassImp(TProof);
 
 //----- PROOF Interrupt signal handler -----------------------------------------
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,7 +172,7 @@ Bool_t TProofInputHandler::Notify()
 
 //------------------------------------------------------------------------------
 
-ClassImp(TSlaveInfo)
+ClassImp(TSlaveInfo);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Used to sort slaveinfos by ordinal.
@@ -274,7 +274,7 @@ void TSlaveInfo::SetSysInfo(SysInfo_t si)
    fSysInfo.fPhysRam  = si.fPhysRam;     // Physical RAM
 }
 
-ClassImp(TProof)
+ClassImp(TProof);
 
 //------------------------------------------------------------------------------
 
@@ -485,7 +485,7 @@ TProof::TProof(const char *masterurl, const char *conffile, const char *confdir,
    // If called by a manager, make sure it stays in last position
    // for cleaning
    if (mgr) {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfSockets()->Remove(mgr);
       gROOT->GetListOfSockets()->Add(mgr);
    }
@@ -897,7 +897,7 @@ Int_t TProof::Init(const char *, const char *conffile,
 
    if (IsMaster()) {
       // to make UploadPackage() method work on the master as well.
-      fPackMgr = gProofServ->GetPackMgr();
+      if (gProofServ) fPackMgr = gProofServ->GetPackMgr();
    } else {
 
       TString sandbox;
@@ -924,7 +924,8 @@ Int_t TProof::Init(const char *, const char *conffile,
       TString globpack = gEnv->GetValue("Proof.GlobalPackageDirs","");
       TProofServ::ResolveKeywords(globpack);
       Int_t nglb = TPackMgr::RegisterGlobalPath(globpack);
-      Info("Init", " %d global package directories registered", nglb);
+      if (gDebug > 0)
+         Info("Init", " %d global package directories registered", nglb);
    }
 
    // Master may want dynamic startup
@@ -985,7 +986,7 @@ Int_t TProof::Init(const char *, const char *conffile,
       // Activate input handler
       ActivateAsyncInput();
 
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfSockets()->Add(this);
    }
 
@@ -1286,7 +1287,7 @@ void TProof::SetManager(TProofMgr *mgr)
    fManager = mgr;
 
    if (mgr) {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfSockets()->Remove(mgr);
       gROOT->GetListOfSockets()->Add(mgr);
    }
@@ -1362,7 +1363,7 @@ Int_t TProof::AddWorkers(TList *workerList)
       // Remove worker from the list of workers terminated gracefully
       dummysi->SetOrdinal(fullord);
       TSlaveInfo *rmsi = (TSlaveInfo *)fTerminatedSlaveInfos->Remove(dummysi);
-      if (rmsi) SafeDelete(rmsi);
+      SafeDelete(rmsi);
 
       // Create worker server
       TString wn(worker->GetNodeName());
@@ -1796,7 +1797,7 @@ void TProof::Close(Option_t *opt)
       }
    }
 
-   {  R__LOCKGUARD2(gROOTMutex);
+   {  R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfSockets()->Remove(this);
 
       if (fChains) {
@@ -3860,7 +3861,7 @@ Int_t TProof::HandleInputMessage(TSlave *sl, TMessage *mess, Bool_t deactonfail)
                            ourwi->SetSysInfo(slinfo->GetSysInfo());
                            ourwi->fHostName = slinfo->GetName();
                            if (slinfo->GetDataDir() && (strlen(slinfo->GetDataDir()) > 0))
-                           ourwi->fDataDir = slinfo->GetDataDir();
+                              ourwi->fDataDir = slinfo->GetDataDir();
                            break;
                         }
                      }
@@ -5318,6 +5319,9 @@ Long64_t TProof::Process(TDSet *dset, const char *selector, Option_t *option,
       fWrksOutputReady->SetOwner(kFALSE);
       fWrksOutputReady->Clear();
    }
+
+   // Make sure the selector path is in the macro path
+   TProof::AssertMacroPath(selector);
 
    // Reset time measurements
    fQuerySTW.Reset();
@@ -8560,6 +8564,23 @@ Int_t TProof::UploadPackage(const char *pack, EUploadPackageOpt opt,
    return 0;
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+/// Make sure that the directory path contained by macro is in the macro path
+
+void TProof::AssertMacroPath(const char *macro)
+{
+   static TString macrop(gROOT->GetMacroPath());
+   if (macro && strlen(macro) > 0) {
+      TString dirn(gSystem->DirName(macro));
+      if (!macrop.Contains(dirn)) {
+         macrop += TString::Format("%s:", dirn.Data());
+         gROOT->SetMacroPath(macrop);
+      }
+   }
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Load the specified macro on master, workers and, if notOnClient is
 /// kFALSE, on the client. The macro file is uploaded if new or updated.
@@ -8585,6 +8606,9 @@ Int_t TProof::Load(const char *macro, Bool_t notOnClient, Bool_t uniqueWorkers,
       Error("Load", "need to specify a macro name");
       return -1;
    }
+
+   // Make sure the path is in the macro path
+   TProof::AssertMacroPath(macro);
 
    if (TestBit(TProof::kIsClient) && !wrks) {
 
@@ -10378,10 +10402,10 @@ void TProof::ShowLog(Int_t qry)
    UInt_t tolog = (UInt_t)(endlog - startlog);
 
    // Perhaps nothing
-   if (tolog <= 0)
-
-   // Set starting point
-   lseek(fileno(fLogFileR), startlog, SEEK_SET);
+   if (tolog <= 0) {
+      // Set starting point
+      lseek(fileno(fLogFileR), startlog, SEEK_SET);
+   }
 
    // Now we go
    Int_t np = 0;
@@ -11097,7 +11121,7 @@ Int_t TProof::VerifyDataSet(const char *uri, const char *optStr)
       Info("VerifyDataSet", "Master-only verification");
       TMessage nameMess(kPROOF_DATASETS);
       nameMess << Int_t(kVerifyDataSet);
-      nameMess << TString(uri ? uri : "");
+      nameMess << TString(uri);
       nameMess << sopt;
       Broadcast(nameMess);
 
@@ -11975,6 +11999,15 @@ Int_t TProof::AssertDataSet(TDSet *dset, TList *input,
    TFileCollection *dataset = 0;
    TString lookupopt;
    TString dsname(dset->GetName());
+
+   // First extract the "entry list" part on the global name, if any
+   TString dsns(dsname), enlname;
+   Ssiz_t eli = dsns.Index("?enl=");
+   if (eli != kNPOS) {
+      enlname = dsns(eli + strlen("?enl="), dsns.Length());
+      dsns.Remove(eli, dsns.Length()-eli);
+   }
+
    // The dataset maybe in the form of a TFileCollection in the input list
    if (dsname.BeginsWith("TFileCollection:")) {
       // Isolate the real name
@@ -11988,7 +12021,7 @@ Int_t TProof::AssertDataSet(TDSet *dset, TList *input,
       // Remove from everywhere
       input->RecursiveRemove(dataset);
       // Add it to the local list
-      datasets->Add(new TPair(dataset, new TObjString("")));
+      datasets->Add(new TPair(dataset, new TObjString(enlname.Data())));
       // Make sure we lookup everything (unless the client or the administrator
       // required something else)
       if (TProof::GetParameter(input, "PROOF_LookupOpt", lookupopt) != 0) {
@@ -12006,24 +12039,16 @@ Int_t TProof::AssertDataSet(TDSet *dset, TList *input,
    // name, should be processed.
    if (!dataset) {
 
-      // First of all check if the full string (except the "entry list" part)
-      // is the name of a single existing dataset: if it is, don't break it
-      // into parts
-      TString dsns( dsname.Data() ), enl;
-      Ssiz_t eli = dsns.Index("?enl=");
       TFileCollection *fc = nullptr;
-      if (eli != kNPOS) {
-         enl = dsns(eli+5, dsns.Length());
-         dsns.Remove(eli, dsns.Length()-eli);
-      }
 
-      // Check if the entry list is valid. If it has spaces, commas, or pipes,
-      // it is not considered as valid and we revert to the "multiple datasets"
-      // case
-      Bool_t validEnl = ((enl.Index("|") == kNPOS) &&
-        (enl.Index(",") == kNPOS) && (enl.Index(" ") == kNPOS));
+      // Check if the entry list and dataset name are valid. If they have spaces,
+      // commas, or pipes, they are not considered as valid and we revert to the
+      // "multiple datasets" case
+      TRegexp rg("[, |]");
+      Bool_t validEnl = (enlname.Index(rg) == kNPOS) ? kTRUE : kFALSE;
+      Bool_t validSdsn = (dsns.Index(rg) == kNPOS) ? kTRUE : kFALSE;
 
-      if (validEnl && (( fc = mgr->GetDataSet(dsns) ))) {
+      if (validEnl && validSdsn && (( fc = mgr->GetDataSet(dsns) ))) {
 
          //
          // String corresponds to ONE dataset only
@@ -12037,10 +12062,9 @@ Int_t TProof::AssertDataSet(TDSet *dset, TList *input,
          dsnparse = dsns;  // without entry list
 
          // Adds the entry list (or empty string if not specified)
-         datasets->Add( new TPair(dataset, new TObjString( enl.Data() )) );
+         datasets->Add( new TPair(dataset, new TObjString( enlname.Data() )) );
 
-      }
-      else {
+      } else {
 
          //
          // String does NOT correspond to one dataset: check if many datasets
@@ -12054,10 +12078,10 @@ Int_t TProof::AssertDataSet(TDSet *dset, TList *input,
             TString dsn2;
             Int_t from2 = 0;
             while (dsn1.Tokenize(dsn2, from2, "|")) {
-               enl = "";
+               enlname = "";
                Int_t ienl = dsn2.Index("?enl=");
                if (ienl != kNPOS) {
-                  enl = dsn2(ienl + 5, dsn2.Length());
+                  enlname = dsn2(ienl + 5, dsn2.Length());
                   dsn2.Remove(ienl);
                }
                if ((fc = mgr->GetDataSet(dsn2.Data()))) {
@@ -12081,7 +12105,7 @@ Int_t TProof::AssertDataSet(TDSet *dset, TList *input,
                if (dataset->GetList()->First())
                   ((TFileInfo *)(dataset->GetList()->First()))->SetTitle(dsn1.Data());
                // Add it to the local list
-               datasets->Add(new TPair(dataset, new TObjString(enl.Data())));
+               datasets->Add(new TPair(dataset, new TObjString(enlname.Data())));
             }
             // Reset the pointer
             dataset = 0;

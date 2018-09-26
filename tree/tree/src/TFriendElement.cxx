@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TFriendElement
+\ingroup tree
+
 A TFriendElement TF describes a TTree object TF in a file.
 When a TFriendElement TF is added to the the list of friends of an
 existing TTree T, any variable from TF can be referenced in a query
@@ -28,7 +30,7 @@ See TTree::AddFriend for more information.
 #include "TFile.h"
 #include "TROOT.h"
 
-ClassImp(TFriendElement)
+ClassImp(TFriendElement);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for a friend element.
@@ -139,34 +141,6 @@ TFriendElement::TFriendElement(TTree *tree, TTree* friendtree, const char *alias
    }
 
    // No need to Connect.
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Copy constructor
-
-TFriendElement::TFriendElement(const TFriendElement& tfe) :
-   TNamed(tfe),
-   fParentTree(tfe.fParentTree),
-   fTree(tfe.fTree),
-   fFile(tfe.fFile),
-   fTreeName(tfe.fTreeName),
-   fOwnFile(tfe.fOwnFile)
-{
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Equal operator
-
-TFriendElement& TFriendElement::operator=(const TFriendElement& tfe)
-{
-   if(this!=&tfe) {
-      TNamed::operator=(tfe);
-      fParentTree=tfe.fParentTree;
-      fTree=tfe.fTree;
-      fFile=tfe.fFile;
-      fTreeName=tfe.fTreeName;
-      fOwnFile=tfe.fOwnFile;
-   } return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

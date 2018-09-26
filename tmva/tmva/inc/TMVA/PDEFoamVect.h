@@ -29,9 +29,7 @@
 #ifndef ROOT_TMVA_PDEFoamVect
 #define ROOT_TMVA_PDEFoamVect
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
 namespace TMVA {
 
@@ -66,7 +64,7 @@ namespace TMVA {
       Double_t   GetCoord(Int_t i) const { return fCoords[i]; }   // Returns coordinate
 
       ClassDef(PDEFoamVect,2) //n-dimensional vector with dynamical allocation
-   }; // end of PDEFoamVect
+         }; // end of PDEFoamVect
 }  // namespace TMVA
 
 #endif

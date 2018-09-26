@@ -46,43 +46,45 @@ static TString &IncludeNameBuffer() {
    return includeName;
 }
 
-extern void *gMmallocDesc;
-
 ////////////////////////////////////////////////////////////////////////////////
 /// Helper function to initialize the 'index/counter' value of
 /// the Pointer streamerElements.  If directive is a StreamerInfo and it correspond to the
 /// same class a 'countClass' the streamerInfo is used instead of the current StreamerInfo of the TClass
 /// for 'countClass'.
 
-static TStreamerBasicType *InitCounter(const char *countClass, const char *countName, TObject *directive)
+static TStreamerBasicType *InitCounter(const char *countClass, const char *countName, TVirtualStreamerInfo *directive)
 {
    TStreamerBasicType *counter = 0;
 
-   if (directive && directive->InheritsFrom(TVirtualStreamerInfo::Class())) {
+   TClass *cl = TClass::GetClass(countClass);
 
-      if (strcmp(directive->GetName(),countClass)==0) {
+   if (directive) {
 
-         TVirtualStreamerInfo *info = (TVirtualStreamerInfo*)directive;
-         TStreamerElement *element = (TStreamerElement *)info->GetElements()->FindObject(countName);
+      if (directive->GetClass() == cl) {
+         // The info we have been passed is indeed describing the counter holder, just look there.
+
+         TStreamerElement *element = (TStreamerElement *)directive->GetElements()->FindObject(countName);
          if (!element) return 0;
          if (element->IsA() != TStreamerBasicType::Class()) return 0;
          counter = (TStreamerBasicType*)element;
 
       } else {
-
-         TVirtualStreamerInfo *info = (TVirtualStreamerInfo*)directive;
-         TRealData* rdCounter = (TRealData*) info->GetClass()->GetListOfRealData()->FindObject(countName);
-         if (!rdCounter) return 0;
-         TDataMember *dmCounter = rdCounter->GetDataMember();
-
-         TClass *cl = dmCounter->GetClass();
+         if (directive->GetClass()->GetListOfRealData()) {
+            TRealData* rdCounter = (TRealData*) directive->GetClass()->GetListOfRealData()->FindObject(countName);
+            if (!rdCounter) return 0;
+            TDataMember *dmCounter = rdCounter->GetDataMember();
+            cl = dmCounter->GetClass();
+         } else {
+            TStreamerElement *element = (TStreamerElement *)directive->GetElements()->FindObject(countName);
+            if (!element) return 0;
+            if (element->IsA() != TStreamerBasicType::Class()) return 0;
+            cl = directive->GetClass();
+         }
          if (cl==0) return 0;
          counter = TVirtualStreamerInfo::GetElementCounter(countName,cl);
-
       }
    } else {
 
-      TClass *cl = TClass::GetClass(countClass);
       if (cl==0) return 0;
       counter = TVirtualStreamerInfo::GetElementCounter(countName,cl);
    }
@@ -177,7 +179,7 @@ static void GetRange(const char *comments, Double_t &xmin, Double_t &xmax, Doubl
    if (xmin >= xmax && nbits <15) xmin = nbits+0.1;
 }
 
-ClassImp(TStreamerElement)
+ClassImp(TStreamerElement);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -217,7 +219,7 @@ TStreamerElement::TStreamerElement(const char *name, const char *title, Int_t of
       fTypeName = typeName;
    } else {
       //must protect call into the interpreter
-      R__LOCKGUARD2(gInterpreterMutex);
+      R__LOCKGUARD(gInterpreterMutex);
       fTypeName    = TClassEdit::ResolveTypedef(typeName);
    }
    fStreamer    = 0;
@@ -400,7 +402,7 @@ const char *TStreamerElement::GetTypeNameBasic() const
 ////////////////////////////////////////////////////////////////////////////////
 /// Initliaze the element.
 
-void TStreamerElement::Init(TObject *)
+void TStreamerElement::Init(TVirtualStreamerInfo *)
 {
    fClassObject = GetClassPointer();
    if (fClassObject && fClassObject->IsTObject()) {
@@ -444,7 +446,7 @@ Bool_t TStreamerElement::IsTransient() const
    if (fType == TVirtualStreamerInfo::kCacheDelete) return kTRUE;
    if (fType == TVirtualStreamerInfo::kCache) return kTRUE;
    if (fType == TVirtualStreamerInfo::kMissing) return kTRUE;
-   if (TVirtualStreamerInfo::kSkip <= fType && fType < TVirtualStreamerInfo::kSkip) return kTRUE;
+   if (TVirtualStreamerInfo::kSkip <= fType && fType < TVirtualStreamerInfo::kConv) return kTRUE;
 
    return kFALSE;
 }
@@ -590,7 +592,7 @@ void TStreamerElement::Update(const TClass *oldClass, TClass *newClass)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerBase)
+ClassImp(TStreamerBase);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -665,7 +667,7 @@ Int_t TStreamerBase::GetSize() const
 ////////////////////////////////////////////////////////////////////////////////
 /// Setup the element.
 
-void TStreamerBase::Init(TObject *)
+void TStreamerBase::Init(TVirtualStreamerInfo *)
 {
    fBaseClass = TClass::GetClass(GetName());
    if (!fBaseClass) return;
@@ -881,7 +883,7 @@ Int_t TStreamerBase::WriteBuffer (TBuffer &b, char *pointer)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerBasicPointer)
+ClassImp(TStreamerBasicPointer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -943,7 +945,7 @@ Int_t TStreamerBasicPointer::GetSize() const
 /// same class a 'countClass' the streamerInfo is used instead of the current StreamerInfo of the TClass
 /// for 'countClass'.
 
-void TStreamerBasicPointer::Init(TObject *directive)
+void TStreamerBasicPointer::Init(TVirtualStreamerInfo *directive)
 {
    fCounter = InitCounter( fCountClass, fCountName, directive );
 }
@@ -994,7 +996,7 @@ void TStreamerBasicPointer::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerLoop)
+ClassImp(TStreamerLoop);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1050,7 +1052,7 @@ Int_t TStreamerLoop::GetSize() const
 /// same class a 'countClass' the streamerInfo is used instead of the current StreamerInfo of the TClass
 /// for 'countClass'.
 
-void TStreamerLoop::Init(TObject *directive)
+void TStreamerLoop::Init(TVirtualStreamerInfo *directive)
 {
    fCounter = InitCounter( fCountClass, fCountName, directive );
 }
@@ -1098,7 +1100,7 @@ void TStreamerLoop::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerBasicType)
+ClassImp(TStreamerBasicType);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1198,7 +1200,7 @@ void TStreamerBasicType::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerObject)
+ClassImp(TStreamerObject);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1230,7 +1232,7 @@ TStreamerObject::~TStreamerObject()
 ////////////////////////////////////////////////////////////////////////////////
 /// Setup the element.
 
-void TStreamerObject::Init(TObject *)
+void TStreamerObject::Init(TVirtualStreamerInfo *)
 {
    fClassObject = GetClassPointer();
    if (fClassObject && fClassObject->IsTObject()) {
@@ -1295,7 +1297,7 @@ void TStreamerObject::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerObjectAny)
+ClassImp(TStreamerObjectAny);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1323,7 +1325,7 @@ TStreamerObjectAny::~TStreamerObjectAny()
 ////////////////////////////////////////////////////////////////////////////////
 /// Setup the element.
 
-void TStreamerObjectAny::Init(TObject *)
+void TStreamerObjectAny::Init(TVirtualStreamerInfo *)
 {
    fClassObject = GetClassPointer();
    if (fClassObject && fClassObject->IsTObject()) {
@@ -1389,7 +1391,7 @@ void TStreamerObjectAny::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerObjectPointer)
+ClassImp(TStreamerObjectPointer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1420,7 +1422,7 @@ TStreamerObjectPointer::~TStreamerObjectPointer()
 ////////////////////////////////////////////////////////////////////////////////
 /// Setup the element.
 
-void TStreamerObjectPointer::Init(TObject *)
+void TStreamerObjectPointer::Init(TVirtualStreamerInfo *)
 {
    fClassObject = GetClassPointer();
    if (fClassObject && fClassObject->IsTObject()) {
@@ -1493,7 +1495,7 @@ void TStreamerObjectPointer::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerObjectAnyPointer)
+ClassImp(TStreamerObjectAnyPointer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1524,7 +1526,7 @@ TStreamerObjectAnyPointer::~TStreamerObjectAnyPointer()
 ////////////////////////////////////////////////////////////////////////////////
 /// Setup the element.
 
-void TStreamerObjectAnyPointer::Init(TObject *)
+void TStreamerObjectAnyPointer::Init(TVirtualStreamerInfo *)
 {
    fClassObject = GetClassPointer();
    if (fClassObject && fClassObject->IsTObject()) {
@@ -1588,7 +1590,7 @@ void TStreamerObjectAnyPointer::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerString)
+ClassImp(TStreamerString);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1658,7 +1660,7 @@ void TStreamerString::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerSTL)
+ClassImp(TStreamerSTL);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -1744,24 +1746,9 @@ TStreamerSTL::TStreamerSTL(const char *name, const char *title, Int_t offset,
       char *pconst = sconst-1;
       if (*pconst == ' ' || *pconst == '<' || *pconst == '*' || *pconst == '\0') sopen = sconst + 5;
    }
-   fSTLtype = 0;
+   fSTLtype = TClassEdit::STLKind(s);
    fCtype   = 0;
-   // Any class name that 'contains' the word will be counted
-   // as a STL container. Is that really what we want.
-   if      (strstr(s,"vector"))                 fSTLtype = ROOT::kSTLvector;
-   else if (strstr(s,"list"))                   fSTLtype = ROOT::kSTLlist;
-   else if (strstr(s,"forward_list"))           fSTLtype = ROOT::kSTLforwardlist;
-   else if (strstr(s,"deque"))                  fSTLtype = ROOT::kSTLdeque;
-   else if (strstr(s,"multimap"))               fSTLtype = ROOT::kSTLmultimap;
-   else if (strstr(s,"multiset"))               fSTLtype = ROOT::kSTLmultiset;
-   else if (strstr(s,"bitset"))                 fSTLtype = ROOT::kSTLbitset;
-   else if (strstr(s,"map"))                    fSTLtype = ROOT::kSTLmap;
-   else if (strstr(s,"set"))                    fSTLtype = ROOT::kSTLset;
-   else if (strstr(s,"unordered_set"))          fSTLtype = ROOT::kSTLunorderedset;
-   else if (strstr(s,"unordered_multiset"))     fSTLtype = ROOT::kSTLunorderedmultiset;
-   else if (strstr(s,"unordered_map"))          fSTLtype = ROOT::kSTLunorderedmap;
-   else if (strstr(s,"unordered_multimap"))     fSTLtype = ROOT::kSTLunorderedmultimap;
-   if (fSTLtype == 0) { delete [] s; return;}
+   if (fSTLtype == ROOT::kNotSTL) { delete [] s; return;}
    if (dmPointer) fSTLtype += TVirtualStreamerInfo::kOffsetP;
 
    // find STL contained type
@@ -1999,7 +1986,7 @@ void TStreamerSTL::Streamer(TBuffer &R__b)
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TStreamerSTLstring)
+ClassImp(TStreamerSTLstring);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.

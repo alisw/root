@@ -12,89 +12,28 @@
 #ifndef ROOT_TGDMLWRITE
 #define ROOT_TGDMLWRITE
 
-#ifndef ROOT_TGeoMatrix
 #include "TGeoMatrix.h"
-#endif
-
-#ifndef ROOT_TXMLEngine
 #include "TXMLEngine.h"
-#endif
-
-#ifndef ROOT_TGeoVolume
 #include "TGeoVolume.h"
-#endif
-
-#ifndef ROOT_TGeoParaboloid
 #include "TGeoParaboloid.h"
-#endif
-
-#ifndef ROOT_TGeoSphere
 #include "TGeoSphere.h"
-#endif
-
-#ifndef ROOT_TGeoArb8
 #include "TGeoArb8.h"
-#endif
-
-#ifndef ROOT_TGeoCone
 #include "TGeoCone.h"
-#endif
-
-#ifndef ROOT_TGeoPara
 #include "TGeoPara.h"
-#endif
-
-#ifndef ROOT_TGeoTrd1
 #include "TGeoTrd1.h"
-#endif
-
-#ifndef ROOT_TGeoTrd2
 #include "TGeoTrd2.h"
-#endif
-
-#ifndef ROOT_TGeoTube
 #include "TGeoTube.h"
-#endif
-
-#ifndef ROOT_TGeoPcon
 #include "TGeoPcon.h"
-#endif
-
-#ifndef ROOT_TGeoTorus
 #include "TGeoTorus.h"
-#endif
-
-#ifndef ROOT_TGeoPgon
 #include "TGeoPgon.h"
-#endif
-
-#ifndef ROOT_TGeoXtru
 #include "TGeoXtru.h"
-#endif
-
-#ifndef ROOT_TGeoPgon
 #include "TGeoPgon.h"
-#endif
-
-#ifndef ROOT_TGeoEltu
 #include "TGeoEltu.h"
-#endif
-
-#ifndef ROOT_TGeoHype
 #include "TGeoHype.h"
-#endif
-
-#ifndef ROOT_TGeoBoolNode
 #include "TGeoBoolNode.h"
-#endif
-
-#ifndef ROOT_TGeoCompositeShape
 #include "TGeoCompositeShape.h"
-#endif
-
-#ifndef ROOT_TGeoScaledShape
 #include "TGeoScaledShape.h"
-#endif
+#include "TGeoManager.h"
 
 #include <map>
 #include <vector>
@@ -122,11 +61,15 @@ public:
       //        if "n" then there is no suffix, but uniqness of names
       //        is not secured.
       TGDMLWrite *writer = new TGDMLWrite;
+      writer->SetFltPrecision(TGeoManager::GetExportPrecision());
       writer->WriteGDMLfile(geomanager, filename, option);
       delete writer;
    }
    //wrapper of all main methods for extraction
    void WriteGDMLfile(TGeoManager * geomanager, const char* filename = "test.gdml", TString option = "");
+   // Wrapper to only selectively write one branch of the volume hierarchy to file
+   void WriteGDMLfile(TGeoManager * geomanager, TGeoVolume* volume, const char* filename = "test.gdml", TString option = "");
+
    enum ENamingType {
       kelegantButSlow = 0,
       kwithoutSufixNotUniq = 1,
@@ -180,6 +123,7 @@ private:
    Int_t        fPhysVolCnt;                               //count of physical volumes
    UInt_t       fActNameErr;                               //count of name errors
    UInt_t       fSolCnt;                                   //count of name solids
+   UInt_t       fFltPrecision;                             //! floating point precision when writing
 
    static const UInt_t fgkProcBit    = BIT(14);    //14th bit is set when solid is processed
    static const UInt_t fgkProcBitVol = BIT(19);    //19th bit is set when volume is processed
@@ -191,6 +135,8 @@ private:
    TString          ExtractSolid(TGeoShape* volShape);     //adds <shape> to <solids>
    void             ExtractVolumes(TGeoVolume* volume);    //result <volume> node...  + corresp. shape
 
+   // Combined implementation to extract GDML information from the geometry tree
+   void WriteGDMLfile(TGeoManager * geomanager, TGeoVolume* volume, TList* materialsLst, const char* filename, TString option);
 
    //1.1 Materials sub methods - creating Nodes
    XMLNodePointer_t CreateAtomN(Double_t atom, const char * unit = "g/mole");
@@ -256,6 +202,8 @@ private:
    TString GetPattAxis(Int_t divAxis, const char * pattName, TString& unit);
    Bool_t IsNullParam(Double_t parValue, TString parName, TString objName);
    void UnsetTemporaryBits(TGeoManager * geoMng);
+   UInt_t GetFltPrecision() const { return fFltPrecision; }
+   void SetFltPrecision(UInt_t prec) { fFltPrecision = prec; }
 
    ClassDef(TGDMLWrite, 0)    //imports GDML using DOM and binds it to ROOT
 };

@@ -22,25 +22,15 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
-#ifndef ROOT_TCollection
 #include "TCollection.h"
-#endif
 
-#ifndef ROOT_TMath
 #include "TMath.h"
-#endif
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
-#ifndef ROOT_TROOT
 #include "TROOT.h"
-#endif
 
 class TStatistic : public TObject {
 
@@ -56,7 +46,7 @@ public:
 
    TStatistic(const char *name = "") : fName(name), fN(0), fW(0.), fW2(0.), fM(0.), fM2(0.) { }
    TStatistic(const char *name, Int_t n, const Double_t *val, const Double_t *w = 0);
-   ~TStatistic() { }
+   ~TStatistic();
 
    // Getters
    const char    *GetName() const { return fName; }

@@ -24,9 +24,7 @@
 #ifndef ROOT_TMVA_RuleCut
 #define ROOT_TMVA_RuleCut
 
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
 
 namespace TMVA {
 
@@ -41,7 +39,7 @@ namespace TMVA {
       RuleCut( const std::vector< const TMVA::Node * > & nodes );
 
       // copy constructor
-      RuleCut( const RuleCut & other ) : fLogger(0) { Copy( other ); }
+   RuleCut( const RuleCut & other ) : fLogger(0) { Copy( other ); }
 
       // empty constructor
       RuleCut();

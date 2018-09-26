@@ -46,10 +46,10 @@ The fact that the archive has a global directory makes it efficient
 and allows for only the reading of the desired data, one does not
 have to scan through the whole file to find the desired sub-file.
 The Zip64 extensions are supported so files larger than 2GB can be
-stored in archives larger than 4 GB.                     
-Once the archive has been opened, the client can query the members 
-and read their contents by asking the archive for an offset where  
-the sub-file starts. The members can be accessed in any order.     
+stored in archives larger than 4 GB.
+Once the archive has been opened, the client can query the members
+and read their contents by asking the archive for an offset where
+the sub-file starts. The members can be accessed in any order.
 */
 
 #include "TZIPFile.h"
@@ -57,7 +57,7 @@ the sub-file starts. The members can be accessed in any order.
 #include "TObjArray.h"
 
 
-ClassImp(TZIPFile)
+ClassImp(TZIPFile);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.
@@ -561,7 +561,7 @@ void TZIPFile::Print(Option_t *) const
 }
 
 
-ClassImp(TZIPMember)
+ClassImp(TZIPMember);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default ctor.

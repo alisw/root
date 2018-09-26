@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_tree
+/// \notebook -nodraw
 /// This example writes a tree with objects of the class Event.
 /// It is a simplified version of $ROOTSYS/test/MainEvent.cxx to
 /// write the tree, and $ROOTSYS/test/eventb.C
@@ -26,7 +27,7 @@
 /// This example can be run in many different ways:
 ///  - way1 using the Cling interpreter:
 /// ~~~
-/// .x tree4.C    
+/// .x tree4.C
 /// ~~~
 ///  - way2 using the Cling interpreter:
 /// ~~~
@@ -47,6 +48,9 @@
 /// \macro_code
 ///
 /// \author Rene Brun
+
+R__LOAD_LIBRARY($ROOTSYS/test/libEvent.so)
+
 #include "TFile.h"
 #include "TTree.h"
 #include "TBrowser.h"
@@ -121,12 +125,6 @@ void tree4w()
 
 void tree4r()
 {
-  // check to see if the event class is in the dictionary
-  // if it is not load the definition in libEvent.so
-  if (!TClassTable::GetDict("Event")) {
-    gSystem->Load("$ROOTSYS/test/libEvent");
-  }
-
   // read the tree generated with tree4w
 
   //note that we use "new" to create the TFile and TTree objects !

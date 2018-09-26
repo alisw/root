@@ -24,7 +24,7 @@
 #include <TH1.h>
 #include <TColor.h>
 
-ClassImp(TPie)
+ClassImp(TPie);
 
 /** \class TPie
 \ingroup BasicGraphics
@@ -154,6 +154,7 @@ TPie::TPie(const TPie &cpy) : TNamed(cpy), TAttText(cpy)
 TPie::~TPie()
 {
    if (fNvals>0) {
+      for (int i=0; i<fNvals; ++i) delete fPieSlices[i];
       delete [] fPieSlices;
    }
 
@@ -986,7 +987,7 @@ void TPie::Paint(Option_t *option)
       tmptxt.ReplaceAll("%txt",fPieSlices[i]->GetTitle());
       tmptxt.ReplaceAll("%val",Form(fValueFormat.Data(),fPieSlices[i]->GetValue()));
       tmptxt.ReplaceAll("%frac",Form(fFractionFormat.Data(),fPieSlices[i]->GetValue()/fSum));
-      tmptxt.ReplaceAll("%perc",Form("%3.1f %s",(fPieSlices[i]->GetValue()/fSum)*100,"%"));
+      tmptxt.ReplaceAll("%perc",Form(Form("%s %s",fPercentFormat.Data(),"%s"),(fPieSlices[i]->GetValue()/fSum)*100,"%"));
 
       textlabel->SetTitle(tmptxt.Data());
       Double_t h = textlabel->GetYsize();
@@ -1087,9 +1088,9 @@ void TPie::Paint(Option_t *option)
    }
 
    Int_t talh = gStyle->GetTitleAlign()/10;
-   if (talh < 1) talh = 1; if (talh > 3) talh = 3;
+   if (talh < 1) talh = 1; else if (talh > 3) talh = 3;
    Int_t talv = gStyle->GetTitleAlign()%10;
-   if (talv < 1) talv = 1; if (talv > 3) talv = 3;
+   if (talv < 1) talv = 1; else if (talv > 3) talv = 3;
    Double_t xpos, ypos;
    xpos = gStyle->GetTitleX();
    ypos = gStyle->GetTitleY();

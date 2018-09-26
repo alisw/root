@@ -9,7 +9,6 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-#include "Riosfwd.h"
 #include "Riostream.h"
 
 #include "TDataSetIter.h"
@@ -28,7 +27,7 @@
 
 TDataSet *TDataSetIter::fgNullDataSet = (TDataSet *)(-1);
 
-ClassImp(TDataSetIter)
+ClassImp(TDataSetIter);
 
 //////////////////////////////////////////////////////////////////////////
 //                                                                      //

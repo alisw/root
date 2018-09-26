@@ -362,11 +362,7 @@ namespace {
          TString rdynpath = gEnv ? gEnv->GetValue("Root.DynamicPath", (char*)0) : "";
          rdynpath.ReplaceAll("; ", ";");  // in case DynamicPath was extended
          if (rdynpath == "") {
-#ifdef ROOTBINDIR
-            rdynpath = ".;"; rdynpath += ROOTBINDIR;
-#else
-            rdynpath = ".;"; rdynpath += gRootDir; rdynpath += "/bin";
-#endif
+            rdynpath = ".;"; rdynpath += TROOT::GetBinDir();
          }
          TString path = gSystem->Getenv("PATH");
          if (path == "")
@@ -376,15 +372,10 @@ namespace {
          }
 
       }
-#ifdef ROOTLIBDIR
-      if (!dynpath.Contains(ROOTLIBDIR)) {
-         dynpath += ";"; dynpath += ROOTLIBDIR;
+
+      if (!dynpath.Contains(TROOT::GetLibDir())) {
+         dynpath += ";"; dynpath += TROOT::GetLibDir();
       }
-#else
-      if (!dynpath.Contains(TString::Format("%s/lib", gRootDir))) {
-         dynpath += ";"; dynpath += gRootDir; dynpath += "/lib";
-      }
-#endif
 
       return dynpath;
    }
@@ -823,16 +814,10 @@ namespace {
       }
 
       // determine the fileopen.C file path:
-      TString fileopen;
-#ifndef ROOT_PREFIX
-      fileopen += sys->TWinNTSystem::DriveName(buf);
-      fileopen += ":";
-      fileopen += sys->TWinNTSystem::DirName(sys->TWinNTSystem::DirName(buf));
-      fileopen += "\\macros";
-#else
-      fileopen += ROOTMACRODIR;
-#endif
-      fileopen += "\\fileopen.C";
+      TString fileopen = "fileopen.C";
+      TString rootmacrodir = "macros";
+      sys->PrependPathName(getenv("ROOTSYS"), rootmacrodir);
+      sys->PrependPathName(rootmacrodir.Data(), fileopen);
 
       if (regROOTwrite) {
          // only write to registry if fileopen.C is readable
@@ -901,16 +886,17 @@ namespace {
    bool NeedSplash()
    {
       static bool once = true;
-      if (!once || gROOT->IsBatch() || !gApplication) return false;
-      TString arg = gSystem->BaseName(gApplication->Argv(0));
-      if ((arg != "root") && (arg != "rootn") &&
-          (arg != "root.exe") && (arg != "rootn.exe")) return false;
-      for(int i=1; i<gApplication->Argc(); i++) {
-         arg = gApplication->Argv(i);
+      TString arg;
+
+      if (!once || gROOT->IsBatch()) return false;
+      TString cmdline(::GetCommandLine());
+      Int_t i = 0, from = 0;
+      while (cmdline.Tokenize(arg, from, " ")) {
          arg.Strip(TString::kBoth);
-         if ((arg == "-l") || (arg == "-b")) {
-            return false;
-         }
+         if (i == 0 && ((arg != "root") && (arg != "rootn") &&
+             (arg != "root.exe") && (arg != "rootn.exe"))) return false;
+         else if ((arg == "-l") || (arg == "-b")) return false;
+         ++i;
       }
       if (once) {
          once = false;
@@ -957,7 +943,7 @@ namespace {
 
 
 ///////////////////////////////////////////////////////////////////////////////
-ClassImp(TWinNTSystem)
+ClassImp(TWinNTSystem);
 
 ULong_t gConsoleWindow = 0;
 
@@ -1007,7 +993,9 @@ fGUIThreadHandle(0), fGUIThreadId(0)
 
    char *buf = new char[MAX_MODULE_NAME32 + 1];
 
-#ifndef ROOTPREFIX
+#ifdef ROOTPREFIX
+   if (gSystem->Getenv("ROOTIGNOREPREFIX")) {
+#endif
    // set ROOTSYS
    HMODULE hModCore = ::GetModuleHandle("libCore.dll");
    if (hModCore) {
@@ -1034,6 +1022,8 @@ fGUIThreadHandle(0), fGUIThreadId(0)
             Setenv("PATH", path.Data());
          }
       }
+   }
+#ifdef ROOTPREFIX
    }
 #endif
 
@@ -1112,23 +1102,17 @@ Bool_t TWinNTSystem::Init()
 
    fSigcnt = 0;
 
-#ifndef ROOTPREFIX
-   gRootDir = Getenv("ROOTSYS");
-   if (gRootDir == 0) {
-      static char lpFilename[MAX_PATH];
-      if (::GetModuleFileName(NULL,               // handle to module to find filename for
-                            lpFilename,           // pointer to buffer to receive module path
-                            sizeof(lpFilename)))  // size of buffer, in characters
-      {
-         const char *dirName = DirName(DirName(lpFilename));
-         gRootDir = StrDup(dirName);
-      } else {
-         gRootDir = 0;
-      }
+   // This is a fallback in case TROOT::GetRootSys() can't determine ROOTSYS
+   static char lpFilename[MAX_PATH];
+   if (::GetModuleFileName(
+          NULL,                   // handle to module to find filename for
+          lpFilename,             // pointer to buffer to receive module path
+          sizeof(lpFilename))) {  // size of buffer, in characters
+      const char *dirName = DirName(DirName(lpFilename));
+      gRootDir = StrDup(dirName);
+   } else {
+      gRootDir = 0;
    }
-#else
-   gRootDir= ROOTPREFIX;
-#endif
 
    // Increase the accuracy of Sleep() without needing to link to winmm.lib
    typedef UINT (WINAPI* LPTIMEBEGINPERIOD)( UINT uPeriod );
@@ -1198,7 +1182,7 @@ const char *TWinNTSystem::BaseName(const char *name)
       char *cp;
       char *bslash = (char *)strrchr(&symbol[idx],'\\');
       char *rslash = (char *)strrchr(&symbol[idx],'/');
-      if (cp = std::max(rslash, bslash)) {
+      if (cp = (std::max)(rslash, bslash)) {
          //return StrDup(++cp);
          return ++cp;
       }
@@ -2107,6 +2091,8 @@ void *TWinNTSystem::OpenDirectory(const char *fdir)
       if (!(entry[strlen(dir)-1] == '/' || entry[strlen(dir)-1] == '\\' )) {
          strlcat(entry,"\\",nche);
       }
+      if (entry[strlen(dir)-1] == ' ')
+         entry[strlen(dir)-1] = '\0';
       strlcat(entry,"*",nche);
 
       HANDLE searchFile;
@@ -2136,11 +2122,44 @@ const char *TWinNTSystem::WorkingDirectory()
    return WorkingDirectory('\0');
 }
 
+//////////////////////////////////////////////////////////////////////////////
+/// Return the working directory for the default drive
+
+std::string TWinNTSystem::GetWorkingDirectory() const
+{
+   char *wdpath = GetWorkingDirectory('\0');
+   std::string cwd;
+   if (wdpath) {
+      cwd = wdpath;
+      free(wdpath);
+   }
+   return cwd;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///  Return working directory for the selected drive
 ///  driveletter == 0 means return the working durectory for the default drive
 
 const char *TWinNTSystem::WorkingDirectory(char driveletter)
+{
+   char *wdpath = GetWorkingDirectory(driveletter);
+   if (wdpath) {
+      fWdpath = wdpath;
+
+      // Make sure the drive letter is upper case
+      if (fWdpath[1] == ':')
+         fWdpath[0] = toupper(fWdpath[0]);
+
+      free(wdpath);
+   }
+   return fWdpath;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+///  Return working directory for the selected drive (helper function).
+///  The caller must free the return value.
+
+char *TWinNTSystem::GetWorkingDirectory(char driveletter) const
 {
    char *wdpath = 0;
    char drive = driveletter ? toupper( driveletter ) - 'A' + 1 : 0;
@@ -2154,12 +2173,8 @@ const char *TWinNTSystem::WorkingDirectory(char driveletter)
       Warning("WorkingDirectory", "getcwd() failed");
       return 0;
    }
-   fWdpath = wdpath;
-   // Make sure the drive letter is upper case
-   if (fWdpath[1] == ':')
-      fWdpath[0] = toupper(fWdpath[0]);
-   free(wdpath);
-   return fWdpath;
+
+   return wdpath;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2168,6 +2183,25 @@ const char *TWinNTSystem::WorkingDirectory(char driveletter)
 const char *TWinNTSystem::HomeDirectory(const char *userName)
 {
    static char mydir[kMAXPATHLEN] = "./";
+   FillWithHomeDirectory(userName, mydir);
+   return mydir;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+/// Return the user's home directory.
+
+std::string TWinNTSystem::GetHomeDirectory(const char *userName) const
+{
+   char mydir[kMAXPATHLEN] = "./";
+   FillWithHomeDirectory(userName, mydir);
+   return std::string(mydir); 
+}
+
+//////////////////////////////////////////////////////////////////////////////
+/// Fill buffer with user's home directory.
+
+void TWinNTSystem::FillWithHomeDirectory(const char *userName, char *mydir) const
+{
    const char *h = 0;
    if (!(h = ::getenv("home"))) h = ::getenv("HOME");
 
@@ -2192,8 +2226,8 @@ const char *TWinNTSystem::HomeDirectory(const char *userName)
    // Make sure the drive letter is upper case
    if (mydir[1] == ':')
       mydir[0] = toupper(mydir[0]);
-   return mydir;
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return a user configured or systemwide directory to create
@@ -2355,7 +2389,7 @@ const char *TWinNTSystem::DirName(const char *pathname)
       if (strchr(pathname, '/') || strchr(pathname, '\\')) {
          const char *rslash = strrchr(pathname, '/');
          const char *bslash = strrchr(pathname, '\\');
-         const char *r = std::max(rslash, bslash);
+         const char *r = (std::max)(rslash, bslash);
          const char *ptr = pathname;
          while (ptr <= r) {
             if (*ptr == ':') {
@@ -2382,18 +2416,19 @@ const char *TWinNTSystem::DirName(const char *pathname)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////
-/// Return the drive letter in pathname. DriveName of 'c:/user/root' is 'c'//
-///   Input:                                                               //
-///      pathname - the string containing file name                        //
-///   Return:                                                              //
-///     = Letter presenting the drive letter in the file name              //
-///     = The current drive if the pathname has no drive assigment         //
-///     = 0 if pathname is an empty string  or uses UNC syntax             //
-///   Note:                                                                //
-///      It doesn't chech whether pathname presents the 'real filename     //
-///      This subroutine looks for 'single letter' is follows with a ':'   //
-/////////////////////////////////////////////////////////////////////////////
+/// Return the drive letter in pathname. DriveName of 'c:/user/root' is 'c'
+///
+///   Input:
+///     - pathname - the string containing file name
+///
+///   Return:
+///     - Letter representing the drive letter in the file name
+///     - The current drive if the pathname has no drive assigment
+///     - 0 if pathname is an empty string  or uses UNC syntax
+///
+///   Note:
+///      It doesn't check whether pathname represents a 'real' filename.
+///      This subroutine looks for 'single letter' followed by a ':'.
 
 const char TWinNTSystem::DriveName(const char *pathname)
 {
@@ -2458,10 +2493,13 @@ Bool_t TWinNTSystem::IsAbsoluteFileName(const char *dir)
 
 const char *TWinNTSystem::UnixPathName(const char *name)
 {
-   static char temp[1024];
-   strlcpy(temp, name,1024);
+   const int kBufSize = 1024;
+   TTHREAD_TLS_ARRAY(char, kBufSize, temp);
+
+   strlcpy(temp, name, kBufSize);
    char *currentChar = temp;
 
+   // This can not change the size of the string.
    while (*currentChar != '\0') {
       if (*currentChar == '\\') *currentChar = '/';
       currentChar++;
@@ -2812,6 +2850,9 @@ int TWinNTSystem::Symlink(const char *from, const char *to)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Unlink, i.e. remove, a file or directory.
+///
+/// If the file is currently open by the current or another process Windows does not allow the file to be deleted and
+/// the operation is a no-op.
 
 int TWinNTSystem::Unlink(const char *name)
 {
@@ -2863,6 +2904,13 @@ Bool_t TWinNTSystem::ExpandPathName(TString &patbuf0)
 
    Int_t old_level = gErrorIgnoreLevel;
    gErrorIgnoreLevel = kFatal; // Explicitly remove all messages
+   if (patbuf0.BeginsWith("\\")) {
+      const char driveletter = DriveName(patbuf);
+      if (driveletter) {
+         patbuf0.Prepend(":");
+         patbuf0.Prepend(driveletter);
+      }
+   }
    TUrl urlpath(patbuf0, kTRUE);
    TString proto = urlpath.GetProtocol();
    gErrorIgnoreLevel = old_level;
@@ -2933,7 +2981,7 @@ needshell:
 
    // escape shell quote characters
    // EscChar(patbuf, stuffedPat, sizeof(stuffedPat), shellStuff, shellEscape);
-   patbuf0 = ExpandFileName(patbuf0.Data());
+   ExpandFileName(patbuf0);
    Int_t lbuf = ::ExpandEnvironmentStrings(
                                  patbuf0.Data(), // pointer to string with environment variables
                                  cmd,            // pointer to string with expanded environment variables
@@ -3825,13 +3873,20 @@ void TWinNTSystem::Exit(int code, Bool_t mode)
       if (gROOT->GetListOfBrowsers()) {
          // GetListOfBrowsers()->Delete() creates problems when a browser is
          // created on the stack, calling CloseWindow() solves the problem
-         //gROOT->GetListOfBrowsers()->Delete();
-         TBrowser *b;
-         TIter next(gROOT->GetListOfBrowsers());
-         while ((b = (TBrowser*) next()))
-            gROOT->ProcessLine(TString::Format("((TBrowser*)0x%lx)->GetBrowserImp()->GetMainFrame()->CloseWindow();",
-                                               (ULong_t)b));
+         if (gROOT->IsBatch())
+            gROOT->GetListOfBrowsers()->Delete();
+         else {
+            TBrowser *b;
+            TIter next(gROOT->GetListOfBrowsers());
+            while ((b = (TBrowser*) next()))
+               gROOT->ProcessLine(TString::Format("\
+                  if (((TBrowser*)0x%lx)->GetBrowserImp() &&\
+                      ((TBrowser*)0x%lx)->GetBrowserImp()->GetMainFrame()) \
+                     ((TBrowser*)0x%lx)->GetBrowserImp()->GetMainFrame()->CloseWindow();\
+                  else delete (TBrowser*)0x%lx", (ULong_t)b, (ULong_t)b, (ULong_t)b, (ULong_t)b));
+         }
       }
+      gROOT->EndOfProcessCleanups();
    }
    if (gInterpreter) {
       gInterpreter->ResetGlobals();
@@ -4998,8 +5053,8 @@ int TWinNTSystem::GetSockOpt(int socket, int opt, int *val)
          if (sock == INVALID_SOCKET) {
             ::SysError("GetSockOpt", "INVALID_SOCKET");
          }
-         return -1;
          *val = flg; //  & O_NDELAY;  It is not been defined for WIN32
+         return -1;
       }
       break;
 #if 0
@@ -5274,8 +5329,9 @@ int TWinNTSystem::AnnounceTcpService(int port, Bool_t reuse, int backlog,
    } else {
       int bret;
       do {
-         inserver.sin_port = ::htons(tryport++);
+         inserver.sin_port = ::htons(tryport);
          bret = ::bind(sock, (struct sockaddr*) &inserver, sizeof(inserver));
+         tryport++;
       } while (bret == SOCKET_ERROR && WSAGetLastError() == WSAEADDRINUSE &&
                tryport < kSOCKET_MAXPORT);
       if (bret == SOCKET_ERROR) {
@@ -5334,8 +5390,9 @@ int TWinNTSystem::AnnounceUdpService(int port, int backlog)
    } else {
       int bret;
       do {
-         inserver.sin_port = htons(tryport++);
+         inserver.sin_port = htons(tryport);
          bret = bind(sock, (struct sockaddr*) &inserver, sizeof(inserver));
+         tryport++;
       } while (bret == SOCKET_ERROR && WSAGetLastError() == WSAEADDRINUSE &&
                tryport < kSOCKET_MAXPORT);
       if (bret < 0) {

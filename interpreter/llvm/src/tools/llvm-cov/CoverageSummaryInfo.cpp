@@ -19,7 +19,7 @@ using namespace coverage;
 
 FunctionCoverageSummary
 FunctionCoverageSummary::get(const coverage::FunctionRecord &Function) {
-  // Compute the region coverage
+  // Compute the region coverage.
   size_t NumCodeRegions = 0, CoveredRegions = 0;
   for (auto &CR : Function.CountedRegions) {
     if (CR.Kind != CounterMappingRegion::CodeRegion)
@@ -67,30 +67,17 @@ FunctionCoverageSummary::get(const coverage::FunctionRecord &Function) {
   return FunctionCoverageSummary(
       Function.Name, Function.ExecutionCount,
       RegionCoverageInfo(CoveredRegions, NumCodeRegions),
-      LineCoverageInfo(CoveredLines, 0, NumLines));
+      LineCoverageInfo(CoveredLines, NumLines));
 }
 
-FileCoverageSummary
-FileCoverageSummary::get(StringRef Name,
-                         ArrayRef<FunctionCoverageSummary> FunctionSummaries) {
-  size_t NumRegions = 0, CoveredRegions = 0;
-  size_t NumLines = 0, NonCodeLines = 0, CoveredLines = 0;
-  size_t NumFunctionsExecuted = 0;
-  for (const auto &Func : FunctionSummaries) {
-    CoveredRegions += Func.RegionCoverage.Covered;
-    NumRegions += Func.RegionCoverage.NumRegions;
-
-    CoveredLines += Func.LineCoverage.Covered;
-    NonCodeLines += Func.LineCoverage.NonCodeLines;
-    NumLines += Func.LineCoverage.NumLines;
-
-    if (Func.ExecutionCount != 0)
-      ++NumFunctionsExecuted;
-  }
-
-  return FileCoverageSummary(
-      Name, RegionCoverageInfo(CoveredRegions, NumRegions),
-      LineCoverageInfo(CoveredLines, NonCodeLines, NumLines),
-      FunctionCoverageInfo(NumFunctionsExecuted, FunctionSummaries.size()),
-      FunctionSummaries);
+void FunctionCoverageSummary::update(const FunctionCoverageSummary &Summary) {
+  ExecutionCount += Summary.ExecutionCount;
+  RegionCoverage.Covered =
+      std::max(RegionCoverage.Covered, Summary.RegionCoverage.Covered);
+  RegionCoverage.NotCovered =
+      std::min(RegionCoverage.NotCovered, Summary.RegionCoverage.NotCovered);
+  LineCoverage.Covered =
+      std::max(LineCoverage.Covered, Summary.LineCoverage.Covered);
+  LineCoverage.NotCovered =
+      std::min(LineCoverage.NotCovered, Summary.LineCoverage.NotCovered);
 }

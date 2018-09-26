@@ -22,9 +22,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 #include "TClassRef.h"
 #include "TDataType.h"
 
@@ -55,7 +53,8 @@ public:
       // kIsInitialized = BIT(1),
       kIsAssociative = BIT(2),
       kIsEmulated    = BIT(3),
-      kNeedDelete    = BIT(4)   // Flag to indicate that this collection that contains directly or indirectly (only via other collection) some pointers that will need explicit deletions.
+      kNeedDelete    = BIT(4),  // Flag to indicate that this collection that contains directly or indirectly (only via other collection) some pointers that will need explicit deletions.
+      kCustomAlloc   = BIT(5)   // The collection has a custom allocator.
    };
 
    class TPushPop {

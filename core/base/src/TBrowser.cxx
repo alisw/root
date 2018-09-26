@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TBrowser
+\ingroup Base
+
 Using a TBrowser one can browse all ROOT objects. It shows in a list
 on the left side of the window all browsable ROOT classes. Selecting
 one of the classes displays, in the icon-box on the right side, all
@@ -71,7 +73,7 @@ private:
 };
 
 
-ClassImp(TBrowser)
+ClassImp(TBrowser);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a new browser with a name, title. Width and height are by
@@ -243,12 +245,12 @@ TBrowser::~TBrowser()
 
 void TBrowser::Destructor()
 {
-   fImp->CloseTabs();
-   R__LOCKGUARD2(gROOTMutex);
+   if (fImp) fImp->CloseTabs();
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfBrowsers()->Remove(this);
    delete fContextMenu;
    delete fTimer;
-   delete fImp;
+   if (fImp) delete fImp;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -326,7 +328,7 @@ void TBrowser::Create(TObject *obj)
    fTimer = new TBrowserTimer(this);
    gSystem->AddTimer(fTimer);
 
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfBrowsers()->Add(this);
 
    // Get the list of globals

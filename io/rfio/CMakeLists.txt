@@ -2,12 +2,21 @@
 # CMakeLists.txt file for building ROOT io/rfio package
 ############################################################################
 
+if(CASTOR_FOUND)
 include_directories(${CASTOR_INCLUDE_DIR})
+ROOT_STANDARD_LIBRARY_PACKAGE(RFIO
+                              HEADERS TRFIOFile.h
+                              SOURCES src/TRFIOFile.cxx
+                              LIBRARIES ${CASTOR_LIBRARIES} ${CASTOR_rfio_LIBRARY}
+                                        ${CASTOR_common_LIBRARY} ${CASTOR_client_LIBRARY}
+                              DEPENDENCIES Core Net RIO)
+else()
+include_directories(${DPM_INCLUDE_DIR})
+ROOT_STANDARD_LIBRARY_PACKAGE(RFIO
+                              HEADERS TRFIOFile.h
+                              SOURCES src/TRFIOFile.cxx
+                              LIBRARIES ${DPM_LIBRARIES}
+                              DEPENDENCIES Core Net RIO)
+endif()
 
-ROOT_GENERATE_DICTIONARY(G__RFIO *.h MODULE RFIO  LINKDEF LinkDef.h)
-
-ROOT_ADD_CXX_FLAG(CMAKE_CXX_FLAGS -Wno-shadow)
-
-ROOT_LINKER_LIBRARY(RFIO *.cxx G__RFIO.cxx LIBRARIES Core ${CASTOR_LIBRARIES}
-    ${CASTOR_rfio_LIBRARY} ${CASTOR_common_LIBRARY} ${CASTOR_client_LIBRARY} DEPENDENCIES Net RIO)
-ROOT_INSTALL_HEADERS()
+target_compile_options(RFIO PRIVATE -Wno-shadow)

@@ -9,28 +9,43 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TLockPath                                                            //
-//                                                                      //
-// Path locking class allowing shared and exclusive locks               //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+/** \class TLockPath
+\ingroup proofkernel
+
+Path locking class allowing shared and exclusive locks
+
+*/
 
 #include "TLockPath.h"
 #include "TSystem.h"
+#if defined(R__WIN32) && !defined(R__WINGCC)
+#include <io.h>
+#define lseek _lseek
+#define close _close
+#define open _open
+#define O_CREAT _O_CREAT
+#define O_RDWR _O_RDWR
+#else
 #include <sys/file.h>
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Locks the directory. Waits if lock is hold by an other process.
 /// Returns 0 on success, -1 in case of error.
+
+TLockPath::TLockPath(const char *path) : fName(path), fLockId(-1)
+{
+   // Work with full names
+   if (gSystem->ExpandPathName(fName))
+      Warning("TLockPath", "problems expanding path '%s'", fName.Data());
+}
 
 Int_t TLockPath::Lock(Bool_t shared)
 {
    const char *pname = GetName();
 
    if (gSystem->AccessPathName(pname))
-      fLockId = open(pname, O_CREAT|O_RDWR, 0644);
+      fLockId = open(pname, O_CREAT | O_RDWR, 0644);
    else
       fLockId = open(pname, O_RDWR);
 

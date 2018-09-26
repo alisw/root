@@ -12,9 +12,7 @@
 #ifndef ROOT_TGLLogicalShape
 #define ROOT_TGLLogicalShape
 
-#ifndef ROOT_TGLBoundingBox
 #include "TGLBoundingBox.h"
-#endif
 
 class TBuffer3D;
 class TObject;
@@ -61,6 +59,9 @@ protected:
    void PurgeDLRange(UInt_t base, Int_t size) const;
 
    static  Bool_t     fgIgnoreSizeForCameraInterest;
+
+   static  Bool_t     fgUseDLs;            //! global flag for usage of display-lists
+   static  Bool_t     fgUseDLsForVertArrs; //! global flag for usage of display-lists in shapes that use vertex arrays
 
 public:
    TGLLogicalShape();
@@ -114,6 +115,8 @@ public:
 
    static Bool_t GetIgnoreSizeForCameraInterest();
    static void   SetIgnoreSizeForCameraInterest(Bool_t isfci);
+
+   static void   SetEnvDefaults();
 
    ClassDef(TGLLogicalShape,0) // a logical (non-placed, local frame) drawable object
 };

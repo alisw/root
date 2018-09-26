@@ -42,8 +42,8 @@
 #include "TImage.h"
 #include <time.h>
 
-ClassImp(TGFileItem)
-ClassImp(TGFileContainer)
+ClassImp(TGFileItem);
+ClassImp(TGFileContainer);
 
 class TViewUpdateTimer : public TTimer {
 
@@ -649,7 +649,8 @@ void TGFileContainer::GetFilePictures(const TGPicture **pic,
             *pic = fClient->GetPicturePool()->GetPicture(lnk_name.Data(),
                                  img1->GetPixmap(), img1->GetMask());
             fCleanups->Add(((TObject *)*pic));
-            if (img2) delete img2; delete img1;
+            if (img2) delete img2;
+            delete img1;
          }
          img1 = TImage::Create();
          if (img1) {
@@ -662,7 +663,8 @@ void TGFileContainer::GetFilePictures(const TGPicture **pic,
             *lpic = fClient->GetPicturePool()->GetPicture(lnk_name.Data(),
                                  img1->GetPixmap(), img1->GetMask());
             fCleanups->Add(((TObject *)*lpic));
-            if (img2) delete img2; delete img1;
+            if (img2) delete img2;
+            delete img1;
          }
       }
       else {
@@ -683,11 +685,13 @@ void TGFileContainer::ChangeDirectory(const char *path)
 {
    TString savdir = gSystem->WorkingDirectory();
    gSystem->ChangeDirectory(fDirectory.Data());   // so path of ".." will work
-   if (gSystem->ChangeDirectory(gSystem->ExpandPathName(path))) {
+   char *exppath = gSystem->ExpandPathName(path);
+   if (gSystem->ChangeDirectory(exppath)) {
       fDirectory = gSystem->WorkingDirectory();
       gSystem->ChangeDirectory(savdir.Data());
       DisplayDirectory();
    }
+   delete[] exppath;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

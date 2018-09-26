@@ -33,9 +33,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_Interval
 #include "TMVA/Interval.h"
-#endif
 
 class TRandom3;
 
@@ -72,7 +70,7 @@ namespace TMVA {
 
       TRandom3* fRandomGenerator;  // the randomGenerator for calculating the new values
 
-      ClassDef(GeneticRange,0) // Range definition for genetic algorithm
+      ClassDef(GeneticRange,0); // Range definition for genetic algorithm
    };
 
 } // namespace TMVA

@@ -3,7 +3,7 @@
 ############################################################################
 
 include_directories(${GSL_INCLUDE_DIR} ${CMAKE_SOURCE_DIR})
-add_definitions(-DUSE_ROOT_ERROR ${GSL_CFLAGS})
+add_definitions(${GSL_CFLAGS})
 
 set(headers Math/DistFuncMathMore.h Math/SpecFuncMathMore.h Math/PdfFuncMathMore.h
             Math/Polynomial.h Math/Derivator.h Math/Interpolator.h
@@ -19,14 +19,12 @@ set(headers Math/DistFuncMathMore.h Math/SpecFuncMathMore.h Math/PdfFuncMathMore
             Math/VavilovAccurateCdf.h Math/VavilovAccurateQuantile.h Math/VavilovFast.h )
 set(linkdefs Math/LinkDef.h Math/LinkDef_Func.h Math/LinkDef_RootFinding.h)
 
-ROOT_GENERATE_DICTIONARY(G__MathMore ${headers} MODULE MathMore LINKDEF Math/LinkDef.h OPTIONS "-writeEmptyRootPCM")
-
-ROOT_LINKER_LIBRARY(MathMore *.cxx G__MathMore.cxx LIBRARIES ${GSL_LIBRARIES} DEPENDENCIES MathCore)
-ROOT_INSTALL_HEADERS()
-
-if(builtin_gsl)
-  ROOT_ADD_BUILTIN_DEPENDENCIES(MathMore GSL)
-endif()
+ROOT_STANDARD_LIBRARY_PACKAGE(MathMore
+                              HEADERS ${headers}
+                              LINKDEF Math/LinkDef.h
+                              LIBRARIES ${GSL_LIBRARIES}
+                              DEPENDENCIES MathCore
+                              BUILTINS GSL)
 
 ROOT_ADD_TEST_SUBDIRECTORY(test)
 

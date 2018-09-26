@@ -1,13 +1,12 @@
 // @(#)root/geombuilder:$Id$
 // Author: Matevz Tadel   25/09/2006
 
-//______________________________________________________________________________
-//                                                                      //
-//  TGeoGedFrame                                                        //
-//                                                                      //
-//  Common base class for geombuilder editors.                          //
-//                                                                      //
-//______________________________________________________________________________
+/** \class TGeoGedFrame
+\ingroup Geometry_builder
+
+Common base class for geombuilder editors.
+
+*/
 
 #include "TGeoGedFrame.h"
 #include "TGeoTabManager.h"
@@ -15,7 +14,7 @@
 #include "TGTab.h"
 #include "TVirtualPad.h"
 
-ClassImp(TGeoGedFrame)
+ClassImp(TGeoGedFrame);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.

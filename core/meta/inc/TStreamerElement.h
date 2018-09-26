@@ -21,13 +21,9 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
 
-#ifndef ROOT_ESTLType
 #include "ESTLType.h"
-#endif
 
 class TMethodCall;
 class TClass;
@@ -77,15 +73,31 @@ public:
       kSTLbitset            = ROOT::kSTLbitset
    };
    // TStreamerElement status bits
-   enum {
+   enum EStatusBits {
       kHasRange     = BIT(6),
       kCache        = BIT(9),
       kRepeat       = BIT(10),
       kRead         = BIT(11),
       kWrite        = BIT(12),
       kDoNotDelete  = BIT(13),
-      kWholeObject  = BIT(14)
+      kWholeObject  = BIT(14),
+      kWarned       = BIT(21)
    };
+
+   enum class EStatusBitsDupExceptions {
+      // This bit duplicates TObject::kInvalidObject. As the semantic of kDoNotDelete is a persistent,
+      // we can not change its value without breaking forward compatibility.
+      // Furthermore, TObject::kInvalidObject and its semantic is not (and should not be)
+      // used in TStreamerElement
+      kDoNotDelete = TStreamerElement::kDoNotDelete,
+
+      // This bit duplicates TObject::kCannotPick. As the semantic of kHasRange is a persistent,
+      // we can not change its value without breaking forward compatibility.
+      // Furthermore, TObject::kCannotPick and its semantic is not (and should not be)
+      // used in TStreamerElement
+      kHasRange = TStreamerElement::kHasRange
+   };
+
 
    TStreamerElement();
    TStreamerElement(const char *name, const char *title, Int_t offset, Int_t dtype, const char *typeName);
@@ -113,7 +125,7 @@ public:
    Double_t         GetFactor() const {return fFactor;}
    Double_t         GetXmin()   const {return fXmin;}
    Double_t         GetXmax()   const {return fXmax;}
-   virtual void     Init(TObject *obj=0);
+   virtual void     Init(TVirtualStreamerInfo *obj=0);
    virtual Bool_t   IsaPointer() const {return kFALSE;}
    virtual Bool_t   HasCounter() const {return kFALSE;}
    virtual Bool_t   IsOldFormat(const char *newTypeName);
@@ -168,7 +180,7 @@ public:
    ULong_t          GetMethod() const {return 0;}
    Int_t            GetSize() const;
    TVirtualStreamerInfo *GetBaseStreamerInfo () const { return fStreamerInfo; }
-   virtual void     Init(TObject *obj=0);
+   virtual void     Init(TVirtualStreamerInfo *obj=0);
    Bool_t           IsBase() const;
    virtual void     ls(Option_t *option="") const;
    Int_t            ReadBuffer (TBuffer &b, char *pointer);
@@ -207,7 +219,7 @@ public:
    Int_t          GetCountVersion() const {return fCountVersion;}
    ULong_t        GetMethod() const;
    Int_t          GetSize() const;
-   virtual void   Init(TObject *obj=0);
+   virtual void   Init(TVirtualStreamerInfo *obj=0);
    virtual Bool_t HasCounter() const                {return fCounter!=0;   }
    virtual Bool_t IsaPointer() const                {return kTRUE;         }
    void           SetArrayDim(Int_t dim);
@@ -243,7 +255,7 @@ public:
    const char    *GetInclude() const;
    ULong_t        GetMethod() const;
    Int_t          GetSize() const;
-   virtual void   Init(TObject *obj=0);
+   virtual void   Init(TVirtualStreamerInfo *obj=0);
    virtual Bool_t IsaPointer() const                {return kTRUE;         }
    virtual Bool_t HasCounter() const                {return fCounter!=0;   }
    void           SetCountClass(const char *clname) {fCountClass = clname; }
@@ -291,7 +303,7 @@ public:
    virtual       ~TStreamerObject();
    const char    *GetInclude() const;
    Int_t          GetSize() const;
-   virtual void   Init(TObject *obj=0);
+   virtual void   Init(TVirtualStreamerInfo *obj=0);
 
    ClassDef(TStreamerObject,2)  //Streamer element of type object
 };
@@ -310,7 +322,7 @@ public:
    virtual       ~TStreamerObjectAny();
    const char    *GetInclude() const;
    Int_t          GetSize() const;
-   virtual void   Init(TObject *obj=0);
+   virtual void   Init(TVirtualStreamerInfo *obj=0);
 
    ClassDef(TStreamerObjectAny,2)  //Streamer element of type object other than TObject
 };
@@ -329,7 +341,7 @@ public:
    virtual       ~TStreamerObjectPointer();
    const char    *GetInclude() const;
    Int_t          GetSize() const;
-   virtual void   Init(TObject *obj=0);
+   virtual void   Init(TVirtualStreamerInfo *obj=0);
    virtual Bool_t IsaPointer() const {return kTRUE;}
    virtual void   SetArrayDim(Int_t dim);
 
@@ -350,7 +362,7 @@ public:
    virtual       ~TStreamerObjectAnyPointer();
    const char    *GetInclude() const;
    Int_t          GetSize() const;
-   virtual void   Init(TObject *obj=0);
+   virtual void   Init(TVirtualStreamerInfo *obj=0);
    virtual Bool_t IsaPointer() const {return kTRUE;}
    virtual void   SetArrayDim(Int_t dim);
 
@@ -377,10 +389,6 @@ public:
 
 //________________________________________________________________________
 class TStreamerSTL : public TStreamerElement {
-
-   enum {
-      kWarned       = BIT(21)
-   };
 
 private:
    TStreamerSTL(const TStreamerSTL&);          // Not implemented

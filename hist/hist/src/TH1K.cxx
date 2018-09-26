@@ -30,7 +30,7 @@ In this method :
 This class has been implemented by Victor Perevoztchikov <perev@bnl.gov>
 */
 
-ClassImp(TH1K)
+ClassImp(TH1K);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,7 +97,7 @@ Int_t TH1K::Fill(Double_t x)
    fEntries++;
    bin =fXaxis.FindBin(x);
    if (bin == 0 || bin > fXaxis.GetNbins()) {
-      if (!fgStatOverflows) return -1;
+      if (!GetStatOverflowsBehaviour()) return -1;
    }
    ++fTsumw;
    ++fTsumw2;

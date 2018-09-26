@@ -45,17 +45,13 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TMVA_DecisionTree
 #include "TMVA/DecisionTree.h"
-#endif
 
 /* #ifndef ROOT_TMVA_DecisionTreeNode */
 /* #include "TMVA/DecisionTreeNode.h" */
 /* #endif */
 
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
 
 namespace TMVA {
    class DataSet;
@@ -111,7 +107,7 @@ namespace TMVA {
 }
 
 inline void TMVA::CCPruner::SetPruneStrength( Float_t alpha ) {
-  fAlpha = (alpha > 0 ? alpha : 0.0);
+   fAlpha = (alpha > 0 ? alpha : 0.0);
 }
     
 

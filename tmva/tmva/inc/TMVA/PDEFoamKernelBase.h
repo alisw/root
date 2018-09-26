@@ -28,13 +28,9 @@
 #ifndef ROOT_TMVA_PDEFoamKernelBase
 #define ROOT_TMVA_PDEFoamKernelBase
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
-#ifndef ROOT_TMVA_PDEFoam
 #include "TMVA/PDEFoam.h"
-#endif
 
 namespace TMVA
 {
@@ -57,7 +53,7 @@ namespace TMVA
       MsgLogger& Log() const { return *fLogger; }
 
       ClassDef(PDEFoamKernelBase, 1) // PDEFoam kernel interface
-   }; // end of PDEFoamKernelBase
+         }; // end of PDEFoamKernelBase
 }  // namespace TMVA
 
 #endif

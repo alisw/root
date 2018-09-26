@@ -296,7 +296,7 @@ Bool_t TRootContainer::HandleButton(Event_t *event)
    return fCanvas->HandleContainerButton(event);
 }
 
-ClassImp(TRootCanvas)
+ClassImp(TRootCanvas);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a basic ROOT canvas.
@@ -701,14 +701,12 @@ void TRootCanvas::ReallyDelete()
    Disconnect(fCanvas, "ProcessedEvent(Int_t, Int_t, Int_t, TObject*)",
               this, "EventInfo(Int_t, Int_t, Int_t, TObject*)");
 
-   TVirtualPad *savepad = gPad;
-   gPad = 0;        // hide gPad from CINT
-   gInterpreter->DeleteGlobal(fCanvas);
-   gPad = savepad;  // restore gPad for ROOT
-   if (fCanvas->IsOnHeap())
-      delete fCanvas; // will in turn delete this object
-   else
-      fCanvas->Destructor(); // will in turn delete this object
+   fCanvas->SetCanvasImp(0);
+   fCanvas->Clear();
+   fCanvas->SetName("");
+   if (gPad && gPad->GetCanvas() == fCanvas)
+      gPad = 0;
+   delete this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1192,14 +1190,7 @@ again:
                   case kHelpAbout:
                      {
 #ifdef R__UNIX
-                        TString rootx;
-# ifdef ROOTBINDIR
-                        rootx = ROOTBINDIR;
-# else
-                        rootx = gSystem->Getenv("ROOTSYS");
-                        if (!rootx.IsNull()) rootx += "/bin";
-# endif
-                        rootx += "/root -a &";
+                        TString rootx = TROOT::GetBinDir() + "/root -a &";
                         gSystem->Exec(rootx);
 #else
 #ifdef WIN32
@@ -1302,7 +1293,9 @@ void TRootCanvas::SetWindowSize(UInt_t w, UInt_t h)
    Resize(w, h);
 
    // Make sure the change of size is really done.
+   gVirtualX->Update(1);
    if (!gThreadXAR) {
+      gSystem->Sleep(100);
       gSystem->ProcessEvents();
       gSystem->Sleep(10);
       gSystem->ProcessEvents();

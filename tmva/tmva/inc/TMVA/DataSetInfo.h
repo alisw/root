@@ -37,34 +37,16 @@
 
 #include <iosfwd>
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TTree
 #include "TTree.h"
-#endif
-#ifndef ROOT_TCut
 #include "TCut.h"
-#endif
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
 
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
-#ifndef ROOT_TMVA_VariableInfo
 #include "TMVA/VariableInfo.h"
-#endif
-#ifndef ROOT_TMVA_ClassInfo
 #include "TMVA/ClassInfo.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
 
 class TH2;
 
@@ -146,6 +128,8 @@ namespace TMVA {
 
       // classification information
       Int_t              GetClassNameMaxLength() const;
+      Int_t              GetVariableNameMaxLength() const;
+      Int_t              GetTargetNameMaxLength() const;
       ClassInfo*         GetClassInfo( Int_t clNum ) const;
       ClassInfo*         GetClassInfo( const TString& name ) const;
       void               PrintClasses() const;
@@ -195,25 +179,25 @@ namespace TMVA {
       void                       SetDataSetManager( DataSetManager* dsm ) { fDataSetManager = dsm; } // DSMTEST
       friend class DataSetManager;  // DSMTEST (datasetmanager test)
 
-      DataSetInfo( const DataSetInfo& ) : TObject() {}
+   DataSetInfo( const DataSetInfo& ) : TObject() {}
 
       void PrintCorrelationMatrix( TTree* theTree );
 
-      TString                    fName;              //! name of the dataset info object
+      TString                    fName;              // name of the dataset info object
 
-      mutable DataSet*           fDataSet;           //! dataset, owned by this datasetinfo object
-      mutable Bool_t             fNeedsRebuilding;   //! flag if rebuilding of dataset is needed (after change of cuts, vars, etc.)
+      mutable DataSet*           fDataSet;           // dataset, owned by this datasetinfo object
+      mutable Bool_t             fNeedsRebuilding;   // flag if rebuilding of dataset is needed (after change of cuts, vars, etc.)
 
       // expressions/formulas
-      std::vector<VariableInfo>  fVariables;         //! list of variable expressions/internal names
-      std::vector<VariableInfo>  fTargets;           //! list of targets expressions/internal names
-      std::vector<VariableInfo>  fSpectators;          //! list of spectators expressions/internal names
+      std::vector<VariableInfo>  fVariables;         // list of variable expressions/internal names
+      std::vector<VariableInfo>  fTargets;           // list of targets expressions/internal names
+      std::vector<VariableInfo>  fSpectators;        // list of spectators expressions/internal names
 
       // the classes
-      mutable std::vector<ClassInfo*> fClasses;      //! name and other infos of the classes
+      mutable std::vector<ClassInfo*> fClasses;      // name and other infos of the classes
 
-      TString                    fNormalization;     //!
-      TString                    fSplitOptions;      //!
+      TString                    fNormalization;     //
+      TString                    fSplitOptions;      //
 
       Double_t                   fTrainingSumSignalWeights;
       Double_t                   fTrainingSumBackgrWeights;
@@ -222,17 +206,19 @@ namespace TMVA {
 
 
       
-      TDirectory*                fOwnRootDir;        //! ROOT output dir
-      Bool_t                     fVerbose;           //! Verbosity
+      TDirectory*                fOwnRootDir;        // ROOT output dir
+      Bool_t                     fVerbose;           // Verbosity
 
-      UInt_t                     fSignalClass;       //! index of the class with the name signal
+      UInt_t                     fSignalClass;       // index of the class with the name signal
 
-      std::vector<Float_t>*      fTargetsForMulticlass;       //! all targets 0 except the one with index==classNumber
+      std::vector<Float_t>*      fTargetsForMulticlass;//-> all targets 0 except the one with index==classNumber
       
       mutable MsgLogger*         fLogger;            //! message logger
       MsgLogger& Log() const { return *fLogger; }
 
-
+   public:
+       
+       ClassDef(DataSetInfo,1);
    };
 }
 

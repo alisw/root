@@ -13,20 +13,8 @@
 #define ROOT_TLegend
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TLegend        (a second attempt- the first was TPadLegend           //
-// Matthew.Adam.Dobbs@Cern.CH, September 1999                           //
-// Legend of markers/lines/boxes for histos & graphs                    //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TPave
 #include "TPave.h"
-#endif
-#ifndef ROOT_TAttText
 #include "TAttText.h"
-#endif
 
 class TObject;
 class TList;
@@ -41,6 +29,7 @@ public:
    TLegend();
    TLegend( Double_t x1, Double_t y1, Double_t x2, Double_t y2,
             const char* header = "", Option_t* option="brNDC" );
+   TLegend( Double_t w, Double_t h, const char* header = "", Option_t* option="brNDC" );
    virtual ~TLegend();
    TLegend( const TLegend &legend );
 
@@ -76,21 +65,21 @@ public:
    virtual void    SetEntryOption( Option_t* option ); // *MENU*
    void            SetEntrySeparation( Float_t entryseparation )
                      { fEntrySeparation = entryseparation; } // *MENU*
-   virtual void    SetHeader( const char *header = "" );  // *MENU*
+   virtual void    SetHeader( const char *header = "", Option_t *option = "" );  // *MENU*
    void            SetMargin( Float_t margin ) { fMargin = margin; } // *MENU*
    void            SetNColumns( Int_t nColumns ); // *MENU*
 
 protected:
-   TList     *fPrimitives;       // list of TLegendEntries
-   Float_t    fEntrySeparation;  // separation between entries, as a fraction of
-                                 // the space allocated to one entry.
-                                 // Typical value is 0.1.
-   Float_t    fMargin;           // fraction of total width used for symbol
-   Int_t      fNColumns;         // number of columns in the legend
-   Float_t    fColumnSeparation; // separation between columns, as a fraction of
-                                 // the space allowed to one column
+   TList     *fPrimitives;       ///< List of TLegendEntries
+   Float_t    fEntrySeparation;  ///< Separation between entries, as a fraction of
+                                 ///< The space allocated to one entry.
+                                 ///< Typical value is 0.1.
+   Float_t    fMargin;           ///< Fraction of total width used for symbol
+   Int_t      fNColumns;         ///< Number of columns in the legend
+   Float_t    fColumnSeparation; ///< Separation between columns, as a fraction of
+                                 ///< The space allowed to one column
 
-   ClassDef(TLegend,2) // Legend of markers/lines/boxes to represent obj's
+   ClassDef(TLegend,3) // Legend of markers/lines/boxes to represent obj's
 };
 
 #endif

@@ -27,7 +27,7 @@
 #include "TMVA/Tools.h"
 #include "TXMLEngine.h"
 
-
+std::vector<TControlBar*> TMVA::BDT_Global__cbar;
 
 TMVA::StatDialogBDT* TMVA::StatDialogBDT::fThis = 0;
 
@@ -161,8 +161,8 @@ void TMVA::StatDialogBDT::GetNtrees()
 ///
 
 void TMVA::StatDialogBDT::DrawNode( TMVA::DecisionTreeNode *n, 
-                               Double_t x, Double_t y, 
-                               Double_t xscale,  Double_t yscale, TString * vars) 
+                                    Double_t x, Double_t y, 
+                                    Double_t xscale,  Double_t yscale, TString * vars) 
 {
    Float_t xsize=xscale*1.5;
    Float_t ysize=yscale/3;
@@ -217,6 +217,8 @@ TMVA::DecisionTree* TMVA::StatDialogBDT::ReadTree( TString* &vars, Int_t itree )
       std::ifstream fin( fWfile );
       if (!fin.good( )) { // file not found --> Error
          cout << "*** ERROR: Weight file: " << fWfile << " does not exist" << endl;
+         delete d;
+         d = nullptr;
          return 0;
       }
       
@@ -225,6 +227,8 @@ TMVA::DecisionTree* TMVA::StatDialogBDT::ReadTree( TString* &vars, Int_t itree )
       if (itree >= fNtrees) {
          cout << "*** ERROR: requested decision tree: " << itree 
               << ", but number of trained trees only: " << fNtrees << endl;
+         delete d;
+         d = nullptr;
          return 0;
       }
       
@@ -255,12 +259,14 @@ TMVA::DecisionTree* TMVA::StatDialogBDT::ReadTree( TString* &vars, Int_t itree )
       fin.close();
    }
    else{
-     if (itree >= fNtrees) {
+      if (itree >= fNtrees) {
          cout << "*** ERROR: requested decision tree: " << itree 
               << ", but number of trained trees only: " << fNtrees << endl;
+         delete d;
+         d = nullptr;
          return 0;
       }
-     Int_t nVars;
+      Int_t nVars;
       void* doc = TMVA::gTools().xmlengine().ParseFile(fWfile);
       void* rootnode = TMVA::gTools().xmlengine().DocGetRootElement(doc);
       void* ch = TMVA::gTools().xmlengine().GetChild(rootnode);
@@ -426,9 +432,9 @@ void TMVA::BDT(TString dataset, const TString& fin  )
    }
 
    // *** problems with this button in ROOT 5.19 ***
-   #if ROOT_VERSION_CODE < ROOT_VERSION(5,19,0)
+#if ROOT_VERSION_CODE < ROOT_VERSION(5,19,0)
    cbar->AddButton( "Close", Form("BDT_DeleteTBar(%i)", BDT_Global__cbar.size()-1), "Close this control bar", "button" );
-   #endif
+#endif
    // **********************************************
 
    // set the style 
@@ -456,7 +462,7 @@ void TMVA::BDT(TString dataset, Int_t itree, TString wfile , TString methName , 
    StatDialogBDT::Delete();
    TMVAGlob::DestroyCanvases(); 
    if(wfile=="")
-       wfile = dataset+"/weights/TMVAnalysis_test_BDT.weights.txt";
+      wfile = dataset+"/weights/TMVAnalysis_test_BDT.weights.txt";
    // quick check if weight file exist
    if(!wfile.EndsWith(".xml") ){
       std::ifstream fin( wfile );

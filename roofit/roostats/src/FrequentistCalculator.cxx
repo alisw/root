@@ -8,11 +8,6 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-/**
-Does a frequentist hypothesis test. Nuisance parameters are fixed to their
-MLEs.
-*/
-
 #include "RooStats/FrequentistCalculator.h"
 #include "RooStats/ToyMCSampler.h"
 #include "RooStats/RooStatsUtils.h"
@@ -21,11 +16,24 @@ MLEs.
 #include "RooMinuit.h"
 #include "RooProfileLL.h"
 
+/** \class RooStats::FrequentistCalculator
+    \ingroup Roostats
 
-ClassImp(RooStats::FrequentistCalculator)
+Does a frequentist hypothesis test.
+
+Hypothesis Test Calculator using a full frequentist procedure for sampling the
+test statistic distribution.
+The nuisance parameters are fixed to their MLEs.
+The use of ToyMCSampler as the TestStatSampler is assumed.
+
+*/
+
+ClassImp(RooStats::FrequentistCalculator);
 
 using namespace RooStats;
 using namespace std;
+
+////////////////////////////////////////////////////////////////////////////////
 
 void FrequentistCalculator::PreHook() const {
    if (fFitInfo != NULL) {
@@ -37,8 +45,12 @@ void FrequentistCalculator::PreHook() const {
    }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 void FrequentistCalculator::PostHook() const {
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 int FrequentistCalculator::PreNullHook(RooArgSet *parameterPoint, double obsTestStat) const {
 
@@ -79,8 +91,11 @@ int FrequentistCalculator::PreNullHook(RooArgSet *parameterPoint, double obsTest
 
       RooArgSet conditionalObs;
       if (fNullModel->GetConditionalObservables()) conditionalObs.add(*fNullModel->GetConditionalObservables());
-      
-      RooAbsReal* nll = fNullModel->GetPdf()->createNLL(*const_cast<RooAbsData*>(fData), RooFit::CloneData(kFALSE), RooFit::Constrain(*allParams), 
+      RooArgSet globalObs;
+      if (fNullModel->GetGlobalObservables()) globalObs.add(*fNullModel->GetGlobalObservables());
+
+      RooAbsReal* nll = fNullModel->GetPdf()->createNLL(*const_cast<RooAbsData*>(fData), RooFit::CloneData(kFALSE), RooFit::Constrain(*allParams),
+                                                        RooFit::GlobalObservables(globalObs),
                                                         RooFit::ConditionalObservables(conditionalObs), RooFit::Offset(RooStats::IsNLLOffset()) );
       RooProfileLL* profile = dynamic_cast<RooProfileLL*>(nll->createProfile(allButNuisance));
       profile->getVal(); // this will do fit and set nuisance parameters to profiled values
@@ -90,21 +105,31 @@ int FrequentistCalculator::PreNullHook(RooArgSet *parameterPoint, double obsTest
          RooFitResult *result = profile->minimizer()->save();
          RooArgSet * detOutput = DetailedOutputAggregator::GetAsArgSet(result, "fitNull_");
          fFitInfo->addOwned(*detOutput);
-         delete detOutput; 
+         delete detOutput;
          delete result;
       }
-   
+
       delete profile;
       delete nll;
       RooMsgService::instance().setGlobalKillBelow(msglevel);
+
+      // set in test statistics conditional and global observables
+      // (needed to get correct model likelihood)
+      TestStatistic * testStatistic = nullptr;
+      auto testStatSampler = GetTestStatSampler();
+      if (testStatSampler) testStatistic = testStatSampler->GetTestStatistic();
+      if (testStatistic) {
+         testStatistic->SetConditionalObservables(conditionalObs);
+         testStatistic->SetGlobalObservables(globalObs);
+      }
+
    }
-   
+
    // add nuisance parameters to parameter point
    if(fNullModel->GetNuisanceParameters())
       parameterPoint->add(*fNullModel->GetNuisanceParameters());
 
    delete allParams;
-
 
 
    // ***** ToyMCSampler specific *******
@@ -138,6 +163,7 @@ int FrequentistCalculator::PreNullHook(RooArgSet *parameterPoint, double obsTest
    return 0;
 }
 
+////////////////////////////////////////////////////////////////////////////////
 
 int FrequentistCalculator::PreAltHook(RooArgSet *parameterPoint, double obsTestStat) const {
 
@@ -172,8 +198,12 @@ int FrequentistCalculator::PreAltHook(RooArgSet *parameterPoint, double obsTestS
 
       RooArgSet conditionalObs;
       if (fAltModel->GetConditionalObservables()) conditionalObs.add(*fAltModel->GetConditionalObservables());
-            
+      RooArgSet globalObs;
+      if (fAltModel->GetGlobalObservables()) globalObs.add(*fAltModel->GetGlobalObservables());
+
+
       RooAbsReal* nll = fAltModel->GetPdf()->createNLL(*const_cast<RooAbsData*>(fData), RooFit::CloneData(kFALSE), RooFit::Constrain(*allParams),
+                                                       RooFit::GlobalObservables(globalObs),
                                                        RooFit::ConditionalObservables(conditionalObs), RooFit::Offset(RooStats::IsNLLOffset()));
 
       RooProfileLL* profile = dynamic_cast<RooProfileLL*>(nll->createProfile(allButNuisance));
@@ -187,20 +217,28 @@ int FrequentistCalculator::PreAltHook(RooArgSet *parameterPoint, double obsTestS
          delete detOutput;
          delete result;
       }
-   
+
       delete profile;
       delete nll;
       RooMsgService::instance().setGlobalKillBelow(msglevel);
+
+      // set in test statistics conditional and global observables
+      // (needed to get correct model likelihood)
+      TestStatistic * testStatistic = nullptr;
+      auto testStatSampler = GetTestStatSampler();
+      if (testStatSampler) testStatistic = testStatSampler->GetTestStatistic();
+      if (testStatistic) {
+         testStatistic->SetConditionalObservables(conditionalObs);
+         testStatistic->SetGlobalObservables(globalObs);
+      }
+
    }
-   
+
    // add nuisance parameters to parameter point
    if(fAltModel->GetNuisanceParameters())
       parameterPoint->add(*fAltModel->GetNuisanceParameters());
 
    delete allParams;
-
-
-
 
    // ***** ToyMCSampler specific *******
 
@@ -231,7 +269,3 @@ int FrequentistCalculator::PreAltHook(RooArgSet *parameterPoint, double obsTestS
 
    return 0;
 }
-
-
-
-

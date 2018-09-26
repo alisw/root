@@ -14,23 +14,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/LiveStackAnalysis.h"
-#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
-#include <limits>
 using namespace llvm;
 
 #define DEBUG_TYPE "livestacks"
 
 char LiveStacks::ID = 0;
-INITIALIZE_PASS_BEGIN(LiveStacks, "livestacks",
+INITIALIZE_PASS_BEGIN(LiveStacks, DEBUG_TYPE,
                 "Live Stack Slot Analysis", false, false)
 INITIALIZE_PASS_DEPENDENCY(SlotIndexes)
-INITIALIZE_PASS_END(LiveStacks, "livestacks",
+INITIALIZE_PASS_END(LiveStacks, DEBUG_TYPE,
                 "Live Stack Slot Analysis", false, false)
 
 char &llvm::LiveStacksID = LiveStacks::ID;
@@ -61,8 +59,10 @@ LiveStacks::getOrCreateInterval(int Slot, const TargetRegisterClass *RC) {
   assert(Slot >= 0 && "Spill slot indice must be >= 0");
   SS2IntervalMap::iterator I = S2IMap.find(Slot);
   if (I == S2IMap.end()) {
-    I = S2IMap.insert(I, std::make_pair(Slot,
-            LiveInterval(TargetRegisterInfo::index2StackSlot(Slot), 0.0F)));
+    I = S2IMap.emplace(std::piecewise_construct, std::forward_as_tuple(Slot),
+                       std::forward_as_tuple(
+                           TargetRegisterInfo::index2StackSlot(Slot), 0.0F))
+            .first;
     S2RCMap.insert(std::make_pair(Slot, RC));
   } else {
     // Use the largest common subclass register class.

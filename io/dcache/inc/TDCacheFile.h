@@ -14,15 +14,9 @@
 #ifndef ROOT_TDCacheFile
 #define ROOT_TDCacheFile
 
-#ifndef ROOT_TFile
 #include "TFile.h"
-#endif
-#ifndef ROOT_TSystem
 #include "TSystem.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 #include <sys/stat.h>
 
@@ -63,7 +57,7 @@ public:
                        const char *location = 0);
    static Bool_t CheckFile(const char *path, const char *location = 0);
 
-   /// Note: This must be kept in sync with values #defined in dcap.h
+   /// Note: This must be kept in sync with values \#defined in dcap.h
    enum EOnErrorAction {
       kOnErrorRetry   =  1,
       kOnErrorFail    =  0,

@@ -8,21 +8,26 @@
 //===----------------------------------------------------------------------===//
 //
 // This file contains the custom lowering code required by the shadow-stack GC
-// strategy.  
+// strategy.
+//
+// This pass implements the code transformation described in this paper:
+//   "Accurate Garbage Collection in an Uncooperative Environment"
+//   Fergus Henderson, ISMM, 2002
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/GCStrategy.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/CodeGen/GCStrategy.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Transforms/Utils/EscapeEnumerator.h"
 
 using namespace llvm;
 
-#define DEBUG_TYPE "shadowstackgclowering"
+#define DEBUG_TYPE "shadow-stack-gc-lowering"
 
 namespace {
 
@@ -53,18 +58,18 @@ private:
   Type *GetConcreteStackEntryType(Function &F);
   void CollectRoots(Function &F);
   static GetElementPtrInst *CreateGEP(LLVMContext &Context, IRBuilder<> &B,
-                                      Value *BasePtr, int Idx1,
+                                      Type *Ty, Value *BasePtr, int Idx1,
                                       const char *Name);
   static GetElementPtrInst *CreateGEP(LLVMContext &Context, IRBuilder<> &B,
-                                      Value *BasePtr, int Idx1, int Idx2,
+                                      Type *Ty, Value *BasePtr, int Idx1, int Idx2,
                                       const char *Name);
 };
 }
 
-INITIALIZE_PASS_BEGIN(ShadowStackGCLowering, "shadow-stack-gc-lowering",
+INITIALIZE_PASS_BEGIN(ShadowStackGCLowering, DEBUG_TYPE,
                       "Shadow Stack GC Lowering", false, false)
 INITIALIZE_PASS_DEPENDENCY(GCModuleInfo)
-INITIALIZE_PASS_END(ShadowStackGCLowering, "shadow-stack-gc-lowering",
+INITIALIZE_PASS_END(ShadowStackGCLowering, DEBUG_TYPE,
                     "Shadow Stack GC Lowering", false, false)
 
 FunctionPass *llvm::createShadowStackGCLoweringPass() { return new ShadowStackGCLowering(); }
@@ -76,117 +81,6 @@ ShadowStackGCLowering::ShadowStackGCLowering()
     FrameMapTy(nullptr) {
   initializeShadowStackGCLoweringPass(*PassRegistry::getPassRegistry());
 }
-
-namespace {
-/// EscapeEnumerator - This is a little algorithm to find all escape points
-/// from a function so that "finally"-style code can be inserted. In addition
-/// to finding the existing return and unwind instructions, it also (if
-/// necessary) transforms any call instructions into invokes and sends them to
-/// a landing pad.
-///
-/// It's wrapped up in a state machine using the same transform C# uses for
-/// 'yield return' enumerators, This transform allows it to be non-allocating.
-class EscapeEnumerator {
-  Function &F;
-  const char *CleanupBBName;
-
-  // State.
-  int State;
-  Function::iterator StateBB, StateE;
-  IRBuilder<> Builder;
-
-public:
-  EscapeEnumerator(Function &F, const char *N = "cleanup")
-      : F(F), CleanupBBName(N), State(0), Builder(F.getContext()) {}
-
-  IRBuilder<> *Next() {
-    switch (State) {
-    default:
-      return nullptr;
-
-    case 0:
-      StateBB = F.begin();
-      StateE = F.end();
-      State = 1;
-
-    case 1:
-      // Find all 'return', 'resume', and 'unwind' instructions.
-      while (StateBB != StateE) {
-        BasicBlock *CurBB = StateBB++;
-
-        // Branches and invokes do not escape, only unwind, resume, and return
-        // do.
-        TerminatorInst *TI = CurBB->getTerminator();
-        if (!isa<ReturnInst>(TI) && !isa<ResumeInst>(TI))
-          continue;
-
-        Builder.SetInsertPoint(TI->getParent(), TI);
-        return &Builder;
-      }
-
-      State = 2;
-
-      // Find all 'call' instructions.
-      SmallVector<Instruction *, 16> Calls;
-      for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB)
-        for (BasicBlock::iterator II = BB->begin(), EE = BB->end(); II != EE;
-             ++II)
-          if (CallInst *CI = dyn_cast<CallInst>(II))
-            if (!CI->getCalledFunction() ||
-                !CI->getCalledFunction()->getIntrinsicID())
-              Calls.push_back(CI);
-
-      if (Calls.empty())
-        return nullptr;
-
-      // Create a cleanup block.
-      LLVMContext &C = F.getContext();
-      BasicBlock *CleanupBB = BasicBlock::Create(C, CleanupBBName, &F);
-      Type *ExnTy =
-          StructType::get(Type::getInt8PtrTy(C), Type::getInt32Ty(C), nullptr);
-      Constant *PersFn = F.getParent()->getOrInsertFunction(
-          "__gcc_personality_v0", FunctionType::get(Type::getInt32Ty(C), true));
-      LandingPadInst *LPad =
-          LandingPadInst::Create(ExnTy, PersFn, 1, "cleanup.lpad", CleanupBB);
-      LPad->setCleanup(true);
-      ResumeInst *RI = ResumeInst::Create(LPad, CleanupBB);
-
-      // Transform the 'call' instructions into 'invoke's branching to the
-      // cleanup block. Go in reverse order to make prettier BB names.
-      SmallVector<Value *, 16> Args;
-      for (unsigned I = Calls.size(); I != 0;) {
-        CallInst *CI = cast<CallInst>(Calls[--I]);
-
-        // Split the basic block containing the function call.
-        BasicBlock *CallBB = CI->getParent();
-        BasicBlock *NewBB =
-            CallBB->splitBasicBlock(CI, CallBB->getName() + ".cont");
-
-        // Remove the unconditional branch inserted at the end of CallBB.
-        CallBB->getInstList().pop_back();
-        NewBB->getInstList().remove(CI);
-
-        // Create a new invoke instruction.
-        Args.clear();
-        CallSite CS(CI);
-        Args.append(CS.arg_begin(), CS.arg_end());
-
-        InvokeInst *II =
-            InvokeInst::Create(CI->getCalledValue(), NewBB, CleanupBB, Args,
-                               CI->getName(), CallBB);
-        II->setCallingConv(CI->getCallingConv());
-        II->setAttributes(CI->getAttributes());
-        CI->replaceAllUsesWith(II);
-        delete CI;
-      }
-
-      Builder.SetInsertPoint(RI->getParent(), RI);
-      return &Builder;
-    }
-  }
-};
-}
-
 
 Constant *ShadowStackGCLowering::GetFrameMap(Function &F) {
   // doInitialization creates the abstract type of this value.
@@ -239,7 +133,7 @@ Constant *ShadowStackGCLowering::GetFrameMap(Function &F) {
   Constant *GEPIndices[2] = {
       ConstantInt::get(Type::getInt32Ty(F.getContext()), 0),
       ConstantInt::get(Type::getInt32Ty(F.getContext()), 0)};
-  return ConstantExpr::getGetElementPtr(GV, GEPIndices);
+  return ConstantExpr::getGetElementPtr(FrameMap->getType(), GV, GEPIndices);
 }
 
 Type *ShadowStackGCLowering::GetConcreteStackEntryType(Function &F) {
@@ -249,7 +143,7 @@ Type *ShadowStackGCLowering::GetConcreteStackEntryType(Function &F) {
   for (size_t I = 0; I != Roots.size(); I++)
     EltTys.push_back(Roots[I].second->getAllocatedType());
 
-  return StructType::create(EltTys, "gc_stackentry." + F.getName().str());
+  return StructType::create(EltTys, ("gc_stackentry." + F.getName()).str());
 }
 
 /// doInitialization - If this module uses the GC intrinsics, find them now. If
@@ -343,13 +237,14 @@ void ShadowStackGCLowering::CollectRoots(Function &F) {
 }
 
 GetElementPtrInst *ShadowStackGCLowering::CreateGEP(LLVMContext &Context,
-                                            IRBuilder<> &B, Value *BasePtr,
-                                            int Idx, int Idx2,
-                                            const char *Name) {
+                                                    IRBuilder<> &B, Type *Ty,
+                                                    Value *BasePtr, int Idx,
+                                                    int Idx2,
+                                                    const char *Name) {
   Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(Context), 0),
                       ConstantInt::get(Type::getInt32Ty(Context), Idx),
                       ConstantInt::get(Type::getInt32Ty(Context), Idx2)};
-  Value *Val = B.CreateGEP(BasePtr, Indices, Name);
+  Value *Val = B.CreateGEP(Ty, BasePtr, Indices, Name);
 
   assert(isa<GetElementPtrInst>(Val) && "Unexpected folded constant");
 
@@ -357,11 +252,11 @@ GetElementPtrInst *ShadowStackGCLowering::CreateGEP(LLVMContext &Context,
 }
 
 GetElementPtrInst *ShadowStackGCLowering::CreateGEP(LLVMContext &Context,
-                                            IRBuilder<> &B, Value *BasePtr,
+                                            IRBuilder<> &B, Type *Ty, Value *BasePtr,
                                             int Idx, const char *Name) {
   Value *Indices[] = {ConstantInt::get(Type::getInt32Ty(Context), 0),
                       ConstantInt::get(Type::getInt32Ty(Context), Idx)};
-  Value *Val = B.CreateGEP(BasePtr, Indices, Name);
+  Value *Val = B.CreateGEP(Ty, BasePtr, Indices, Name);
 
   assert(isa<GetElementPtrInst>(Val) && "Unexpected folded constant");
 
@@ -402,14 +297,15 @@ bool ShadowStackGCLowering::runOnFunction(Function &F) {
 
   // Initialize the map pointer and load the current head of the shadow stack.
   Instruction *CurrentHead = AtEntry.CreateLoad(Head, "gc_currhead");
-  Instruction *EntryMapPtr =
-      CreateGEP(Context, AtEntry, StackEntry, 0, 1, "gc_frame.map");
+  Instruction *EntryMapPtr = CreateGEP(Context, AtEntry, ConcreteStackEntryTy,
+                                       StackEntry, 0, 1, "gc_frame.map");
   AtEntry.CreateStore(FrameMap, EntryMapPtr);
 
   // After all the allocas...
   for (unsigned I = 0, E = Roots.size(); I != E; ++I) {
     // For each root, find the corresponding slot in the aggregate...
-    Value *SlotPtr = CreateGEP(Context, AtEntry, StackEntry, 1 + I, "gc_root");
+    Value *SlotPtr = CreateGEP(Context, AtEntry, ConcreteStackEntryTy,
+                               StackEntry, 1 + I, "gc_root");
 
     // And use it in lieu of the alloca.
     AllocaInst *OriginalAlloca = Roots[I].second;
@@ -426,10 +322,10 @@ bool ShadowStackGCLowering::runOnFunction(Function &F) {
   AtEntry.SetInsertPoint(IP->getParent(), IP);
 
   // Push the entry onto the shadow stack.
-  Instruction *EntryNextPtr =
-      CreateGEP(Context, AtEntry, StackEntry, 0, 0, "gc_frame.next");
-  Instruction *NewHeadVal =
-      CreateGEP(Context, AtEntry, StackEntry, 0, "gc_newhead");
+  Instruction *EntryNextPtr = CreateGEP(Context, AtEntry, ConcreteStackEntryTy,
+                                        StackEntry, 0, 0, "gc_frame.next");
+  Instruction *NewHeadVal = CreateGEP(Context, AtEntry, ConcreteStackEntryTy,
+                                      StackEntry, 0, "gc_newhead");
   AtEntry.CreateStore(CurrentHead, EntryNextPtr);
   AtEntry.CreateStore(NewHeadVal, Head);
 
@@ -439,7 +335,8 @@ bool ShadowStackGCLowering::runOnFunction(Function &F) {
     // Pop the entry from the shadow stack. Don't reuse CurrentHead from
     // AtEntry, since that would make the value live for the entire function.
     Instruction *EntryNextPtr2 =
-        CreateGEP(Context, *AtExit, StackEntry, 0, 0, "gc_frame.next");
+        CreateGEP(Context, *AtExit, ConcreteStackEntryTy, StackEntry, 0, 0,
+                  "gc_frame.next");
     Value *SavedHead = AtExit->CreateLoad(EntryNextPtr2, "gc_savedhead");
     AtExit->CreateStore(SavedHead, Head);
   }

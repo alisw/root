@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TSelectorScalar
+\ingroup tree
+
 Named scalar type, based on Long64_t, streamable, storable and
 mergable. Ideally to be used in tree selectors in the PROOF
 environment due to its merge functionality which allows a single
@@ -19,7 +21,7 @@ merged value to be returned to the user.
 #include "TSelectorScalar.h"
 #include "TCollection.h"
 
-ClassImp(TSelectorScalar)
+ClassImp(TSelectorScalar);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Increment scalar value by n.

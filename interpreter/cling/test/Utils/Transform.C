@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling -fno-rtti | FileCheck %s
+// RUN: cat %s | %built_cling -fno-rtti | FileCheck %s
 
 // The test verifies the expected behavior in cling::utils::Transform class,
 // which is supposed to provide different transformation of AST nodes and types.
@@ -274,7 +274,7 @@ Transform::GetPartiallyDesugaredType(Ctx, QT, transConfig).getAsString().c_str()
 lookup.findScope("A<B<Double32_t, std::size_t*> >", diags, &t);
 QT = clang::QualType(t, 0);
 Transform::GetPartiallyDesugaredType(Ctx, QT, transConfig).getAsString().c_str()
-// CHECK:({{[^)]+}}) "A<B<Double32_t, unsigned {{long|int}} *> >"
+// CHECK:({{[^)]+}}) "A<B<Double32_t, unsigned {{long|int|long long}} *> >"
 
 lookup.findScope("CTD", diags, &t);
 QT = clang::QualType(t, 0);

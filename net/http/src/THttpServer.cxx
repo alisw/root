@@ -1,65 +1,65 @@
 // $Id$
 // Author: Sergey Linev   21/12/2013
 
+/*************************************************************************
+ * Copyright (C) 1995-2013, Rene Brun and Fons Rademakers.               *
+ * All rights reserved.                                                  *
+ *                                                                       *
+ * For the licensing terms see $ROOTSYS/LICENSE.                         *
+ * For the list of contributors see $ROOTSYS/README/CREDITS.             *
+ *************************************************************************/
+
 #include "THttpServer.h"
 
 #include "TThread.h"
 #include "TTimer.h"
 #include "TSystem.h"
-#include "TImage.h"
 #include "TROOT.h"
+#include "TUrl.h"
 #include "TClass.h"
-#include "TFolder.h"
 #include "RVersion.h"
 #include "RConfigure.h"
+#include "TRegexp.h"
 
 #include "THttpEngine.h"
+#include "THttpLongPollEngine.h"
+#include "THttpWSHandler.h"
 #include "TRootSniffer.h"
 #include "TRootSnifferStore.h"
+#include "TCivetweb.h"
+#include "TFastCgi.h"
 
 #include <string>
 #include <cstdlib>
 #include <stdlib.h>
 #include <string.h>
 #include <fstream>
+#include <chrono>
 
+////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////
 //                                                                      //
 // THttpTimer                                                           //
 //                                                                      //
 // Specialized timer for THttpServer                                    //
-// Provides regular call of THttpServer::ProcessRequests() method       //
+// Provides regular calls of THttpServer::ProcessRequests() method      //
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-
-////////////////////////////////////////////////////////////////////////////////
-
 class THttpTimer : public TTimer {
 public:
+   THttpServer &fServer; ///!< server processing requests
 
-   THttpServer *fServer;  //!
+   /// constructor
+   THttpTimer(Long_t milliSec, Bool_t mode, THttpServer &serv) : TTimer(milliSec, mode), fServer(serv) {}
 
-   THttpTimer(Long_t milliSec, Bool_t mode, THttpServer *serv) :
-      TTimer(milliSec, mode), fServer(serv)
-   {
-      // construtor
-   }
-   virtual ~THttpTimer()
-   {
-      // destructor
-   }
-   virtual void Timeout()
-   {
-      // timeout handler
-      // used to process http requests in main ROOT thread
-
-      if (fServer) fServer->ProcessRequests();
-   }
+   /// timeout handler
+   /// used to process http requests in main ROOT thread
+   virtual void Timeout() { fServer.ProcessRequests(); }
 };
 
-// =======================================================
+//////////////////////////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////
 //                                                                      //
@@ -98,62 +98,54 @@ public:
 // enable monitoring flag in the browser - than objects view            //
 // will be regularly updated.                                           //
 //                                                                      //
-// More information: http://root.cern.ch/drupal/content/users-guide     //
+// More information: https://root.cern/root/htmldoc/guides/HttpServer/HttpServer.html  //
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(THttpServer)
+ClassImp(THttpServer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
+///
+/// As argument, one specifies engine kind which should be
+/// created like "http:8080". One could specify several engines
+/// at once, separating them with semicolon (";"). Following engines are supported:
+///
+///       http - TCivetweb, civetweb-based implementation of http protocol
+///       fastcgi - TFastCgi, special protocol for communicating with web servers
+///
+/// For each created engine one should provide socket port number like "http:8080" or "fastcgi:9000".
+/// Additional engine-specific options can be supplied with URL syntax like "http:8080?thrds=10".
+/// Full list of supported options should be checked in engines docu.
+///
+/// One also can configure following options, separated by semicolon:
+///
+///     readonly, ro   - set read-only mode (default)
+///     readwrite, rw  - allows methods execution of registered objects
+///     global         - scans global ROOT lists for existing objects (default)
+///     noglobal       - disable scan of global lists
+///     cors           - enable CORS header with origin="*"
+///     cors=domain    - enable CORS header with origin="domain"
+///     basic_sniffer  - use basic sniffer without support of hist, gpad, graph classes
+///
+/// For example, create http server, which allows cors headers and disable scan of global lists,
+/// one should provide "http:8080;cors;noglobal" as parameter
+///
+/// THttpServer uses JavaScript ROOT (https://root.cern/js) to implement web clients UI.
+/// Normally JSROOT sources are used from $ROOTSYS/etc/http directory,
+/// but one could set JSROOTSYS shell variable to specify alternative location
 
-THttpServer::THttpServer(const char *engine) :
-   TNamed("http", "ROOT http server"),
-   fEngines(),
-   fTimer(0),
-   fSniffer(0),
-   fMainThrdId(0),
-   fJSROOTSYS(),
-   fTopName("ROOT"),
-   fJSROOT(),
-   fLocations(),
-   fDefaultPage(),
-   fDefaultPageCont(),
-   fDrawPage(),
-   fDrawPageCont(),
-   fCallArgs()
+THttpServer::THttpServer(const char *engine) : TNamed("http", "ROOT http server")
 {
-   // As argument, one specifies engine kind which should be
-   // created like "http:8080". One could specify several engines
-   // at once, separating them with ; like "http:8080;fastcgi:9000"
-   // One also can configure readonly flag for sniffer like
-   // "http:8080;readonly" or "http:8080;readwrite"
-   //
-   // Also searches for JavaScript ROOT sources, which are used in web clients
-   // Typically JSROOT sources located in $ROOTSYS/etc/http directory,
-   // but one could set JSROOTSYS variable to specify alternative location
-
-   fLocations.SetOwner(kTRUE);
-
-   // Info("THttpServer", "Create %p in thrd %ld", this, (long) fMainThrdId);
-
-#ifdef COMPILED_WITH_DABC
-   const char *dabcsys = gSystem->Getenv("DABCSYS");
-   if (dabcsys != 0)
-      fJSROOTSYS = TString::Format("%s/plugins/root/js", dabcsys);
-#endif
-
    const char *jsrootsys = gSystem->Getenv("JSROOTSYS");
-   if (jsrootsys != 0) fJSROOTSYS = jsrootsys;
+   if (jsrootsys)
+      fJSROOTSYS = jsrootsys;
 
    if (fJSROOTSYS.Length() == 0) {
-#ifdef ROOTETCDIR
-      TString jsdir = TString::Format("%s/http", ROOTETCDIR);
-#else
-      TString jsdir("$(ROOTSYS)/etc/http");
-#endif
+      TString jsdir = TString::Format("%s/http", TROOT::GetEtcDir().Data());
       if (gSystem->ExpandPathName(jsdir)) {
-         Warning("THttpServer", "problems resolving '%s', use JSROOTSYS to specify $ROOTSYS/etc/http location", jsdir.Data());
+         Warning("THttpServer", "problems resolving '%s', use JSROOTSYS to specify $ROOTSYS/etc/http location",
+                 jsdir.Data());
          fJSROOTSYS = ".";
       } else {
          fJSROOTSYS = jsdir;
@@ -162,23 +154,21 @@ THttpServer::THttpServer(const char *engine) :
 
    AddLocation("currentdir/", ".");
    AddLocation("jsrootsys/", fJSROOTSYS);
-
-   const char *rootsys = gSystem->Getenv("ROOTSYS");
-   if (rootsys != 0) {
-      AddLocation("rootsys/", rootsys);
-   } else {
-#ifdef ROOTPREFIX
-      TString sysdir = ROOTPREFIX;
-#else
-      TString sysdir = "$(ROOTSYS)";
-#endif
-      if (!gSystem->ExpandPathName(sysdir)) AddLocation("rootsys/", sysdir);
-   }
+   AddLocation("rootsys/", TROOT::GetRootSys());
 
    fDefaultPage = fJSROOTSYS + "/files/online.htm";
    fDrawPage = fJSROOTSYS + "/files/draw.htm";
 
-   SetSniffer(new TRootSniffer("sniff"));
+   TRootSniffer *sniff = nullptr;
+   if (strstr(engine, "basic_sniffer")) {
+      sniff = new TRootSniffer("sniff");
+      sniff->SetScanGlobalDir(kFALSE);
+      sniff->CreateOwnTopFolder(); // use dedicated folder
+   } else {
+      sniff = (TRootSniffer *)gROOT->ProcessLineSync("new TRootSnifferFull(\"sniff\");");
+   }
+
+   SetSniffer(sniff);
 
    // start timer
    SetTimer(20, kTRUE);
@@ -194,6 +184,14 @@ THttpServer::THttpServer(const char *engine) :
             GetSniffer()->SetReadOnly(kTRUE);
          } else if ((strcmp(opt, "readwrite") == 0) || (strcmp(opt, "rw") == 0)) {
             GetSniffer()->SetReadOnly(kFALSE);
+         } else if (strcmp(opt, "global") == 0) {
+            GetSniffer()->SetScanGlobalDir(kTRUE);
+         } else if (strcmp(opt, "noglobal") == 0) {
+            GetSniffer()->SetScanGlobalDir(kFALSE);
+         } else if (strncmp(opt, "cors=", 5) == 0) {
+            SetCors(opt + 5);
+         } else if (strcmp(opt, "cors") == 0) {
+            SetCors("*");
          } else
             CreateEngine(opt);
       }
@@ -208,9 +206,36 @@ THttpServer::THttpServer(const char *engine) :
 
 THttpServer::~THttpServer()
 {
+   StopServerThread();
+
+   THttpCallArg *arg = nullptr;
+   Bool_t owner = kFALSE;
+   while (true) {
+      // delete outside the locked mutex area
+      if (owner && arg)
+         delete arg;
+
+      std::unique_lock<std::mutex> lk(fMutex);
+
+      if (fCallArgs.GetSize() == 0)
+         break;
+
+      arg = static_cast<THttpCallArg *>(fCallArgs.First());
+      const char *opt = fCallArgs.FirstLink()->GetAddOption();
+      owner = opt && !strcmp(opt, "owner");
+      fCallArgs.RemoveFirst();
+   }
+
+   if (fTerminated) {
+      TIter iter(&fEngines);
+      THttpEngine *engine = nullptr;
+      while ((engine = (THttpEngine *)iter()) != nullptr)
+         engine->Terminate();
+   }
+
    fEngines.Delete();
 
-   SetSniffer(0);
+   SetSniffer(nullptr);
 
    SetTimer(0);
 }
@@ -221,8 +246,18 @@ THttpServer::~THttpServer()
 
 void THttpServer::SetSniffer(TRootSniffer *sniff)
 {
-   if (fSniffer) delete fSniffer;
+   if (fSniffer)
+      delete fSniffer;
    fSniffer = sniff;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set termination flag,
+/// No any further requests will be processed, server only can be destroyed afterwards
+
+void THttpServer::SetTerminate()
+{
+   fTerminated = kTRUE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -240,7 +275,8 @@ Bool_t THttpServer::IsReadOnly() const
 
 void THttpServer::SetReadOnly(Bool_t readonly)
 {
-   if (fSniffer) fSniffer->SetReadOnly(readonly);
+   if (fSniffer)
+      fSniffer->SetReadOnly(readonly);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,14 +287,13 @@ void THttpServer::SetReadOnly(Bool_t readonly)
 
 void THttpServer::AddLocation(const char *prefix, const char *path)
 {
-   if ((prefix==0) || (*prefix==0)) return;
+   if (!prefix || (*prefix == 0))
+      return;
 
-   TNamed *obj = dynamic_cast<TNamed*> (fLocations.FindObject(prefix));
-   if (obj != 0) {
-      obj->SetTitle(path);
-   } else {
-      fLocations.Add(new TNamed(prefix, path));
-   }
+   if (!path)
+      fLocations.erase(fLocations.find(prefix));
+   else
+      fLocations[prefix] = path;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -270,7 +305,7 @@ void THttpServer::AddLocation(const char *prefix, const char *path)
 /// reduce load on THttpServer instance, also startup time can be improved
 /// When empty string specified (default), local copy of JSROOT is used (distributed with ROOT)
 
-void THttpServer::SetJSROOT(const char* location)
+void THttpServer::SetJSROOT(const char *location)
 {
    fJSROOT = location ? location : "";
 }
@@ -281,15 +316,15 @@ void THttpServer::SetJSROOT(const char* location)
 /// By default, $ROOTSYS/etc/http/files/online.htm page is used
 /// When empty filename is specified, default page will be used
 
-void THttpServer::SetDefaultPage(const char* filename)
+void THttpServer::SetDefaultPage(const std::string &filename)
 {
-   if ((filename!=0) && (*filename!=0))
+   if (!filename.empty())
       fDefaultPage = filename;
    else
       fDefaultPage = fJSROOTSYS + "/files/online.htm";
 
    // force to read page content next time again
-   fDefaultPageCont.Clear();
+   fDefaultPageCont.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -298,50 +333,60 @@ void THttpServer::SetDefaultPage(const char* filename)
 /// By default, $ROOTSYS/etc/http/files/draw.htm page is used
 /// When empty filename is specified, default page will be used
 
-void THttpServer::SetDrawPage(const char* filename)
+void THttpServer::SetDrawPage(const std::string &filename)
 {
-   if ((filename!=0) && (*filename!=0))
+   if (!filename.empty())
       fDrawPage = filename;
    else
       fDrawPage = fJSROOTSYS + "/files/draw.htm";
 
    // force to read page content next time again
-   fDrawPageCont.Clear();
+   fDrawPageCont.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// factory method to create different http engines
 /// At the moment two engine kinds are supported:
-///  civetweb (default) and fastcgi
+///   civetweb (default) and fastcgi
 /// Examples:
-///   "civetweb:8080" or "http:8080" or ":8080" - creates civetweb web server with http port 8080
+///   "http:8080" or "civetweb:8080" or ":8080"  - creates civetweb web server with http port 8080
 ///   "fastcgi:9000" - creates fastcgi server with port 9000
-///   "dabc:1237"    - create DABC server with port 1237 (only available with DABC installed)
-///   "dabc:master_host:port" - attach to DABC master, running on master_host:port (only available with DABC installed)
+/// One could apply additional parameters, using URL syntax:
+///    "http:8080?thrds=10"
 
 Bool_t THttpServer::CreateEngine(const char *engine)
 {
-   if (engine == 0) return kFALSE;
+   if (!engine)
+      return kFALSE;
 
    const char *arg = strchr(engine, ':');
-   if (arg == 0) return kFALSE;
+   if (!arg)
+      return kFALSE;
 
    TString clname;
-   if (arg != engine) clname.Append(engine, arg - engine);
+   if (arg != engine)
+      clname.Append(engine, arg - engine);
 
-   if ((clname.Length() == 0) || (clname == "http") || (clname == "civetweb"))
-      clname = "TCivetweb";
-   else if (clname == "fastcgi")
-      clname = "TFastCgi";
-   else if (clname == "dabc")
-      clname = "TDabcEngine";
+   THttpEngine *eng = nullptr;
 
-   // ensure that required engine class exists before we try to create it
-   TClass *engine_class = gROOT->LoadClass(clname.Data());
-   if (engine_class == 0) return kFALSE;
+   if ((clname.Length() == 0) || (clname == "http") || (clname == "civetweb")) {
+      eng = new TCivetweb(kFALSE);
+   } else if (clname == "https") {
+      eng = new TCivetweb(kTRUE);
+   } else if (clname == "fastcgi") {
+      eng = new TFastCgi();
+   }
 
-   THttpEngine *eng = (THttpEngine *) engine_class->New();
-   if (eng == 0) return kFALSE;
+   if (!eng) {
+      // ensure that required engine class exists before we try to create it
+      TClass *engine_class = gROOT->LoadClass(clname.Data());
+      if (!engine_class)
+         return kFALSE;
+
+      eng = (THttpEngine *)engine_class->New();
+      if (!eng)
+         return kFALSE;
+   }
 
    eng->SetServer(this);
 
@@ -361,20 +406,79 @@ Bool_t THttpServer::CreateEngine(const char *engine)
 /// Method arguments are the same as for TTimer constructor
 /// By default, sync timer with 100 ms period is created
 ///
+/// It is recommended to always use sync timer mode and only change period to
+/// adjust server reaction time. Use of async timer requires, that application regularly
+/// calls gSystem->ProcessEvents(). It happens automatically in ROOT interactive shell.
 /// If milliSec == 0, no timer will be created.
 /// In this case application should regularly call ProcessRequests() method.
+///
+/// Async timer allows to use THttpServer in applications, which does not have explicit
+/// gSystem->ProcessEvents() calls. But be aware, that such timer can interrupt any system call
+/// (like malloc) and can lead to dead locks, especially in multi-threaded applications.
 
 void THttpServer::SetTimer(Long_t milliSec, Bool_t mode)
 {
    if (fTimer) {
       fTimer->Stop();
       delete fTimer;
-      fTimer = 0;
+      fTimer = nullptr;
    }
    if (milliSec > 0) {
-      fTimer = new THttpTimer(milliSec, mode, this);
-      fTimer->TurnOn();
+      if (fOwnThread) {
+         Error("SetTimer", "Server runs already in special thread, therefore no any timer can be created");
+      } else {
+         fTimer = new THttpTimer(milliSec, mode, *this);
+         fTimer->TurnOn();
+      }
    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Creates special thread to process all requests, directed to http server
+///
+/// Should be used with care - only dedicated instance of TRootSniffer is allowed
+/// By default THttpServer allows to access global lists pointers gROOT or gFile.
+/// To be on the safe side, all kind of such access performed from the main thread.
+/// Therefore usage of specialized thread means that no any global pointers will
+/// be accessible by THttpServer
+
+void THttpServer::CreateServerThread()
+{
+   if (fOwnThread) return;
+
+   SetTimer(0);
+   fMainThrdId = 0;
+   fOwnThread = true;
+
+   std::thread thrd([this] {
+      int nempty = 0;
+      while (fOwnThread && !fTerminated) {
+         int nprocess = ProcessRequests();
+         if (nprocess > 0)
+            nempty = 0;
+         else
+            nempty++;
+         if (nempty > 1000) {
+            nempty = 0;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+         }
+      }
+   });
+
+   fThrd = std::move(thrd);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Stop server thread
+/// Normally called shortly before http server destructor
+
+void THttpServer::StopServerThread()
+{
+   if (!fOwnThread) return;
+
+   fOwnThread = false;
+   fThrd.join();
+   fMainThrdId = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -383,7 +487,8 @@ void THttpServer::SetTimer(Long_t milliSec, Bool_t mode)
 
 Bool_t THttpServer::VerifyFilePath(const char *fname)
 {
-   if ((fname == 0) || (*fname == 0)) return kFALSE;
+   if (!fname || (*fname == 0))
+      return kFALSE;
 
    Int_t level = 0;
 
@@ -391,25 +496,27 @@ Bool_t THttpServer::VerifyFilePath(const char *fname)
 
       // find next slash or backslash
       const char *next = strpbrk(fname, "/\\");
-      if (next == 0) return kTRUE;
+      if (next == 0)
+         return kTRUE;
 
       // most important - change to parent dir
       if ((next == fname + 2) && (*fname == '.') && (*(fname + 1) == '.')) {
          fname += 3;
          level--;
-         if (level < 0) return kFALSE;
+         if (level < 0)
+            return kFALSE;
          continue;
       }
 
       // ignore current directory
-      if ((next == fname + 1) && (*fname == '.'))  {
+      if ((next == fname + 1) && (*fname == '.')) {
          fname += 2;
          continue;
       }
 
       // ignore slash at the front
       if (next == fname) {
-         fname ++;
+         fname++;
          continue;
       }
 
@@ -429,19 +536,21 @@ Bool_t THttpServer::VerifyFilePath(const char *fname)
 
 Bool_t THttpServer::IsFileRequested(const char *uri, TString &res) const
 {
-   if ((uri == 0) || (strlen(uri) == 0)) return kFALSE;
+   if (!uri || (*uri == 0))
+      return kFALSE;
 
-   TString fname = uri;
+   TString fname(uri);
 
-   TIter iter(&fLocations);
-   TObject *obj(0);
-   while ((obj=iter()) != 0) {
-      Ssiz_t pos = fname.Index(obj->GetName());
-      if (pos == kNPOS) continue;
-      fname.Remove(0, pos + (strlen(obj->GetName()) - 1));
-      if (!VerifyFilePath(fname.Data())) return kFALSE;
-      res = obj->GetTitle();
-      if ((fname[0]=='/') && (res[res.Length()-1]=='/')) res.Resize(res.Length()-1);
+   for (auto iter = fLocations.begin(); iter != fLocations.end(); iter++) {
+      Ssiz_t pos = fname.Index(iter->first.c_str());
+      if (pos == kNPOS)
+         continue;
+      fname.Remove(0, pos + (iter->first.length() - 1));
+      if (!VerifyFilePath(fname.Data()))
+         return kFALSE;
+      res = iter->second.c_str();
+      if ((fname[0] == '/') && (res[res.Length() - 1] == '/'))
+         res.Resize(res.Length() - 1);
       res.Append(fname);
       return kTRUE;
    }
@@ -454,9 +563,40 @@ Bool_t THttpServer::IsFileRequested(const char *uri, TString &res) const
 /// Method can be called from any thread
 /// Actual execution will be done in main ROOT thread, where analysis code is running.
 
+Bool_t THttpServer::ExecuteHttp(std::shared_ptr<THttpCallArg> arg)
+{
+   if (fTerminated)
+      return kFALSE;
+
+   if ((fMainThrdId != 0) && (fMainThrdId == TThread::SelfId())) {
+      // should not happen, but one could process requests directly without any signaling
+
+      ProcessRequest(arg);
+
+      return kTRUE;
+   }
+
+   // add call arg to the list
+   std::unique_lock<std::mutex> lk(fMutex);
+   fArgs.push(arg);
+   // and now wait until request is processed
+   arg->fCond.wait(lk);
+
+   return kTRUE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// \deprecated Signature with shared_ptr should be used
+/// Executes http request, specified in THttpCallArg structure
+/// Method can be called from any thread
+/// Actual execution will be done in main ROOT thread, where analysis code is running.
+
 Bool_t THttpServer::ExecuteHttp(THttpCallArg *arg)
 {
-   if ((fMainThrdId!=0) && (fMainThrdId == TThread::SelfId())) {
+   if (fTerminated)
+      return kFALSE;
+
+   if ((fMainThrdId != 0) && (fMainThrdId == TThread::SelfId())) {
       // should not happen, but one could process requests directly without any signaling
 
       ProcessRequest(arg);
@@ -474,50 +614,189 @@ Bool_t THttpServer::ExecuteHttp(THttpCallArg *arg)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Process requests, submitted for execution
-/// Regularly invoked by THttpTimer, when somewhere in the code
-/// gSystem->ProcessEvents() is called.
-/// User can call serv->ProcessRequests() directly, but only from main analysis thread.
+/// \deprecated Signature with shared_ptr should be used
+/// Submit http request, specified in THttpCallArg structure
+/// Contrary to ExecuteHttp, it will not block calling thread.
+/// User should reimplement THttpCallArg::HttpReplied() method
+/// to react when HTTP request is executed.
+/// Method can be called from any thread
+/// Actual execution will be done in main ROOT thread, where analysis code is running.
+/// When called from main thread and can_run_immediately==kTRUE, will be
+/// executed immediately.
+/// If ownership==kTRUE, THttpCallArg object will be destroyed by the THttpServer
+/// Returns kTRUE when was executed.
 
-void THttpServer::ProcessRequests()
+Bool_t THttpServer::SubmitHttp(THttpCallArg *arg, Bool_t can_run_immediately, Bool_t ownership)
 {
-   if (fMainThrdId==0) fMainThrdId = TThread::SelfId();
+   if (fTerminated) {
+      if (ownership)
+         delete arg;
+      return kFALSE;
+   }
+
+   if (can_run_immediately && (fMainThrdId != 0) && (fMainThrdId == TThread::SelfId())) {
+      ProcessRequest(arg);
+      arg->NotifyCondition();
+      if (ownership)
+         delete arg;
+      return kTRUE;
+   }
+
+   // add call arg to the list
+   std::unique_lock<std::mutex> lk(fMutex);
+   if (ownership)
+      fArgs.push(std::shared_ptr<THttpCallArg>(arg));
+   else
+      fCallArgs.Add(arg);
+   return kFALSE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Submit http request, specified in THttpCallArg structure
+/// Contrary to ExecuteHttp, it will not block calling thread.
+/// User should reimplement THttpCallArg::HttpReplied() method
+/// to react when HTTP request is executed.
+/// Method can be called from any thread
+/// Actual execution will be done in main ROOT thread, where analysis code is running.
+/// When called from main thread and can_run_immediately==kTRUE, will be
+/// executed immediately.
+/// Returns kTRUE when was executed.
+
+Bool_t THttpServer::SubmitHttp(std::shared_ptr<THttpCallArg> arg, Bool_t can_run_immediately)
+{
+   if (fTerminated)
+      return kFALSE;
+
+   if (can_run_immediately && (fMainThrdId != 0) && (fMainThrdId == TThread::SelfId())) {
+      ProcessRequest(arg);
+      arg->NotifyCondition();
+      return kTRUE;
+   }
+
+   // add call arg to the list
+   std::unique_lock<std::mutex> lk(fMutex);
+   fArgs.push(arg);
+   return kFALSE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Process requests, submitted for execution
+/// Returns number of processed requests
+///
+/// Normally invoked by THttpTimer, when somewhere in the code
+/// gSystem->ProcessEvents() is called.
+/// User can call serv->ProcessRequests() directly, but only from main thread.
+/// If special server thread is created, called from that thread
+
+
+Int_t THttpServer::ProcessRequests()
+{
+   if (fMainThrdId == 0)
+      fMainThrdId = TThread::SelfId();
 
    if (fMainThrdId != TThread::SelfId()) {
       Error("ProcessRequests", "Should be called only from main ROOT thread");
-      return;
+      return 0;
    }
 
+   Int_t cnt = 0;
+
    std::unique_lock<std::mutex> lk(fMutex, std::defer_lock);
+
+   // first process requests in the queue
    while (true) {
-      THttpCallArg *arg = 0;
+      std::shared_ptr<THttpCallArg> arg;
+
+      lk.lock();
+      if (!fArgs.empty()) {
+         arg = fArgs.front();
+         fArgs.pop();
+      }
+      lk.unlock();
+
+      if (!arg)
+         break;
+
+      if (arg->fFileName == "root_batch_holder.js") {
+         ProcessBatchHolder(arg);
+         continue;
+      }
+
+      fSniffer->SetCurrentCallArg(arg.get());
+
+      try {
+         cnt++;
+         ProcessRequest(arg);
+         fSniffer->SetCurrentCallArg(nullptr);
+      } catch (...) {
+         fSniffer->SetCurrentCallArg(nullptr);
+      }
+
+      arg->NotifyCondition();
+   }
+
+   // then process old-style queue, will be removed later
+   while (true) {
+      THttpCallArg *arg = nullptr;
 
       lk.lock();
       if (fCallArgs.GetSize() > 0) {
-         arg = (THttpCallArg *) fCallArgs.First();
+         arg = static_cast<THttpCallArg *>(fCallArgs.First());
          fCallArgs.RemoveFirst();
       }
       lk.unlock();
 
-      if (arg == 0) break;
+      if (!arg)
+         break;
 
       fSniffer->SetCurrentCallArg(arg);
 
       try {
+         cnt++;
          ProcessRequest(arg);
-         fSniffer->SetCurrentCallArg(0);
+         fSniffer->SetCurrentCallArg(nullptr);
       } catch (...) {
-         fSniffer->SetCurrentCallArg(0);
+         fSniffer->SetCurrentCallArg(nullptr);
       }
 
-      arg->fCond.notify_one();
+      arg->NotifyCondition();
    }
 
    // regularly call Process() method of engine to let perform actions in ROOT context
    TIter iter(&fEngines);
-   THttpEngine *engine = 0;
-   while ((engine = (THttpEngine *)iter()) != 0)
+   THttpEngine *engine = nullptr;
+   while ((engine = (THttpEngine *)iter()) != nullptr) {
+      if (fTerminated)
+         engine->Terminate();
       engine->Process();
+   }
+
+   return cnt;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Method called when THttpServer cannot process request
+/// By default such requests replied with 404 code
+/// One could overwrite with method in derived class to process all kinds of such non-standard requests
+
+void THttpServer::MissedRequest(THttpCallArg *arg)
+{
+   arg->Set404();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Process special http request for root_batch_holder.js script
+/// This kind of requests used to hold web browser running in headless mode
+/// Intentionally requests does not replied immediately
+
+void THttpServer::ProcessBatchHolder(std::shared_ptr<THttpCallArg> &arg)
+{
+   auto wsptr = FindWS(arg->GetPathName());
+
+   if (!wsptr || !wsptr->ProcessBatchHolder(arg)) {
+      arg->Set404();
+      arg->NotifyCondition();
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -525,44 +804,88 @@ void THttpServer::ProcessRequests()
 /// Depending from requested path and filename different actions will be performed.
 /// In most cases information is provided by TRootSniffer class
 
+void THttpServer::ProcessRequest(std::shared_ptr<THttpCallArg> arg)
+{
+   if (fTerminated) {
+      arg->Set404();
+   } else if ((arg->fFileName == "root.websocket") || (arg->fFileName == "root.longpoll")) {
+      ExecuteWS(arg);
+   } else {
+      ProcessRequest(arg.get());
+   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// \deprecated  One should use signature with std::shared_ptr
+/// Process single http request
+/// Depending from requested path and filename different actions will be performed.
+/// In most cases information is provided by TRootSniffer class
+
 void THttpServer::ProcessRequest(THttpCallArg *arg)
 {
+   if (fTerminated) {
+      arg->Set404();
+      return;
+   }
 
    if (arg->fFileName.IsNull() || (arg->fFileName == "index.htm")) {
 
-      if (fDefaultPageCont.Length() == 0) {
-         Int_t len = 0;
-         char *buf = ReadFileContent(fDefaultPage.Data(), len);
-         if (len > 0) fDefaultPageCont.Append(buf, len);
-         delete buf;
+      auto wsptr = FindWS(arg->GetPathName());
+
+      auto handler = wsptr.get();
+
+      if (!handler)
+         handler = dynamic_cast<THttpWSHandler *>(fSniffer->FindTObjectInHierarchy(arg->fPathName.Data()));
+
+      if (handler) {
+
+         arg->fContent = handler->GetDefaultPageContent().Data();
+
+         if (arg->fContent.find("file:") == 0) {
+            TString fname = arg->fContent.c_str() + 5;
+            fname.ReplaceAll("$jsrootsys", fJSROOTSYS);
+
+            arg->fContent = ReadFileContent(fname.Data());
+         }
       }
 
-      if (fDefaultPageCont.Length() == 0) {
+      if (arg->fContent.empty()) {
+
+         if (fDefaultPageCont.empty())
+            fDefaultPageCont = ReadFileContent(fDefaultPage);
+
+         arg->fContent = fDefaultPageCont;
+      }
+
+      if (arg->fContent.empty()) {
          arg->Set404();
       } else {
-         arg->fContent = fDefaultPageCont;
-
          // replace all references on JSROOT
          if (fJSROOT.Length() > 0) {
-            TString repl = TString("=\"") + fJSROOT;
-            if (!repl.EndsWith("/")) repl+="/";
-            arg->fContent.ReplaceAll("=\"jsrootsys/", repl);
+            std::string repl("=\"");
+            repl.append(fJSROOT.Data());
+            if (repl.back() != '/')
+               repl.append("/");
+            arg->ReplaceAllinContent("=\"jsrootsys/", repl);
          }
 
          const char *hjsontag = "\"$$$h.json$$$\"";
 
          // add h.json caching
-         if (arg->fContent.Index(hjsontag) != kNPOS) {
+         if (arg->fContent.find(hjsontag) != std::string::npos) {
             TString h_json;
             TRootSnifferStoreJson store(h_json, kTRUE);
             const char *topname = fTopName.Data();
-            if (arg->fTopName.Length() > 0) topname = arg->fTopName.Data();
+            if (arg->fTopName.Length() > 0)
+               topname = arg->fTopName.Data();
             fSniffer->ScanHierarchy(topname, arg->fPathName.Data(), &store);
 
-            arg->fContent.ReplaceAll(hjsontag, h_json);
+            arg->ReplaceAllinContent(hjsontag, h_json.Data());
 
-            arg->AddHeader("Cache-Control", "private, no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate, s-maxage=0");
-            if (arg->fQuery.Index("nozip") == kNPOS) arg->SetZipping(2);
+            arg->AddHeader("Cache-Control",
+                           "private, no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate, s-maxage=0");
+            if (arg->fQuery.Index("nozip") == kNPOS)
+               arg->SetZipping();
          }
          arg->SetContentType("text/html");
       }
@@ -570,14 +893,10 @@ void THttpServer::ProcessRequest(THttpCallArg *arg)
    }
 
    if (arg->fFileName == "draw.htm") {
-      if (fDrawPageCont.Length() == 0) {
-         Int_t len = 0;
-         char *buf = ReadFileContent(fDrawPage.Data(), len);
-         if (len > 0) fDrawPageCont.Append(buf, len);
-         delete buf;
-      }
+      if (fDrawPageCont.empty())
+         fDrawPageCont = ReadFileContent(fDrawPage);
 
-      if (fDrawPageCont.Length() == 0) {
+      if (fDrawPageCont.empty()) {
          arg->Set404();
       } else {
          const char *rootjsontag = "\"$$$root.json$$$\"";
@@ -587,33 +906,42 @@ void THttpServer::ProcessRequest(THttpCallArg *arg)
 
          // replace all references on JSROOT
          if (fJSROOT.Length() > 0) {
-            TString repl = TString("=\"") + fJSROOT;
-            if (!repl.EndsWith("/")) repl+="/";
-            arg->fContent.ReplaceAll("=\"jsrootsys/", repl);
+            std::string repl("=\"");
+            repl.append(fJSROOT.Data());
+            if (repl.back() != '/')
+               repl.append("/");
+            arg->ReplaceAllinContent("=\"jsrootsys/", repl);
          }
 
-         if (arg->fContent.Index(hjsontag) != kNPOS) {
+         if ((arg->fQuery.Index("no_h_json") == kNPOS) && (arg->fQuery.Index("webcanvas") == kNPOS) &&
+             (arg->fContent.find(hjsontag) != std::string::npos)) {
             TString h_json;
             TRootSnifferStoreJson store(h_json, kTRUE);
             const char *topname = fTopName.Data();
-            if (arg->fTopName.Length() > 0) topname = arg->fTopName.Data();
+            if (arg->fTopName.Length() > 0)
+               topname = arg->fTopName.Data();
             fSniffer->ScanHierarchy(topname, arg->fPathName.Data(), &store, kTRUE);
 
-            arg->fContent.ReplaceAll(hjsontag, h_json);
+            arg->ReplaceAllinContent(hjsontag, h_json.Data());
          }
 
-         if (arg->fContent.Index(rootjsontag) != kNPOS) {
-            TString str;
-            void *bindata = 0;
-            Long_t bindatalen = 0;
-            if (fSniffer->Produce(arg->fPathName.Data(), "root.json", "compact=3", bindata, bindatalen, str)) {
-               arg->fContent.ReplaceAll(rootjsontag, str);
-            }
+         if ((arg->fQuery.Index("no_root_json") == kNPOS) && (arg->fQuery.Index("webcanvas") == kNPOS) &&
+             (arg->fContent.find(rootjsontag) != std::string::npos)) {
+            std::string str;
+            if (fSniffer->Produce(arg->fPathName.Data(), "root.json", "compact=23", str))
+               arg->ReplaceAllinContent(rootjsontag, str);
          }
-         arg->AddHeader("Cache-Control", "private, no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate, s-maxage=0");
-         if (arg->fQuery.Index("nozip") == kNPOS) arg->SetZipping(2);
+         arg->AddHeader("Cache-Control",
+                        "private, no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate, s-maxage=0");
+         if (arg->fQuery.Index("nozip") == kNPOS)
+            arg->SetZipping();
          arg->SetContentType("text/html");
       }
+      return;
+   }
+
+   if ((arg->fFileName == "favicon.ico") && arg->fPathName.IsNull()) {
+      arg->SetFile(fJSROOTSYS + "/img/RootIcon.ico");
       return;
    }
 
@@ -630,62 +958,71 @@ void THttpServer::ProcessRequest(THttpCallArg *arg)
       iszip = kTRUE;
    }
 
-   void* bindata(0);
-   Long_t bindatalen(0);
-
-   if ((filename == "h.xml") || (filename == "get.xml"))  {
+   if ((filename == "h.xml") || (filename == "get.xml")) {
 
       Bool_t compact = arg->fQuery.Index("compact") != kNPOS;
 
-      arg->fContent.Form("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-      if (!compact) arg->fContent.Append("\n");
-      arg->fContent.Append("<root>");
-      if (!compact) arg->fContent.Append("\n");
+      TString res;
+
+      res.Form("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+      if (!compact)
+         res.Append("\n");
+      res.Append("<root>");
+      if (!compact)
+         res.Append("\n");
       {
-         TRootSnifferStoreXml store(arg->fContent, compact);
+         TRootSnifferStoreXml store(res, compact);
 
          const char *topname = fTopName.Data();
-         if (arg->fTopName.Length() > 0) topname = arg->fTopName.Data();
+         if (arg->fTopName.Length() > 0)
+            topname = arg->fTopName.Data();
          fSniffer->ScanHierarchy(topname, arg->fPathName.Data(), &store, filename == "get.xml");
       }
 
-      arg->fContent.Append("</root>");
-      if (!compact) arg->fContent.Append("\n");
+      res.Append("</root>");
+      if (!compact)
+         res.Append("\n");
+
+      arg->SetContent(std::string(res.Data()));
 
       arg->SetXml();
-   } else
-
-   if (filename == "h.json")  {
-      TRootSnifferStoreJson store(arg->fContent, arg->fQuery.Index("compact") != kNPOS);
+   } else if (filename == "h.json") {
+      TString res;
+      TRootSnifferStoreJson store(res, arg->fQuery.Index("compact") != kNPOS);
       const char *topname = fTopName.Data();
-      if (arg->fTopName.Length() > 0) topname = arg->fTopName.Data();
+      if (arg->fTopName.Length() > 0)
+         topname = arg->fTopName.Data();
       fSniffer->ScanHierarchy(topname, arg->fPathName.Data(), &store);
+      arg->SetContent(std::string(res.Data()));
       arg->SetJson();
-   } else
-
-   if (fSniffer->Produce(arg->fPathName.Data(), filename.Data(), arg->fQuery.Data(), bindata, bindatalen, arg->fContent)) {
-      if (bindata != 0) arg->SetBinData(bindata, bindatalen);
-
+   } else if (fSniffer->Produce(arg->fPathName.Data(), filename.Data(), arg->fQuery.Data(), arg->fContent)) {
       // define content type base on extension
       arg->SetContentType(GetMimeType(filename.Data()));
    } else {
-      // request is not processed
-      arg->Set404();
+      // miss request, user may process
+      MissedRequest(arg);
    }
 
-   if (arg->Is404()) return;
+   if (arg->Is404())
+      return;
 
-   if (iszip) arg->SetZipping(3);
+   if (iszip)
+      arg->SetZipping(THttpCallArg::kZipAlways);
 
    if (filename == "root.bin") {
       // only for binary data master version is important
       // it allows to detect if streamer info was modified
       const char *parname = fSniffer->IsStreamerInfoItem(arg->fPathName.Data()) ? "BVersion" : "MVersion";
-      arg->AddHeader(parname, Form("%u", (unsigned) fSniffer->GetStreamerInfoHash()));
+      arg->AddHeader(parname, Form("%u", (unsigned)fSniffer->GetStreamerInfoHash()));
    }
 
    // try to avoid caching on the browser
-   arg->AddHeader("Cache-Control", "private, no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate, s-maxage=0");
+   arg->AddHeader("Cache-Control",
+                  "private, no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate, s-maxage=0");
+
+   // potentially add cors header
+   if (IsCors())
+      arg->AddHeader("Access-Control-Allow-Origin", GetCors());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -709,11 +1046,127 @@ Bool_t THttpServer::Unregister(TObject *obj)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Register WS handler to the THttpServer
+///
+/// Only such handler can be used in multi-threaded processing of websockets
+
+void THttpServer::RegisterWS(std::shared_ptr<THttpWSHandler> ws)
+{
+   std::lock_guard<std::mutex> grd(fWSMutex);
+   fWSHandlers.emplace_back(ws);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Unregister WS handler to the THttpServer
+
+void THttpServer::UnregisterWS(std::shared_ptr<THttpWSHandler> ws)
+{
+   std::lock_guard<std::mutex> grd(fWSMutex);
+   for (int n = (int)fWSHandlers.size(); n > 0; --n)
+      if ((fWSHandlers[n - 1] == ws) || fWSHandlers[n - 1]->IsDisabled())
+         fWSHandlers.erase(fWSHandlers.begin() + n - 1);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Search WS handler with given name
+///
+/// Handler must be registered with RegisterWS() method
+
+std::shared_ptr<THttpWSHandler> THttpServer::FindWS(const char *name)
+{
+   std::lock_guard<std::mutex> grd(fWSMutex);
+   for (int n = 0; n < (int)fWSHandlers.size(); ++n) {
+      if (strcmp(name, fWSHandlers[n]->GetName()) == 0)
+         return fWSHandlers[n];
+   }
+
+   return nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Execute WS related operation
+
+Bool_t THttpServer::ExecuteWS(std::shared_ptr<THttpCallArg> &arg, Bool_t external_thrd, Bool_t wait_process)
+{
+   if (fTerminated) {
+      arg->Set404();
+      return kFALSE;
+   }
+
+   auto wsptr = FindWS(arg->GetPathName());
+
+   auto handler = wsptr.get();
+
+   if (!handler && !external_thrd)
+      handler = dynamic_cast<THttpWSHandler *>(fSniffer->FindTObjectInHierarchy(arg->fPathName.Data()));
+
+   if (external_thrd && (!handler || !handler->AllowMTProcess())) {
+      std::unique_lock<std::mutex> lk(fMutex);
+      fArgs.push(arg);
+      // and now wait until request is processed
+      if (wait_process) arg->fCond.wait(lk);
+
+      return kTRUE;
+   }
+
+   if (!handler)
+      return kFALSE;
+
+   Bool_t process = kFALSE;
+
+   if (arg->fFileName == "root.websocket") {
+      // handling of web socket
+      process = handler->HandleWS(arg);
+   } else if (arg->fFileName == "root.longpoll") {
+      // ROOT emulation of websocket with polling requests
+      if (arg->fQuery.BeginsWith("raw_connect") || arg->fQuery.BeginsWith("txt_connect")) {
+         // try to emulate websocket connect
+         // if accepted, reply with connection id, which must be used in the following communications
+         arg->SetMethod("WS_CONNECT");
+
+         bool israw = arg->fQuery.BeginsWith("raw_connect");
+
+         // automatically assign engine to arg
+         arg->CreateWSEngine<THttpLongPollEngine>(israw);
+
+         if (handler->HandleWS(arg)) {
+            arg->SetMethod("WS_READY");
+
+            if (handler->HandleWS(arg))
+               arg->SetTextContent(std::string(israw ? "txt:" : "") + std::to_string(arg->GetWSId()));
+         } else {
+            arg->TakeWSEngine(); // delete handle
+         }
+
+         process = arg->IsText();
+      } else {
+         TUrl url;
+         url.SetOptions(arg->fQuery);
+         url.ParseOptions();
+         Int_t connid = url.GetIntValueFromOptions("connection");
+         arg->SetWSId((UInt_t)connid);
+         if (url.HasOption("close")) {
+            arg->SetMethod("WS_CLOSE");
+            arg->SetTextContent("OK");
+         } else {
+            arg->SetMethod("WS_DATA");
+         }
+
+         process = handler->HandleWS(arg);
+      }
+   }
+
+   if (!process) arg->Set404();
+
+   return process;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Restrict access to specified object
 ///
 /// See TRootSniffer::Restrict() for more details
 
-void THttpServer::Restrict(const char *path, const char* options)
+void THttpServer::Restrict(const char *path, const char *options)
 {
    fSniffer->Restrict(path, options);
 }
@@ -756,7 +1209,7 @@ Bool_t THttpServer::RegisterCommand(const char *cmdname, const char *method, con
 
 Bool_t THttpServer::Hide(const char *foldername, Bool_t hide)
 {
-   return SetItemField(foldername, "_hidden", hide ? "true" : (const char *) 0);
+   return SetItemField(foldername, "_hidden", hide ? "true" : (const char *)0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -800,62 +1253,61 @@ const char *THttpServer::GetMimeType(const char *path)
       const char *extension;
       int ext_len;
       const char *mime_type;
-   } builtin_mime_types[] = {
-      {".xml", 4, "text/xml"},
-      {".json", 5, "application/json"},
-      {".bin", 4, "application/x-binary"},
-      {".gif", 4, "image/gif"},
-      {".jpg", 4, "image/jpeg"},
-      {".png", 4, "image/png"},
-      {".html", 5, "text/html"},
-      {".htm", 4, "text/html"},
-      {".shtm", 5, "text/html"},
-      {".shtml", 6, "text/html"},
-      {".css", 4, "text/css"},
-      {".js",  3, "application/x-javascript"},
-      {".ico", 4, "image/x-icon"},
-      {".jpeg", 5, "image/jpeg"},
-      {".svg", 4, "image/svg+xml"},
-      {".txt", 4, "text/plain"},
-      {".torrent", 8, "application/x-bittorrent"},
-      {".wav", 4, "audio/x-wav"},
-      {".mp3", 4, "audio/x-mp3"},
-      {".mid", 4, "audio/mid"},
-      {".m3u", 4, "audio/x-mpegurl"},
-      {".ogg", 4, "application/ogg"},
-      {".ram", 4, "audio/x-pn-realaudio"},
-      {".xslt", 5, "application/xml"},
-      {".xsl", 4, "application/xml"},
-      {".ra",  3, "audio/x-pn-realaudio"},
-      {".doc", 4, "application/msword"},
-      {".exe", 4, "application/octet-stream"},
-      {".zip", 4, "application/x-zip-compressed"},
-      {".xls", 4, "application/excel"},
-      {".tgz", 4, "application/x-tar-gz"},
-      {".tar", 4, "application/x-tar"},
-      {".gz",  3, "application/x-gunzip"},
-      {".arj", 4, "application/x-arj-compressed"},
-      {".rar", 4, "application/x-arj-compressed"},
-      {".rtf", 4, "application/rtf"},
-      {".pdf", 4, "application/pdf"},
-      {".swf", 4, "application/x-shockwave-flash"},
-      {".mpg", 4, "video/mpeg"},
-      {".webm", 5, "video/webm"},
-      {".mpeg", 5, "video/mpeg"},
-      {".mov", 4, "video/quicktime"},
-      {".mp4", 4, "video/mp4"},
-      {".m4v", 4, "video/x-m4v"},
-      {".asf", 4, "video/x-ms-asf"},
-      {".avi", 4, "video/x-msvideo"},
-      {".bmp", 4, "image/bmp"},
-      {".ttf", 4, "application/x-font-ttf"},
-      {NULL,  0, NULL}
-   };
+   } builtin_mime_types[] = {{".xml", 4, "text/xml"},
+                             {".json", 5, "application/json"},
+                             {".bin", 4, "application/x-binary"},
+                             {".gif", 4, "image/gif"},
+                             {".jpg", 4, "image/jpeg"},
+                             {".png", 4, "image/png"},
+                             {".html", 5, "text/html"},
+                             {".htm", 4, "text/html"},
+                             {".shtm", 5, "text/html"},
+                             {".shtml", 6, "text/html"},
+                             {".css", 4, "text/css"},
+                             {".js", 3, "application/x-javascript"},
+                             {".ico", 4, "image/x-icon"},
+                             {".jpeg", 5, "image/jpeg"},
+                             {".svg", 4, "image/svg+xml"},
+                             {".txt", 4, "text/plain"},
+                             {".torrent", 8, "application/x-bittorrent"},
+                             {".wav", 4, "audio/x-wav"},
+                             {".mp3", 4, "audio/x-mp3"},
+                             {".mid", 4, "audio/mid"},
+                             {".m3u", 4, "audio/x-mpegurl"},
+                             {".ogg", 4, "application/ogg"},
+                             {".ram", 4, "audio/x-pn-realaudio"},
+                             {".xslt", 5, "application/xml"},
+                             {".xsl", 4, "application/xml"},
+                             {".ra", 3, "audio/x-pn-realaudio"},
+                             {".doc", 4, "application/msword"},
+                             {".exe", 4, "application/octet-stream"},
+                             {".zip", 4, "application/x-zip-compressed"},
+                             {".xls", 4, "application/excel"},
+                             {".tgz", 4, "application/x-tar-gz"},
+                             {".tar", 4, "application/x-tar"},
+                             {".gz", 3, "application/x-gunzip"},
+                             {".arj", 4, "application/x-arj-compressed"},
+                             {".rar", 4, "application/x-arj-compressed"},
+                             {".rtf", 4, "application/rtf"},
+                             {".pdf", 4, "application/pdf"},
+                             {".swf", 4, "application/x-shockwave-flash"},
+                             {".mpg", 4, "video/mpeg"},
+                             {".webm", 5, "video/webm"},
+                             {".mpeg", 5, "video/mpeg"},
+                             {".mov", 4, "video/quicktime"},
+                             {".mp4", 4, "video/mp4"},
+                             {".m4v", 4, "video/x-m4v"},
+                             {".asf", 4, "video/x-ms-asf"},
+                             {".avi", 4, "video/x-msvideo"},
+                             {".bmp", 4, "image/bmp"},
+                             {".ttf", 4, "application/x-font-ttf"},
+                             {NULL, 0, NULL}};
 
    int path_len = strlen(path);
 
    for (int i = 0; builtin_mime_types[i].extension != NULL; i++) {
-      if (path_len <= builtin_mime_types[i].ext_len) continue;
+      if (path_len <= builtin_mime_types[i].ext_len)
+         continue;
       const char *ext = path + (path_len - builtin_mime_types[i].ext_len);
       if (strcmp(ext, builtin_mime_types[i].extension) == 0) {
          return builtin_mime_types[i].mime_type;
@@ -873,13 +1325,14 @@ char *THttpServer::ReadFileContent(const char *filename, Int_t &len)
    len = 0;
 
    std::ifstream is(filename);
-   if (!is) return 0;
+   if (!is)
+      return 0;
 
    is.seekg(0, is.end);
    len = is.tellg();
    is.seekg(0, is.beg);
 
-   char *buf = (char *) malloc(len);
+   char *buf = (char *)malloc(len);
    is.read(buf, len);
    if (!is) {
       free(buf);
@@ -888,4 +1341,22 @@ char *THttpServer::ReadFileContent(const char *filename, Int_t &len)
    }
 
    return buf;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// reads file content, using std::string as container
+
+std::string THttpServer::ReadFileContent(const std::string &filename)
+{
+   std::ifstream is(filename);
+   std::string res;
+   if (is) {
+      is.seekg(0, std::ios::end);
+      res.resize(is.tellg());
+      is.seekg(0, std::ios::beg);
+      is.read((char *)res.data(), res.length());
+      if (!is)
+         res.clear();
+   }
+   return res;
 }

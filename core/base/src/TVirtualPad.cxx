@@ -11,16 +11,14 @@
 
 #include "TVirtualPad.h"
 #include "TBuffer.h"
-#include "X3DBuffer.h"
 #include "TClass.h"
 #include "TThreadSlots.h"
 
 /** \class TVirtualPad
+\ingroup Base
+
 TVirtualPad is an abstract base class for the Pad and Canvas classes.
 */
-
-Size3D gVarSize3D;
-Size3D* gFuncSize3D(){ return &gVarSize3D; }
 
 Int_t (*gThreadXAR)(const char *xact, Int_t nb, void **ar, Int_t *iret) = 0;
 
@@ -36,7 +34,7 @@ TVirtualPad *&TVirtualPad::Pad()
       return *(TVirtualPad**)(*gThreadTsd)(&currentPad,ROOT::kPadThreadSlot);
 }
 
-ClassImp(TVirtualPad)
+ClassImp(TVirtualPad);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// VirtualPad default constructor

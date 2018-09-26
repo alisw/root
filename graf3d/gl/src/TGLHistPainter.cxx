@@ -36,7 +36,7 @@
 #include "TGL5DPainter.h"
 #include "TGLUtil.h"
 
-ClassImp(TGLHistPainter)
+ClassImp(TGLHistPainter);
 
 /** \class TGLHistPainter
 \ingroup opengl
@@ -520,6 +520,15 @@ void TGLHistPainter::ProcessMessage(const char *m, const TObject *o)
 
    if (fDefaultPainter.get())
       fDefaultPainter->ProcessMessage(m, o);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set highlight mode
+
+void TGLHistPainter::SetHighlight()
+{
+   if (fDefaultPainter.get())
+      fDefaultPainter->SetHighlight();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

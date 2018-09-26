@@ -13,13 +13,16 @@
 #include "TROOT.h"
 #include "TPluginManager.h"
 
-ClassImp(TView)
+ClassImp(TView);
 
 /** \class TView
 \ingroup gpad
 
 See TView3D.
 */
+
+// pin the vtable here.
+TView::~TView() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor.

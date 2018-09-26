@@ -1,5 +1,5 @@
 // @(#)root/tmva $Id$
-// Author: Rustem Ospanov 
+// Author: Rustem Ospanov
 
 /**********************************************************************************
  * Project: TMVA - a Root-integrated toolkit for multivariate data analysis       *
@@ -14,8 +14,8 @@
  *      Rustem Ospanov <rustem@fnal.gov> - U. of Texas at Austin, USA             *
  *                                                                                *
  * Copyright (c) 2007:                                                            *
- *      CERN, Switzerland                                                         * 
- *      MPI-K Heidelberg, Germany                                                 * 
+ *      CERN, Switzerland                                                         *
+ *      MPI-K Heidelberg, Germany                                                 *
  *      U. of Texas at Austin, USA                                                *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
@@ -33,211 +33,206 @@
 #include <iostream>
 
 // ROOT
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// kNN::Node                                                            //
-//                                                                      //
-// This file contains binary tree and global function template          //
-// that searches tree for k-nearest neigbors                            //
-//                                                                      //
-// Node class template parameter T has to provide these functions:      //
-//   rtype GetVar(UInt_t) const;                                        //
-//   - rtype is any type convertible to Float_t                         //
-//   UInt_t GetNVar(void) const;                                        //
-//   rtype GetWeight(void) const;                                       //
-//   - rtype is any type convertible to Double_t                        //
-//                                                                      //
-// Find function template parameter T has to provide these functions:   //
-// (in addition to above requirements)                                  //
-//   rtype GetDist(Float_t, UInt_t) const;                              //
-//   - rtype is any type convertible to Float_t                         //
-//   rtype GetDist(const T &) const;                                    //
-//   - rtype is any type convertible to Float_t                         //
-//                                                                      //
-//   where T::GetDist(Float_t, UInt_t) <= T::GetDist(const T &)         //
-//   for any pair of events and any variable number for these events    //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+/*! \class TMVA::kNN::Node
+\ingroup TMVA
+This file contains binary tree and global function template
+that searches tree for k-nearest neigbors
+
+Node class template parameter T has to provide these functions:
+  rtype GetVar(UInt_t) const;
+  - rtype is any type convertible to Float_t
+  UInt_t GetNVar(void) const;
+  rtype GetWeight(void) const;
+  - rtype is any type convertible to Double_t
+
+Find function template parameter T has to provide these functions:
+(in addition to above requirements)
+  rtype GetDist(Float_t, UInt_t) const;
+  - rtype is any type convertible to Float_t
+  rtype GetDist(const T &) const;
+  - rtype is any type convertible to Float_t
+
+  where T::GetDist(Float_t, UInt_t) <= T::GetDist(const T &)
+  for any pair of events and any variable number for these events
+*/
 
 namespace TMVA
 {
    namespace kNN
    {
       template <class T>
-      class Node
-      {
+         class Node
+         {
 
-      public:
-      
-         Node(const Node *parent, const T &event, Int_t mod);
-         ~Node();
+         public:
 
-         const Node* Add(const T &event, UInt_t depth);
-      
-         void SetNodeL(Node *node);
-         void SetNodeR(Node *node);
-      
-         const T& GetEvent() const;
+            Node(const Node *parent, const T &event, Int_t mod);
+            ~Node();
 
-         const Node* GetNodeL() const;
-         const Node* GetNodeR() const;
-         const Node* GetNodeP() const;
-      
-         Double_t GetWeight() const;
+            const Node* Add(const T &event, UInt_t depth);
 
-         Float_t GetVarDis() const;
-         Float_t GetVarMin() const;
-         Float_t GetVarMax() const;
+            void SetNodeL(Node *node);
+            void SetNodeR(Node *node);
 
-         UInt_t GetMod() const;
+            const T& GetEvent() const;
 
-         void Print() const;
-         void Print(std::ostream& os, const std::string &offset = "") const;
+            const Node* GetNodeL() const;
+            const Node* GetNodeR() const;
+            const Node* GetNodeP() const;
 
-      private: 
+            Double_t GetWeight() const;
 
-         // these methods are private and not implemented by design
-         // use provided public constructor for all uses of this template class
-         Node();
-         Node(const Node &);
-         const Node& operator=(const Node &);
+            Float_t GetVarDis() const;
+            Float_t GetVarMin() const;
+            Float_t GetVarMax() const;
 
-      private:
+            UInt_t GetMod() const;
 
-         const Node* fNodeP;
-      
-         Node* fNodeL;
-         Node* fNodeR;      
-      
-         const T fEvent;
-      
-         const Float_t fVarDis;
+            void Print() const;
+            void Print(std::ostream& os, const std::string &offset = "") const;
 
-         Float_t fVarMin;
-         Float_t fVarMax;
+         private:
 
-         const UInt_t fMod;
-      };
+            // these methods are private and not implemented by design
+            // use provided public constructor for all uses of this template class
+            Node();
+            Node(const Node &);
+            const Node& operator=(const Node &);
 
-      // recursive search for k-nearest neighbor: k = nfind 
+         private:
+
+            const Node* fNodeP;
+
+            Node* fNodeL;
+            Node* fNodeR;
+
+            const T fEvent;
+
+            const Float_t fVarDis;
+
+            Float_t fVarMin;
+            Float_t fVarMax;
+
+            const UInt_t fMod;
+         };
+
+      // recursive search for k-nearest neighbor: k = nfind
       template<class T>
-      UInt_t Find(std::list<std::pair<const Node<T> *, Float_t> > &nlist,
-                        const Node<T> *node, const T &event, UInt_t nfind);
+         UInt_t Find(std::list<std::pair<const Node<T> *, Float_t> > &nlist,
+                     const Node<T> *node, const T &event, UInt_t nfind);
 
       // recursive search for k-nearest neighbor
       // find k events with sum of event weights >= nfind
       template<class T>
-      UInt_t Find(std::list<std::pair<const Node<T> *, Float_t> > &nlist,
-                  const Node<T> *node, const T &event, Double_t nfind, Double_t ncurr);
+         UInt_t Find(std::list<std::pair<const Node<T> *, Float_t> > &nlist,
+                     const Node<T> *node, const T &event, Double_t nfind, Double_t ncurr);
 
       // recursively travel upward until root node is reached
       template <class T>
-      UInt_t Depth(const Node<T> *node);
+         UInt_t Depth(const Node<T> *node);
 
       // prInt_t node content and content of its children
       //template <class T>
       //std::ostream& operator<<(std::ostream& os, const Node<T> &node);
 
-      // 
+      //
       // Inlined functions for Node template
       //
       template <class T>
-      inline void Node<T>::SetNodeL(Node<T> *node)
-      {
-         fNodeL = node;
-      }
+         inline void Node<T>::SetNodeL(Node<T> *node)
+         {
+            fNodeL = node;
+         }
 
       template <class T>
-      inline void Node<T>::SetNodeR(Node<T> *node)
-      {
-         fNodeR = node;
-      }
+         inline void Node<T>::SetNodeR(Node<T> *node)
+         {
+            fNodeR = node;
+         }
 
       template <class T>
-      inline const T& Node<T>::GetEvent() const
-      {
-         return fEvent;
-      }
+         inline const T& Node<T>::GetEvent() const
+         {
+            return fEvent;
+         }
 
       template <class T>
-      inline const Node<T>* Node<T>::GetNodeL() const
-      {
-         return fNodeL;
-      }
+         inline const Node<T>* Node<T>::GetNodeL() const
+         {
+            return fNodeL;
+         }
 
       template <class T>
-      inline const Node<T>* Node<T>::GetNodeR() const
-      {
-         return fNodeR;
-      }
+         inline const Node<T>* Node<T>::GetNodeR() const
+         {
+            return fNodeR;
+         }
 
       template <class T>
-      inline const Node<T>* Node<T>::GetNodeP() const
-      {
-         return fNodeP;
-      }
+         inline const Node<T>* Node<T>::GetNodeP() const
+         {
+            return fNodeP;
+         }
 
       template <class T>
-      inline Double_t Node<T>::GetWeight() const
-      {
-         return fEvent.GetWeight();
-      }
+         inline Double_t Node<T>::GetWeight() const
+         {
+            return fEvent.GetWeight();
+         }
 
       template <class T>
-      inline Float_t Node<T>::GetVarDis() const
-      {
-         return fVarDis;
-      }
+         inline Float_t Node<T>::GetVarDis() const
+         {
+            return fVarDis;
+         }
 
       template <class T>
-      inline Float_t Node<T>::GetVarMin() const
-      {
-         return fVarMin;
-      }
+         inline Float_t Node<T>::GetVarMin() const
+         {
+            return fVarMin;
+         }
 
       template <class T>
-      inline Float_t Node<T>::GetVarMax() const
-      {
-         return fVarMax;
-      }
+         inline Float_t Node<T>::GetVarMax() const
+         {
+            return fVarMax;
+         }
 
       template <class T>
-      inline UInt_t Node<T>::GetMod() const
-      {
-         return fMod;
-      }
+         inline UInt_t Node<T>::GetMod() const
+         {
+            return fMod;
+         }
 
-      // 
+      //
       // Inlined global function(s)
       //
       template <class T>
-      inline UInt_t Depth(const Node<T> *node)
-      {
-         if (!node) return 0;
-         else return Depth(node->GetNodeP()) + 1;
-      }
+         inline UInt_t Depth(const Node<T> *node)
+         {
+            if (!node) return 0;
+            else return Depth(node->GetNodeP()) + 1;
+         }
 
    } // end of kNN namespace
 } // end of TMVA namespace
 
-//-------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////
 template<class T>
-TMVA::kNN::Node<T>::Node(const Node<T> *parent, const T &event, const Int_t mod) 
-   :fNodeP(parent),
-    fNodeL(0),
-    fNodeR(0),
-    fEvent(event),
-    fVarDis(event.GetVar(mod)),
-    fVarMin(fVarDis),
-    fVarMax(fVarDis),
-    fMod(mod)
+TMVA::kNN::Node<T>::Node(const Node<T> *parent, const T &event, const Int_t mod)
+:fNodeP(parent),
+   fNodeL(0),
+   fNodeR(0),
+   fEvent(event),
+   fVarDis(event.GetVar(mod)),
+   fVarMin(fVarDis),
+   fVarMax(fVarDis),
+   fMod(mod)
 {}
 
-//-------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////
 template<class T>
 TMVA::kNN::Node<T>::~Node()
 {
@@ -245,21 +240,22 @@ TMVA::kNN::Node<T>::~Node()
    if (fNodeR) delete fNodeR;
 }
 
-//-------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////
+/// This is Node member function that adds a new node to a binary tree.
+/// each node contains maximum and minimum values of splitting variable
+/// left or right nodes are added based on value of splitting variable
+
 template<class T>
 const TMVA::kNN::Node<T>* TMVA::kNN::Node<T>::Add(const T &event, const UInt_t depth)
 {
-   // This is Node member function that adds a new node to a binary tree.
-   // each node contains maximum and minimum values of splitting variable
-   // left or right nodes are added based on value of splitting variable
-   
+
    assert(fMod == depth % event.GetNVar() && "Wrong recursive depth in Node<>::Add");
-   
+
    const Float_t value = event.GetVar(fMod);
-   
+
    fVarMin = std::min(fVarMin, value);
    fVarMax = std::max(fVarMax, value);
-   
+
    Node<T> *node = 0;
    if (value < fVarDis) {
       if (fNodeL)
@@ -278,36 +274,36 @@ const TMVA::kNN::Node<T>* TMVA::kNN::Node<T>::Add(const T &event, const UInt_t d
       else {
          fNodeR = new Node<T>(this, event, (depth + 1) % event.GetNVar());
          node = fNodeR;
-      }      
+      }
    }
-   
+
    return node;
 }
-   
-//-------------------------------------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////////////////////
 template<class T>
 void TMVA::kNN::Node<T>::Print() const
 {
    Print(std::cout);
 }
-   
-//-------------------------------------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////////////////////
 template<class T>
 void TMVA::kNN::Node<T>::Print(std::ostream& os, const std::string &offset) const
 {
    os << offset << "-----------------------------------------------------------" << std::endl;
-   os << offset << "Node: mod " << fMod 
-      << " at " << fVarDis 
+   os << offset << "Node: mod " << fMod
+      << " at " << fVarDis
       << " with weight: " << GetWeight() << std::endl
       << offset << fEvent;
-   
+
    if (fNodeL) {
       os << offset << "Has left node " << std::endl;
    }
    if (fNodeR) {
       os << offset << "Has right node" << std::endl;
    }
-   
+
    if (fNodeL) {
       os << offset << "PrInt_t left node " << std::endl;
       fNodeL->Print(os, offset + " ");
@@ -316,32 +312,31 @@ void TMVA::kNN::Node<T>::Print(std::ostream& os, const std::string &offset) cons
       os << offset << "PrInt_t right node" << std::endl;
       fNodeR->Print(os, offset + " ");
    }
-   
+
    if (!fNodeL && !fNodeR) {
       os << std::endl;
    }
 }
 
-//-------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////
+/// This is a global templated function that searches for k-nearest neighbors.
+/// list contains k or less nodes that are closest to event.
+/// only nodes with positive weights are added to list.
+/// each node contains maximum and minimum values of splitting variable
+/// for all its children - this range is checked to avoid descending into
+/// nodes that are definitely outside current minimum neighbourhood.
+///
+/// This function should be modified with care.
+
 template<class T>
 UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> > &nlist,
                        const TMVA::kNN::Node<T> *node, const T &event, const UInt_t nfind)
 {
-   // This is a global templated function that searches for k-nearest neighbors.
-   // list contains k or less nodes that are closest to event.
-   // only nodes with positive weights are added to list.
-   // each node contains maximum and minimum values of splitting variable
-   // for all its children - this range is checked to avoid descending into
-   // nodes that are defintely outside current minimum neighbourhood.
-   //
-   // This function should be modified with care.
-   //
-
    if (!node || nfind < 1) {
       return 0;
    }
 
-   const Float_t value = event.GetVar(node->GetMod());     
+   const Float_t value = event.GetVar(node->GetMod());
 
    if (node->GetWeight() > 0.0) {
 
@@ -350,24 +345,24 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
       if (!nlist.empty()) {
 
          max_dist = nlist.back().second;
-         
+
          if (nlist.size() == nfind) {
-            if (value > node->GetVarMax() && 
+            if (value > node->GetVarMax() &&
                 event.GetDist(node->GetVarMax(), node->GetMod()) > max_dist) {
                return 0;
-            }  
-            if (value < node->GetVarMin() && 
+            }
+            if (value < node->GetVarMin() &&
                 event.GetDist(node->GetVarMin(), node->GetMod()) > max_dist) {
                return 0;
             }
-         }      
+         }
       }
 
       const Float_t distance = event.GetDist(node->GetEvent());
-      
+
       Bool_t insert_this = kFALSE;
       Bool_t remove_back = kFALSE;
-      
+
       if (nlist.size() < nfind) {
          insert_this = kTRUE;
       }
@@ -381,12 +376,12 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
          std::cerr << "TMVA::kNN::Find() - logic error in recursive procedure" << std::endl;
          return 1;
       }
-      
+
       if (insert_this) {
-         // need typename keyword because qualified dependent names 
+         // need typename keyword because qualified dependent names
          // are not valid types unless preceded by 'typename'.
          typename std::list<std::pair<const Node<T> *, Float_t> >::iterator lit = nlist.begin();
-         
+
          // find a place where current node should be inserted
          for (; lit != nlist.end(); ++lit) {
             if (distance < lit->second) {
@@ -396,22 +391,22 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
                continue;
             }
          }
-         
+
          nlist.insert(lit, std::pair<const Node<T> *, Float_t>(node, distance));
-         
+
          if (remove_back) {
             nlist.pop_back();
          }
       }
    }
-   
+
    UInt_t count = 1;
    if (node->GetNodeL() && node->GetNodeR()) {
       if (value < node->GetVarDis()) {
          count += Find(nlist, node->GetNodeL(), event, nfind);
          count += Find(nlist, node->GetNodeR(), event, nfind);
       }
-      else { 
+      else {
          count += Find(nlist, node->GetNodeR(), event, nfind);
          count += Find(nlist, node->GetNodeL(), event, nfind);
       }
@@ -424,34 +419,33 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
          count += Find(nlist, node->GetNodeR(), event, nfind);
       }
    }
-   
+
    return count;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// This is a global templated function that searches for k-nearest neighbors.
+/// list contains all nodes that are closest to event
+/// and have sum of event weights >= nfind.
+/// Only nodes with positive weights are added to list.
+/// Requirement for used classes:
+///  - each node contains maximum and minimum values of splitting variable
+///    for all its children
+///  - min and max range is checked to avoid descending into
+///    nodes that are definitely outside current minimum neighbourhood.
+///
+/// This function should be modified with care.
 
-//-------------------------------------------------------------------------------------------
 template<class T>
 UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> > &nlist,
                        const TMVA::kNN::Node<T> *node, const T &event, const Double_t nfind, Double_t ncurr)
 {
-   // This is a global templated function that searches for k-nearest neighbors.
-   // list contains all nodes that are closest to event 
-   // and have sum of event weights >= nfind.
-   // Only nodes with positive weights are added to list.
-   // Requirement for used classes:
-   //  - each node contains maximum and minimum values of splitting variable
-   //    for all its children
-   //  - min and max range is checked to avoid descending into
-   //    nodes that are defintely outside current minimum neighbourhood.
-   //
-   // This function should be modified with care.
-   //
 
    if (!node || !(nfind < 0.0)) {
       return 0;
    }
 
-   const Float_t value = event.GetVar(node->GetMod());     
+   const Float_t value = event.GetVar(node->GetMod());
 
    if (node->GetWeight() > 0.0) {
 
@@ -460,23 +454,23 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
       if (!nlist.empty()) {
 
          max_dist = nlist.back().second;
-         
+
          if (!(ncurr < nfind)) {
-            if (value > node->GetVarMax() && 
+            if (value > node->GetVarMax() &&
                 event.GetDist(node->GetVarMax(), node->GetMod()) > max_dist) {
                return 0;
-            }  
-            if (value < node->GetVarMin() && 
+            }
+            if (value < node->GetVarMin() &&
                 event.GetDist(node->GetVarMin(), node->GetMod()) > max_dist) {
                return 0;
             }
-         }      
+         }
       }
 
       const Float_t distance = event.GetDist(node->GetEvent());
-      
+
       Bool_t insert_this = kFALSE;
-      
+
       if (ncurr < nfind) {
          insert_this = kTRUE;
       }
@@ -489,12 +483,12 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
          std::cerr << "TMVA::kNN::Find() - logic error in recursive procedure" << std::endl;
          return 1;
       }
-      
+
       if (insert_this) {
          // (re)compute total current weight when inserting a new node
          ncurr = 0;
 
-         // need typename keyword because qualified dependent names 
+         // need typename keyword because qualified dependent names
          // are not valid types unless preceded by 'typename'.
          typename std::list<std::pair<const Node<T> *, Float_t> >::iterator lit = nlist.begin();
 
@@ -506,9 +500,9 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
 
             ncurr += lit -> first -> GetWeight();
          }
-         
+
          lit = nlist.insert(lit, std::pair<const Node<T> *, Float_t>(node, distance));
-         
+
          for (; lit != nlist.end(); ++lit) {
             ncurr += lit -> first -> GetWeight();
             if (!(ncurr < nfind)) {
@@ -522,15 +516,15 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
                nlist.erase(lit, nlist.end());
             }
       }
-   }   
-   
+   }
+
    UInt_t count = 1;
    if (node->GetNodeL() && node->GetNodeR()) {
       if (value < node->GetVarDis()) {
          count += Find(nlist, node->GetNodeL(), event, nfind, ncurr);
          count += Find(nlist, node->GetNodeR(), event, nfind, ncurr);
       }
-      else { 
+      else {
          count += Find(nlist, node->GetNodeR(), event, nfind, ncurr);
          count += Find(nlist, node->GetNodeL(), event, nfind, ncurr);
       }
@@ -543,7 +537,7 @@ UInt_t TMVA::kNN::Find(std::list<std::pair<const TMVA::kNN::Node<T> *, Float_t> 
          count += Find(nlist, node->GetNodeR(), event, nfind, ncurr);
       }
    }
-   
+
    return count;
 }
 

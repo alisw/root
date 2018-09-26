@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_math
+/// \notebook -nodraw
 /// Example macro testing available methods and operation of the GenVector classes.
 /// The results are compared and check at the
 /// numerical precision levels.
@@ -13,7 +14,7 @@
 ///
 /// To execute the macro type in:
 ///
-/// ~~~ {.cpp}
+/// ~~~{.cpp}
 /// root[0] .x  mathcoreGenVector.C
 /// ~~~
 ///
@@ -98,8 +99,6 @@ int testVector3D() {
    std::cout << "\n************************************************************************\n "
              << " Vector 3D Test"
              << "\n************************************************************************\n";
-
-   gSystem->Load("libGenVector");
 
    XYZVector v1(0.01, 0.02, 16);
 
@@ -874,14 +873,10 @@ int testRotation() {
    if (ok == 0) std::cout << "\t OK " << std::endl;
    else  std::cout << std::endl;
       return ok;
-   }
+}
 
-   void mathcoreGenVector() {
+void mathcoreGenVector() {
 
-   #ifdef __CINT__
-   gSystem->Load("libMathCore");
-   using namespace ROOT::Math;
-   #endif
 
    testVector3D();
    testPoint3D();

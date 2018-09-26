@@ -24,11 +24,13 @@
 #include "TTreeSQL.h"
 #include "TBufferSQL.h"
 
-ClassImp(TBasketSQL)
+ClassImp(TBasketSQL);
 
 namespace std {} using namespace std;
 
 /** \class TBasketSQL
+\ingroup tree
+
 Implement TBasket for a SQL backend.
 */
 

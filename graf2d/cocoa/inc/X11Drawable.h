@@ -14,15 +14,9 @@
 
 #include <Cocoa/Cocoa.h>
 
-#ifndef ROOT_CocoaGuiTypes
 #include "CocoaGuiTypes.h"
-#endif
-#ifndef ROOT_TVirtualX
 #include "TVirtualX.h"
-#endif
-#ifndef ROOT_GuiTypes
 #include "GuiTypes.h"
-#endif
 
 @class PassiveKeyGrab;
 @class QuartzWindow;
@@ -47,6 +41,7 @@
 //to check in TGCocoa, what's the object.
 - (BOOL) fIsPixmap;
 - (BOOL) fIsOpenGLWidget;
+- (CGFloat) fScaleFactor;
 
 //Either [[NSGraphicsContext currentContext] graphicsPort]
 //or bitmap context (pixmap).

@@ -33,7 +33,7 @@
 #include "TInterpreter.h"
 #include "TColor.h"
 
-ClassImp(TGApplication)
+ClassImp(TGApplication);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a GUI application environment. Use this class if you only
@@ -84,12 +84,7 @@ TGApplication::TGApplication(const char *appClassName,
 
    if (strcmp(appClassName, "proofserv")) {
       const char *ttpath = gEnv->GetValue("Root.TTFontPath",
-#ifdef TTFFONTDIR
-                                          TTFFONTDIR);
-#else
-                                          "$(ROOTSYS)/fonts");
-#endif
-
+                                          TROOT::GetTTFFontDir());
       char *ttfont = gSystem->Which(ttpath, "arialbd.ttf", kReadPermission);
       // Added by cholm for use of DFSG - fonts - based on fix by Kevin
       if (!ttfont)

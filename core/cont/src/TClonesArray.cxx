@@ -123,15 +123,17 @@ When investigating misuse of TClonesArray, please make sure of the following:
      run.
 */
 
-#include <stdlib.h>
 #include "TClonesArray.h"
+
 #include "TError.h"
 #include "TROOT.h"
 #include "TClass.h"
+#include "TObject.h"
 #include "TObjectTable.h"
 
+#include <stdlib.h>
 
-ClassImp(TClonesArray)
+ClassImp(TClonesArray);
 
 /// Internal Utility routine to correctly release the memory for an object
 static inline void R__ReleaseMemory(TClass *cl, TObject *obj)

@@ -24,24 +24,25 @@ class MCInstrInfo;
 class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
+class MCTargetOptions;
 class Target;
+class Triple;
 class StringRef;
+class raw_pwrite_stream;
 class raw_ostream;
 
-extern Target TheSparcTarget;
-extern Target TheSparcV9Target;
+Target &getTheSparcTarget();
+Target &getTheSparcV9Target();
+Target &getTheSparcelTarget();
 
 MCCodeEmitter *createSparcMCCodeEmitter(const MCInstrInfo &MCII,
                                         const MCRegisterInfo &MRI,
-                                        const MCSubtargetInfo &STI,
                                         MCContext &Ctx);
-MCAsmBackend *createSparcAsmBackend(const Target &T,
-                                    const MCRegisterInfo &MRI,
-                                    StringRef TT,
-                                    StringRef CPU);
-MCObjectWriter *createSparcELFObjectWriter(raw_ostream &OS,
-                                           bool Is64Bit,
-                                           uint8_t OSABI);
+MCAsmBackend *createSparcAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                    const Triple &TT, StringRef CPU,
+                                    const MCTargetOptions &Options);
+MCObjectWriter *createSparcELFObjectWriter(raw_pwrite_stream &OS, bool Is64Bit,
+                                           bool IsLIttleEndian, uint8_t OSABI);
 } // End llvm namespace
 
 // Defines symbolic names for Sparc registers.  This defines a mapping from

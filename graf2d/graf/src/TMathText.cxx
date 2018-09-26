@@ -278,8 +278,8 @@ public:
       mathtext::bounding_box_t ret =
          bounding_box(*iterator, current_x, family);
 
-      iterator++;
-      for(; iterator != string.end(); iterator++) {
+      ++iterator;
+      for (; iterator != string.end(); ++iterator) {
          const mathtext::point_t position =
             mathtext::point_t(current_x, 0);
          const mathtext::bounding_box_t glyph_bounding_box =
@@ -302,8 +302,7 @@ public:
       float advance = 0;
 
       buf[1] = L'\0';
-      for(std::wstring::const_iterator iterator = string.begin();
-         iterator != string.end(); iterator++) {
+      for (std::wstring::const_iterator iterator = string.begin(); iterator != string.end(); ++iterator) {
          buf[0] = *iterator;
          const bool cyrillic_or_cjk = is_cyrillic_or_cjk(buf[0]);
 
@@ -335,7 +334,7 @@ public:
    using mathtext::math_text_renderer_t::bounding_box;
 };
 
-ClassImp(TMathText)
+ClassImp(TMathText);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
@@ -630,6 +629,7 @@ void TMathText::PaintMathText(Double_t x, Double_t y, Double_t angle,
    newText.ReplaceAll("\\Chi","X");
    newText.ReplaceAll("\\varomega","\\varpi");
    newText.ReplaceAll("\\mbox","\\hbox");
+   newText.ReplaceAll("\\bar","\\wwbar");
    if (newText.Contains("\\frac")) {
       Int_t len,i1,i2;
       TString str;

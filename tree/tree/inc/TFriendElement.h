@@ -24,9 +24,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
 
 class TFile;
 class TTree;
@@ -35,19 +33,19 @@ class TClass;
 class TFriendElement : public TNamed {
 
 protected:
-   TTree        *fParentTree;  //!pointer to the parent TTree
-   TTree        *fTree;        //!pointer to the TTree described by this element
-   TFile        *fFile;        //!pointer to the file containing the friend TTree
-   TString       fTreeName;    // name of the friend TTree
-   Bool_t        fOwnFile;     // true if file is managed by this class
+   TTree        *fParentTree;  ///<! pointer to the parent TTree
+   TTree        *fTree;        ///<! pointer to the TTree described by this element
+   TFile        *fFile;        ///<! pointer to the file containing the friend TTree
+   TString       fTreeName;    ///<  name of the friend TTree
+   Bool_t        fOwnFile;     ///<  true if file is managed by this class
 
-   TFriendElement(const TFriendElement&);
-   TFriendElement& operator=(const TFriendElement&);
+   TFriendElement(const TFriendElement&) = delete;
+   TFriendElement& operator=(const TFriendElement&) = delete;
 
    friend void TFriendElement__SetTree(TTree *tree, TList *frlist);
 
 public:
-   enum { kFromChain = BIT(11) };
+   enum EStatusBits { kFromChain = BIT(11) };
    TFriendElement();
    TFriendElement(TTree *tree, const char *treename, const char *filename);
    TFriendElement(TTree *tree, const char *treename, TFile *file);

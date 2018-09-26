@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TRef
+\ingroup Base
 
 Persistent Reference link to a TObject
 A TRef is a lightweight object pointing to any TObject.
@@ -253,7 +254,7 @@ The 3 arrays mytracks,pions and muons may be written separately.
 TObjArray  *TRef::fgExecs  = 0;
 TObject    *TRef::fgObject = 0;
 
-ClassImp(TRef)
+ClassImp(TRef);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a ref to obj.
@@ -289,11 +290,10 @@ void TRef::operator=(TObject *obj)
          SetBit(kHasUUID);
          uid = obj->GetUniqueID();
       } else {
-         if (obj->TestBit(kIsReferenced)) {
-            uid = obj->GetUniqueID();
-         } else {
-            uid = TProcessID::AssignID(obj);
+         if (!obj->TestBit(kIsReferenced)) {
+            TProcessID::AssignID(obj);
          }
+         uid = obj->GetUniqueID();
          fPID = TProcessID::GetProcessWithUID(uid,obj);
          ResetBit(kHasUUID);
       }
@@ -384,6 +384,7 @@ TObject *TRef::GetObject() const
    //the reference may be in the TRefTable
    TRefTable *table = TRefTable::GetRefTable();
    if (table) {
+      R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
       table->SetUID(uid, fPID);
       table->Notify();
    }
@@ -397,6 +398,7 @@ TObject *TRef::GetObject() const
       Int_t execid = TestBits(0xff0000);
       if (execid > 0) {
          execid = execid>>16;
+         R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
          TExec *exec = (TExec*)fgExecs->At(execid-1);
          if (exec) {
             //we expect the object to be returned via TRef::SetStaticObject

@@ -1,5 +1,5 @@
 // @(#):$Id$
-// Author: M.Gheata 
+// Author: M.Gheata
 
 /*************************************************************************
  * Copyright (C) 1995-2002, Rene Brun and Fons Rademakers.               *
@@ -12,20 +12,8 @@
 #ifndef ROOT_TGeoMediumEditor
 #define ROOT_TGeoMediumEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoMediumEditor                                                    //
-//                                                                      //
-//  Editor for a TGeoMedium.                                            //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TGButton
 #include "TGWidget.h"
-#endif
-#ifndef ROOT_TGeoGedFrame
 #include "TGeoGedFrame.h"
-#endif
 
 class TGeoMedium;
 class TGeoMaterial;
@@ -49,10 +37,10 @@ protected:
    Bool_t               fIsModified;        // Modified flag
    TGTextEntry         *fMedName;           // Medium name text entry
    TGNumberEntry       *fMedId;             // Number entry for medium id
-//   TGComboBox          *fMatList;           // Combo box for all materials
+//   TGComboBox          *fMatList;         // Combo box for all materials
    TGeoMaterial        *fSelectedMaterial;  // Selected material
    TGLabel             *fLSelMaterial;      // Selected material label
-   TGPictureButton     *fBSelMaterial;        // Button for selecting a material
+   TGPictureButton     *fBSelMaterial;      // Button for selecting a material
    TGTextButton        *fEditMaterial;      // Check button for material editing
    TGCheckButton       *fMedSensitive;      // Check button for sensitivity
    TGComboBox          *fMagfldOption;      // Combo box with magnetic field options
@@ -89,8 +77,8 @@ public:
    void           DoStmin();
    void           DoApply();
    void           DoUndo();
-   
+
    ClassDef(TGeoMediumEditor,0)   // TGeoMedium editor
-};   
-  
-#endif                    
+};
+
+#endif

@@ -39,6 +39,7 @@ namespace llvm {
 
 namespace cling {
   class IncrementalExecutor;
+  class TransactionPool;
 
   ///\brief Contains information about the consumed input at once.
   ///
@@ -61,11 +62,6 @@ namespace cling {
       kCCIHandleCXXStaticMemberVarInstantiation,
       kCCICompleteTentativeDefinition,
       kCCINumStates
-    };
-
-    ///\brief Sort of opaque handle for unloading a transaction from the JIT.
-    struct ExeUnloadHandle {
-      void* m_Opaque;
     };
 
     ///\brief Each declaration group came through different interface at
@@ -148,11 +144,7 @@ namespace cling {
 
     ///\brief The llvm Module containing the information that we will revert
     ///
-    std::unique_ptr<llvm::Module> m_Module;
-
-    ///\brief The JIT handle allowing a removal of the Transaction's symbols.
-    ///
-    ExeUnloadHandle m_ExeUnload;
+    std::shared_ptr<llvm::Module> m_Module;
 
     ///\brief The Executor to use m_ExeUnload on.
     ///
@@ -184,15 +176,12 @@ namespace cling {
     ///
     clang::FileID m_BufferFID;
 
-  public:
-
-    Transaction(clang::Sema& S);
-    Transaction(const CompilationOptions& Opts, clang::Sema& S);
+    /// TransactionPool needs direct access to m_State as setState asserts
+    friend class TransactionPool;
 
     void Initialize(clang::Sema& S);
 
-    ~Transaction();
-
+  public:
     enum State {
       kCollecting,
       kCompleted,
@@ -207,6 +196,10 @@ namespace cling {
       kWarnings,
       kNone
     };
+
+    Transaction(clang::Sema& S);
+    Transaction(const CompilationOptions& Opts, clang::Sema& S);
+    ~Transaction();
 
     /// \{
     /// \name Iteration
@@ -461,15 +454,10 @@ namespace cling {
         m_NestedTransactions->clear();
     }
 
-    llvm::Module* getModule() const { return m_Module.get(); }
-    void setModule(std::unique_ptr<llvm::Module> M) { m_Module.swap(M); }
+    std::shared_ptr<llvm::Module> getModule() const { return m_Module; }
+    void setModule(std::unique_ptr<llvm::Module> M) { m_Module = std::move(M); }
 
-    ExeUnloadHandle getExeUnloadHandle() const { return m_ExeUnload; }
     IncrementalExecutor* getExecutor() const { return m_Exe; }
-    void setExeUnloadHandle(IncrementalExecutor* Exe, ExeUnloadHandle H) {
-      m_Exe = Exe;
-      m_ExeUnload = H;
-    }
 
     clang::FunctionDecl* getWrapperFD() const { return m_WrapperFD; }
 
@@ -478,6 +466,7 @@ namespace cling {
 
     void setBufferFID(clang::FileID FID) { m_BufferFID = FID; }
     clang::FileID getBufferFID() const { return m_BufferFID; }
+    clang::SourceLocation getSourceStart(const clang::SourceManager& SM) const;
 
     ///\brief The transactions could be reused and the pointer couldn't serve
     /// as a unique handle to a transaction. Unique handles are used by clients
@@ -511,7 +500,6 @@ namespace cling {
 
     void printStructureBrief(size_t nindent = 0) const;
 
-    friend class TransactionPool;
   private:
     bool comesFromASTReader(clang::DeclGroupRef DGR) const;
   };

@@ -23,13 +23,10 @@
 #pragma link C++ class ROOT::Fit::FitResult+;
 #pragma link C++ class ROOT::Fit::ParameterSettings+;
 
-///skip  the dictionary for the fit method functions
-#ifndef _WIN32
-
-#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IBaseFunctionMultiDim, ROOT::Fit::BinData>-;
-#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IGradientFunctionMultiDim, ROOT::Fit::BinData>-;
-#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IBaseFunctionMultiDim, ROOT::Fit::UnBinData>-;
-#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IGradientFunctionMultiDim, ROOT::Fit::UnBinData>-;
+#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IBaseFunctionMultiDim, ROOT::Math::IBaseFunctionMultiDim, ROOT::Fit::BinData>-;
+#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IGradientFunctionMultiDim, ROOT::Math::IGradientFunctionMultiDim, ROOT::Fit::BinData>-;
+#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IBaseFunctionMultiDim, ROOT::Math::IBaseFunctionMultiDim, ROOT::Fit::UnBinData>-;
+#pragma link C++ class ROOT::Fit::BasicFCN<ROOT::Math::IGradientFunctionMultiDim, ROOT::Math::IGradientFunctionMultiDim, ROOT::Fit::UnBinData>-;
 #pragma link C++ class ROOT::Fit::Chi2FCN<ROOT::Math::IBaseFunctionMultiDim>-;
 #pragma link C++ class ROOT::Fit::Chi2FCN<ROOT::Math::IGradientFunctionMultiDim>-;
 #pragma link C++ class ROOT::Fit::LogLikelihoodFCN<ROOT::Math::IBaseFunctionMultiDim>-;
@@ -37,16 +34,12 @@
 #pragma link C++ class ROOT::Fit::PoissonLikelihoodFCN<ROOT::Math::IBaseFunctionMultiDim>-;
 #pragma link C++ class ROOT::Fit::PoissonLikelihoodFCN<ROOT::Math::IGradientFunctionMultiDim>-;
 
-
-
 #pragma link C++ typedef ROOT::Fit::Chi2Function;
 #pragma link C++ typedef ROOT::Fit::Chi2GradFunction;
 #pragma link C++ typedef ROOT::Fit::PoissonLLFunction;
 #pragma link C++ typedef ROOT::Fit::PoissonLLGradFunction;
 #pragma link C++ typedef ROOT::Fit::LogLikelihoodFunction;
 #pragma link C++ typedef ROOT::Fit::LogLikelihoodGradFunction;
-
-#endif
 
 //fitter template functions
 #pragma link C++ function ROOT::Fit::Fitter::Fit(const ROOT::Fit::BinData &, const ROOT::Math::IParametricFunctionMultiDim&);

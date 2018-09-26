@@ -21,7 +21,7 @@
 #include "TPosixMutex.h"
 #include "PosixThreadInc.h"
 
-ClassImp(TPosixMutex)
+ClassImp(TPosixMutex);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a posix mutex lock.
@@ -29,6 +29,7 @@ ClassImp(TPosixMutex)
 TPosixMutex::TPosixMutex(Bool_t recursive) : TMutexImp()
 {
    if (recursive) {
+      SetBit(kIsRecursive);
 
       int rc;
       pthread_mutexattr_t attr;

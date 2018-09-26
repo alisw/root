@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TFileInfo
+\ingroup Base
+
 Class describing a generic file including meta information.
 */
 
@@ -20,8 +22,8 @@ Class describing a generic file including meta information.
 #include "TClass.h"
 
 
-ClassImp(TFileInfo)
-ClassImp(TFileInfoMeta)
+ClassImp(TFileInfo);
+ClassImp(TFileInfoMeta);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.

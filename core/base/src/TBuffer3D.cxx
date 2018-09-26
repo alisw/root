@@ -13,6 +13,8 @@
 #include "TBuffer3DTypes.h"
 
 /** \class TBuffer3D
+\ingroup Base
+
 Generic 3D primitive description class.
 See TBuffer3DTypes for producer classes.
 
@@ -211,7 +213,7 @@ internally. You are free to destroy this object, or recycle it for the next
 object if suitable.
 */
 
-ClassImp(TBuffer3D)
+ClassImp(TBuffer3D);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Destructor.

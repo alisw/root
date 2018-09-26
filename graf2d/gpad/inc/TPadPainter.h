@@ -12,9 +12,7 @@
 #ifndef ROOT_TPadPainter
 #define ROOT_TPadPainter
 
-#ifndef ROOT_TVirtualPadPainter
 #include "TVirtualPadPainter.h"
-#endif
 
 /*
 TVirtualPadPainter is an attempt to abstract
@@ -63,8 +61,8 @@ public:
    //2. "Off-screen management" part.
    Int_t    CreateDrawable(UInt_t w, UInt_t h);
    void     ClearDrawable();
-   void     CopyDrawable(Int_t id, Int_t px, Int_t py);
-   void     DestroyDrawable();
+   void     CopyDrawable(Int_t device, Int_t px, Int_t py);
+   void     DestroyDrawable(Int_t device);
    void     SelectDrawable(Int_t device);
 
    //TASImage support (noop for a non-gl pad).

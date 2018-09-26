@@ -11,21 +11,22 @@
 #define LLVM_LIB_TARGET_ARM_ARMASMBACKEND_H
 
 #include "MCTargetDesc/ARMFixupKinds.h"
+#include "MCTargetDesc/ARMMCTargetDesc.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/Support/TargetRegistry.h"
 
-using namespace llvm;
-
-namespace {
+namespace llvm {
 
 class ARMAsmBackend : public MCAsmBackend {
   const MCSubtargetInfo *STI;
   bool isThumbMode;    // Currently emitting Thumb code.
   bool IsLittleEndian; // Big or little endian.
 public:
-  ARMAsmBackend(const Target &T, StringRef TT, bool IsLittle)
+  ARMAsmBackend(const Target &T, const Triple &TT, bool IsLittle)
       : MCAsmBackend(), STI(ARM_MC::createARMMCSubtargetInfo(TT, "", "")),
-        isThumbMode(TT.startswith("thumb")), IsLittleEndian(IsLittle) {}
+        isThumbMode(TT.getArchName().startswith("thumb")),
+        IsLittleEndian(IsLittle) {}
 
   ~ARMAsmBackend() override { delete STI; }
 
@@ -33,27 +34,35 @@ public:
     return ARM::NumTargetFixupKinds;
   }
 
-  bool hasNOP() const { return (STI->getFeatureBits() & ARM::HasV6T2Ops) != 0; }
+  bool hasNOP() const { return STI->getFeatureBits()[ARM::HasV6T2Ops]; }
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
-  /// processFixupValue - Target hook to process the literal value of a fixup
-  /// if necessary.
-  void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
-                         const MCFixup &Fixup, const MCFragment *DF,
-                         const MCValue &Target, uint64_t &Value,
-                         bool &IsResolved) override;
+  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
+                             const MCValue &Target) override;
 
-  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value, bool IsPCRel) const override;
+  unsigned adjustFixupValue(const MCAssembler &Asm, const MCFixup &Fixup,
+                            const MCValue &Target, uint64_t Value,
+                            bool IsResolved, MCContext &Ctx,
+                            bool IsLittleEndian) const;
+
+  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
+                  const MCValue &Target, MutableArrayRef<char> Data,
+                  uint64_t Value, bool IsResolved) const override;
+
+  unsigned getRelaxedOpcode(unsigned Op) const;
 
   bool mayNeedRelaxation(const MCInst &Inst) const override;
+
+  const char *reasonForFixupRelaxation(const MCFixup &Fixup,
+                                       uint64_t Value) const;
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
                             const MCAsmLayout &Layout) const override;
 
-  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override;
+  void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
+                        MCInst &Res) const override;
 
   bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
 
@@ -64,6 +73,6 @@ public:
   void setIsThumb(bool it) { isThumbMode = it; }
   bool isLittle() const { return IsLittleEndian; }
 };
-} // end anonymous namespace
+} // end namespace llvm
 
 #endif

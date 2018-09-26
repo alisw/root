@@ -27,14 +27,13 @@
 //
 //
 
-#include "Math/IFunctionfwd.h"
 #include "Math/IFunction.h"
 #include "Math/Error.h"
-#include <vector>
 
 #include "GSLMonteFunctionWrapper.h"
 
 #include "Math/GSLMCIntegrator.h"
+#include "Math/GSLRndmEngines.h"
 #include "GSLMCIntegrationWorkspace.h"
 #include "GSLRngWrapper.h"
 
@@ -78,6 +77,7 @@ GSLMCIntegrator::GSLMCIntegrator(MCIntegration::Type type, double absTol, double
    fAbsTol((absTol >= 0) ? absTol : IntegratorMultiDimOptions::DefaultAbsTolerance() ),
    fRelTol((relTol >= 0) ? relTol : IntegratorMultiDimOptions::DefaultRelTolerance() ),
    fResult(0),fError(0),fStatus(-1),
+   fExtGen(false),
    fWorkspace(0),
    fFunction(0)
 {
@@ -100,11 +100,13 @@ GSLMCIntegrator::GSLMCIntegrator(MCIntegration::Type type, double absTol, double
 }
 
 GSLMCIntegrator::GSLMCIntegrator(const char * type, double absTol, double relTol, unsigned int calls):
+   fType(MCIntegration::kDEFAULT),
    fDim(0),
    fCalls(calls),
    fAbsTol(absTol),
    fRelTol(relTol),
    fResult(0),fError(0),fStatus(-1),
+   fExtGen(false),
    fWorkspace(0),
    fFunction(0)
 {
@@ -132,7 +134,7 @@ GSLMCIntegrator::~GSLMCIntegrator()
 {
    // delete workspace
    if (fWorkspace) delete fWorkspace;
-   if (fRng != 0) delete fRng;
+   if (fRng != 0 && !fExtGen) delete fRng;
    if (fFunction != 0) delete fFunction;
    fRng = 0;
 
@@ -262,7 +264,12 @@ void GSLMCIntegrator::SetRelTolerance(double relTol){ this->fRelTol = relTol; }
 */
 void GSLMCIntegrator::SetAbsTolerance(double absTol){ this->fAbsTol = absTol; }
 
-void GSLMCIntegrator::SetGenerator(GSLRngWrapper* r){ this->fRng = r; }
+void GSLMCIntegrator::SetGenerator(GSLRandomEngine & r){
+   // delete previous exist generator
+   if (fRng && !fExtGen) delete fRng; 
+   fRng = r.Engine();
+   fExtGen = true; 
+}
 
 void GSLMCIntegrator::SetType (MCIntegration::Type type)
 {
@@ -310,7 +317,8 @@ void GSLMCIntegrator::SetTypeName(const char * type)
    }
 
    // create the fWorkspace object
-   if (integType != fType) SetType(integType);
+   // if it exists already with the same type it will not be re-created
+   SetType(integType);
 }
 
 

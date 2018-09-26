@@ -22,9 +22,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TRandom
 #include "TRandom.h"
-#endif
 
 class TRandom3 : public TRandom {
 
@@ -37,10 +35,11 @@ public:
    virtual ~TRandom3();
    // get the current seed (only first element of the seed table)
    virtual  UInt_t    GetSeed() const { return fMt[0];}
-   virtual  Double_t  Rndm(Int_t i=0);
+   using TRandom::Rndm;
+   virtual  Double_t  Rndm( );
    virtual  void      RndmArray(Int_t n, Float_t *array);
    virtual  void      RndmArray(Int_t n, Double_t *array);
-   virtual  void      SetSeed(UInt_t seed=0);
+   virtual  void      SetSeed(ULong_t seed=0);
 
    ClassDef(TRandom3,2)  //Random number generator: Mersenne Twister
 };

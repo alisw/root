@@ -37,16 +37,10 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include<vector>
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
-#ifndef ROOT_TMVA_Configurable
 #include "TMVA/Configurable.h"
-#endif
 
 namespace TMVA {
 
@@ -75,6 +69,13 @@ namespace TMVA {
       // remove namespace in name
       const char* GetName() const { return fClassName; }
 
+      // setting up variables for JsMVA interactive training
+      void SetIPythonInteractive(bool* ExitFromTraining, UInt_t *fIPyMaxIter_, UInt_t *fIPyCurrentIter_){
+        fExitFromTraining = ExitFromTraining;
+        fIPyMaxIter = fIPyMaxIter_;
+        fIPyCurrentIter = fIPyCurrentIter_;
+      }
+
    protected:
 
       // need to implement option declaration
@@ -89,7 +90,11 @@ namespace TMVA {
 
       TString                             fClassName;    // remove TMVA:: from TObject name
 
-      ClassDef(FitterBase,0) // Baseclass for fitters
+      // variables needed by JsMVA
+      UInt_t *fIPyCurrentIter = nullptr, *fIPyMaxIter = nullptr;
+      bool* fExitFromTraining = nullptr;
+
+      ClassDef(FitterBase,0); // Baseclass for fitters
    };
 
 } // namespace TMVA

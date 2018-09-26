@@ -1,7 +1,12 @@
-// A set of classes deriving from TTask
-// see macro tasks.C to see an example of use
-// The Exec function of each class prints one line when it is called.
-//Author: Rene Brun
+/// \file
+/// \ingroup Tutorials
+/// A set of classes deriving from TTask.
+/// See macro tasks.C to see an example of use
+/// The Exec function of each class prints one line when it is called.
+///
+/// \macro_code
+///
+/// \author Rene Brun
 
 #include "TTask.h"
 
@@ -146,8 +151,6 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(MyRun)
-
 MyRun::MyRun(const char *name, const char *title)
       :TTask(name,title)
 {
@@ -159,8 +162,6 @@ void MyRun::Exec(Option_t * /*option*/)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-ClassImp(MyEvent)
 
 MyEvent::MyEvent(const char *name, const char *title)
       :TTask(name,title)
@@ -174,8 +175,6 @@ void MyEvent::Exec(Option_t * /*option*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(MyGeomInit)
-
 MyGeomInit::MyGeomInit(const char *name, const char *title)
       :TTask(name,title)
 {
@@ -187,8 +186,6 @@ void MyGeomInit::Exec(Option_t * /*option*/)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-ClassImp(MyMaterialInit)
 
 MyMaterialInit::MyMaterialInit(const char *name, const char *title)
       :TTask(name,title)
@@ -202,8 +199,6 @@ void MyMaterialInit::Exec(Option_t * /*option*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(MyTracker)
-
 MyTracker::MyTracker(const char *name, const char *title)
       :TTask(name,title)
 {
@@ -215,8 +210,6 @@ void MyTracker::Exec(Option_t * /*option*/)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-ClassImp(MyRecTPC)
 
 MyRecTPC::MyRecTPC(const char *name, const char *title)
       :TTask(name,title)
@@ -230,8 +223,6 @@ void MyRecTPC::Exec(Option_t * /*option*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(MyRecITS)
-
 MyRecITS::MyRecITS(const char *name, const char *title)
       :TTask(name,title)
 {
@@ -243,8 +234,6 @@ void MyRecITS::Exec(Option_t * /*option*/)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-ClassImp(MyRecMUON)
 
 MyRecMUON::MyRecMUON(const char *name, const char *title)
       :TTask(name,title)
@@ -258,8 +247,6 @@ void MyRecMUON::Exec(Option_t * /*option*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(MyRecPHOS)
-
 MyRecPHOS::MyRecPHOS(const char *name, const char *title)
       :TTask(name,title)
 {
@@ -271,8 +258,6 @@ void MyRecPHOS::Exec(Option_t * /*option*/)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-ClassImp(MyRecRICH)
 
 MyRecRICH::MyRecRICH(const char *name, const char *title)
       :TTask(name,title)
@@ -286,8 +271,6 @@ void MyRecRICH::Exec(Option_t * /*option*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(MyRecTRD)
-
 MyRecTRD::MyRecTRD(const char *name, const char *title)
       :TTask(name,title)
 {
@@ -299,8 +282,6 @@ void MyRecTRD::Exec(Option_t * /*option*/)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-ClassImp(MyRecGlobal)
 
 MyRecGlobal::MyRecGlobal(const char *name, const char *title)
       :TTask(name,title)

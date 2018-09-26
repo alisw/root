@@ -6,7 +6,8 @@ include_directories(${GFAL_INCLUDE_DIRS})
 
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
-ROOT_GENERATE_DICTIONARY(G__GFAL *.h MODULE GFAL LINKDEF LinkDef.h)
-
-ROOT_LINKER_LIBRARY(GFAL *.cxx G__GFAL.cxx LIBRARIES Core ${GFAL_LIBRARIES} DEPENDENCIES Net RIO)
-ROOT_INSTALL_HEADERS()
+ROOT_STANDARD_LIBRARY_PACKAGE(GFAL
+                              HEADERS TGFALFile.h
+                              SOURCES src/TGFALFile.cxx
+                              LIBRARIES ${GFAL_LIBRARIES}
+                              DEPENDENCIES Core Net RIO)

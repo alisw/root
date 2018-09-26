@@ -31,7 +31,7 @@ Utility class to display PROOF stats feedback histos during queries
 #include "TStyle.h"
 #include "TVirtualPad.h"
 
-ClassImp(TStatsFeedback)
+ClassImp(TStatsFeedback);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -50,8 +50,8 @@ TStatsFeedback::TStatsFeedback(TProof *proof)
    fProof = p;
    fName = fProof->GetSessionTag();
 
-   if (!(proof->Connect("Feedback(TList *objs)", "TStatsFeedback",
-                  this, "Feedback(TList *objs)"))) {
+   if (!(proof->Connect("Feedback(TList*)", "TStatsFeedback",
+                  this, "Feedback(TList*)"))) {
       Error("TStatsFeedback", "Connect() failed");
       SetBit(TObject::kInvalidObject);
       return;
@@ -63,6 +63,9 @@ TStatsFeedback::TStatsFeedback(TProof *proof)
 
 TStatsFeedback::~TStatsFeedback()
 {
+   // Required since we overload TObject::Hash.
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
+
    fProof->Disconnect("Feedback(TList*)", this, "Feedback(TList*");
 }
 

@@ -46,7 +46,6 @@ reached
 #include <assert.h>
 #include <math.h>
 #include <float.h>
-#include <stdlib.h>
 #include "Riostream.h"
 #include "TMath.h"
 #include "RooGaussKronrodIntegrator1D.h"
@@ -60,7 +59,7 @@ reached
 
 using namespace std;
 
-ClassImp(RooGaussKronrodIntegrator1D)
+ClassImp(RooGaussKronrodIntegrator1D);
 ;
 
 

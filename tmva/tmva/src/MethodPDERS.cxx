@@ -29,68 +29,63 @@
  * (http://tmva.sourceforge.net/LICENSE)                                           *
  ***********************************************************************************/
 
-//_______________________________________________________________________
-// Begin_Html
-/*
-  This is a generalization of the above Likelihood methods to <i>N</i><sub>var</sub>
-  dimensions, where <i>N</i><sub>var</sub> is the number of input variables
-  used in the MVA. If the multi-dimensional probability density functions
-  (PDFs) for signal and background were known, this method contains the entire
-  physical information, and is therefore optimal. Usually, kernel estimation
-  methods are used to approximate the PDFs using the events from the
-  training sample. <br><p></p>
+/*! \class TMVA::MethodPDERS
+\ingroup TMVA
 
-  A very simple probability density estimator (PDE) has been suggested
-  in <a href="http://arxiv.org/abs/hep-ex/0211019">hep-ex/0211019</a>. The
-  PDE for a given test event is obtained from counting the (normalized)
-  number of signal and background (training) events that occur in the
-  "vicinity" of the test event. The volume that describes "vicinity" is
-  user-defined. A <a href="http://arxiv.org/abs/hep-ex/0211019">search
-  method based on binary-trees</a> is used to effectively reduce the
-  selection time for the range search. Three different volume definitions
-  are optional: <br><p></p>
-  <ul>
-  <li><u>MinMax:</u>
-  the volume is defined in each dimension with respect
-  to the full variable range found in the training sample. </li>
-  <li><u>RMS:</u>
-  the volume is defined in each dimensions with respect
-  to the RMS estimated from the training sample. </li>
-  <li><u>Adaptive:</u>
-  a volume element is defined in each dimensions with
-  respect to the RMS estimated from the training sample. The overall
-  scale of the volume element is then determined for each event so
-  that the total number of events confined in the volume be within
-  a user-defined range.</li>
-  </ul><p></p>
-  The adaptive range search is used by default.
-  // End_Html
-  */
-//_______________________________________________________________________
+This is a generalization of the above Likelihood methods to \f$ N_{var} \f$
+dimensions, where \f$ N_{var} \f$ is the number of input variables
+used in the MVA. If the multi-dimensional probability density functions
+(PDFs) for signal and background were known, this method contains the entire
+physical information, and is therefore optimal. Usually, kernel estimation
+methods are used to approximate the PDFs using the events from the
+training sample.
+
+A very simple probability density estimator (PDE) has been suggested
+in [hep-ex/0211019](http://arxiv.org/abs/hep-ex/0211019). The
+PDE for a given test event is obtained from counting the (normalized)
+number of signal and background (training) events that occur in the
+"vicinity" of the test event. The volume that describes "vicinity" is
+user-defined. A [search method based on binary-trees](http://arxiv.org/abs/hep-ex/0211019)
+is used to effectively reduce the
+selection time for the range search. Three different volume definitions
+are optional:
+
+  - *MinMax:* the volume is defined in each dimension with respect
+      to the full variable range found in the training sample.
+  - *RMS:* the volume is defined in each dimensions with respect
+      to the RMS estimated from the training sample.
+  - *Adaptive:* a volume element is defined in each dimensions with
+      respect to the RMS estimated from the training sample. The overall
+      scale of the volume element is then determined for each event so
+      that the total number of events confined in the volume be within
+      a user-defined range.
+
+The adaptive range search is used by default.
+*/
 
 #include "TMVA/MethodPDERS.h"
 
-#include <assert.h>
-#include <algorithm>
-
-#include "TBuffer.h"
-#include "TFile.h"
-#include "TObjString.h"
-#include "TMath.h"
-
 #include "TMVA/BinaryTree.h"
 #include "TMVA/BinarySearchTree.h"
+#include "TMVA/Configurable.h"
 #include "TMVA/ClassifierFactory.h"
 #include "TMVA/Event.h"
+#include "TMVA/IMethod.h"
+#include "TMVA/MethodBase.h"
 #include "TMVA/MsgLogger.h"
 #include "TMVA/RootFinder.h"
 #include "TMVA/Tools.h"
 #include "TMVA/TransformationHandler.h"
 #include "TMVA/Types.h"
 
-//FIXME: Is that really needed?
-#define TMVA_MethodPDERS__countByHand__Debug__
-#undef  TMVA_MethodPDERS__countByHand__Debug__
+#include "ThreadLocalStorage.h"
+#include "TBuffer.h"
+#include "TFile.h"
+#include "TObjString.h"
+#include "TMath.h"
+
+#include <assert.h>
+#include <algorithm>
 
 namespace TMVA {
    const Bool_t MethodPDERS_UseFindRoot = kFALSE;
@@ -99,17 +94,16 @@ namespace TMVA {
 
 REGISTER_METHOD(PDERS)
 
-ClassImp(TMVA::MethodPDERS)
+ClassImp(TMVA::MethodPDERS);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// standard constructor for the PDERS method
 
-TMVA::MethodPDERS::MethodPDERS( const TString& jobName,
-                                const TString& methodTitle,
-                                DataSetInfo& theData,
-                                const TString& theOption,
-                                TDirectory* theTargetDir ) :
-   MethodBase( jobName, Types::kPDERS, methodTitle, theData, theOption, theTargetDir ),
+   TMVA::MethodPDERS::MethodPDERS( const TString& jobName,
+                                   const TString& methodTitle,
+                                   DataSetInfo& theData,
+                                   const TString& theOption) :
+   MethodBase( jobName, Types::kPDERS, methodTitle, theData, theOption),
    fFcnCall(0),
    fVRangeMode(kAdaptive),
    fKernelEstimator(kBox),
@@ -132,15 +126,16 @@ TMVA::MethodPDERS::MethodPDERS( const TString& jobName,
    fPrinted(0),
    fNormTree(0)
 {
+      fHelpVolume = NULL;
+      fBinaryTree = NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// construct MethodPDERS through from file
 
 TMVA::MethodPDERS::MethodPDERS( DataSetInfo& theData,
-                                const TString& theWeightFile,
-                                TDirectory* theTargetDir ) :
-   MethodBase( Types::kPDERS, theData, theWeightFile, theTargetDir ),
+                                const TString& theWeightFile) :
+   MethodBase( Types::kPDERS, theData, theWeightFile),
    fFcnCall(0),
    fVRangeMode(kAdaptive),
    fKernelEstimator(kBox),
@@ -163,6 +158,8 @@ TMVA::MethodPDERS::MethodPDERS( DataSetInfo& theData,
    fPrinted(0),
    fNormTree(0)
 {
+      fHelpVolume = NULL;
+      fBinaryTree = NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -219,37 +216,40 @@ TMVA::MethodPDERS::~MethodPDERS( void )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// define the options (their key words) that can be set in the option string
+/// define the options (their key words) that can be set in the option string.
+///
 /// know options:
-/// VolumeRangeMode   <string>  Method to determine volume range
-///    available values are:        MinMax
-///                                 Unscaled
-///                                 RMS
-///                                 kNN
-///                                 Adaptive <default>
+///  - VolumeRangeMode   <string>  Method to determine volume range
+///    available values are:
+///    - MinMax
+///    - Unscaled
+///    - RMS
+///    - kNN
+///    - Adaptive <default>
 ///
-/// KernelEstimator   <string>  Kernel estimation function
-///    available values are:        Box <default>
-///                                 Sphere
-///                                 Teepee
-///                                 Gauss
-///                                 Sinc3
-///                                 Sinc5
-///                                 Sinc7
-///                                 Sinc9
-///                                 Sinc11
-///                                 Lanczos2
-///                                 Lanczos3
-///                                 Lanczos5
-///                                 Lanczos8
-///                                 Trim
+///  - KernelEstimator   <string>  Kernel estimation function
+///    available values are:
+///    - Box <default>
+///    - Sphere
+///    - Teepee
+///    - Gauss
+///    - Sinc3
+///    - Sinc5
+///    - Sinc7
+///    - Sinc9
+///    - Sinc11
+///    - Lanczos2
+///    - Lanczos3
+///    - Lanczos5
+///    - Lanczos8
+///    - Trim
 ///
-/// DeltaFrac         <float>   Ratio of #EventsMin/#EventsMax for MinMax and RMS volume range
-/// NEventsMin        <int>     Minimum number of events for adaptive volume range
-/// NEventsMax        <int>     Maximum number of events for adaptive volume range
-/// MaxVIterations    <int>     Maximum number of iterations for adaptive volume range
-/// InitialScale      <float>   Initial scale for adaptive volume range
-/// GaussSigma        <float>   Width with respect to the volume size of Gaussian kernel estimator
+///  - DeltaFrac         <float>   Ratio of #EventsMin/#EventsMax for MinMax and RMS volume range
+///  - NEventsMin        <int>     Minimum number of events for adaptive volume range
+///  - NEventsMax        <int>     Maximum number of events for adaptive volume range
+///  - MaxVIterations    <int>     Maximum number of iterations for adaptive volume range
+///  - InitialScale      <float>   Initial scale for adaptive volume range
+///  - GaussSigma        <float>   Width with respect to the volume size of Gaussian kernel estimator
 
 void TMVA::MethodPDERS::DeclareOptions()
 {
@@ -331,15 +331,15 @@ void TMVA::MethodPDERS::ProcessOptions()
    // TODO: Add parameter validation
 
    Log() << kVERBOSE << "interpreted option string: vRangeMethod: '"
-           << (const char*)((fVRangeMode == kMinMax) ? "MinMax" :
-                            (fVRangeMode == kUnscaled) ? "Unscaled" :
-                            (fVRangeMode == kRMS   ) ? "RMS" : "Adaptive") << "'" << Endl;
+         << (const char*)((fVRangeMode == kMinMax) ? "MinMax" :
+                          (fVRangeMode == kUnscaled) ? "Unscaled" :
+                          (fVRangeMode == kRMS   ) ? "RMS" : "Adaptive") << "'" << Endl;
    if (fVRangeMode == kMinMax || fVRangeMode == kRMS)
       Log() << kVERBOSE << "deltaFrac: " << fDeltaFrac << Endl;
    else
       Log() << kVERBOSE << "nEventsMin/Max, maxVIterations, initialScale: "
-              << fNEventsMin << "  " << fNEventsMax
-              << "  " << fMaxVIterations << "  " << fInitialScale << Endl;
+            << fNEventsMin << "  " << fNEventsMax
+            << "  " << fMaxVIterations << "  " << fInitialScale << Endl;
    Log() << kVERBOSE << "KernelEstimator = " << fKernelString << Endl;
 }
 
@@ -352,9 +352,9 @@ void TMVA::MethodPDERS::ProcessOptions()
 void TMVA::MethodPDERS::Train( void )
 {
    if (IsNormalised()) Log() << kFATAL << "\"Normalise\" option cannot be used with PDERS; "
-                               << "please remove the option from the configuration string, or "
-                               << "use \"!Normalise\""
-                               << Endl;
+                             << "please remove the option from the configuration string, or "
+                             << "use \"!Normalise\""
+                             << Endl;
 
    CreateBinarySearchTree( Types::kTraining );
 
@@ -362,6 +362,7 @@ void TMVA::MethodPDERS::Train( void )
    SetVolumeElement();
 
    fInitializedVolumeEle = kTRUE;
+   ExitFromTraining();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -410,7 +411,7 @@ const std::vector< Float_t >& TMVA::MethodPDERS::GetRegressionValues()
 
    Event * evT = new Event(*ev);
    UInt_t ivar = 0;
-   for (std::vector<Float_t>::iterator it = fRegressionReturnVal->begin(); it != fRegressionReturnVal->end(); it++ ) {
+   for (std::vector<Float_t>::iterator it = fRegressionReturnVal->begin(); it != fRegressionReturnVal->end(); ++it ) {
       evT->SetTarget(ivar,(*it));
       ivar++;
    }
@@ -505,9 +506,9 @@ void TMVA::MethodPDERS::SetVolumeElement( void ) {
             Log() << kFATAL << "<SetVolumeElement> RMS not computed: " << fAverageRMS.size() << Endl;
          (*fDelta)[ivar] = fAverageRMS[ivar]*fDeltaFrac;
          Log() << kVERBOSE << "delta of var[" << (*fInputVars)[ivar]
-                 << "\t]: " << fAverageRMS[ivar]
-                 << "\t  |  comp with |max - min|: " << (GetXmax( ivar ) - GetXmin( ivar ))
-                 << Endl;
+               << "\t]: " << fAverageRMS[ivar]
+               << "\t  |  comp with |max - min|: " << (GetXmax( ivar ) - GetXmin( ivar ))
+               << Endl;
          break;
       case kMinMax:
          (*fDelta)[ivar] = (GetXmax( ivar ) - GetXmin( ivar ))*fDeltaFrac;
@@ -517,7 +518,7 @@ void TMVA::MethodPDERS::SetVolumeElement( void ) {
          break;
       default:
          Log() << kFATAL << "<SetVolumeElement> unknown range-set mode: "
-                 << fVRangeMode << Endl;
+               << fVRangeMode << Endl;
       }
       (*fShift)[ivar] = 0.5; // volume is centered around test value
    }
@@ -611,7 +612,7 @@ void TMVA::MethodPDERS::GetSample( const Event& e,
          fHelpVolume = volume;
 
          UpdateThis(); // necessary update of static pointer
-         RootFinder rootFinder( &IGetVolumeContentForRoot, 0.01, 50, 200, 10 );
+         RootFinder rootFinder( this, 0.01, 50, 200, 10 );
          Double_t scale = rootFinder.Root( (fNEventsMin + fNEventsMax)/2.0 );
 
          volume->ScaleInterval( scale );
@@ -700,7 +701,7 @@ void TMVA::MethodPDERS::GetSample( const Event& e,
       Volume v(*volume);
 
       events.clear();
-      // check number of signals in begining volume
+      // check number of signals in beginning volume
       Int_t kNNcount = fBinaryTree->SearchVolumeWithMaxLimit( &v, &events, fkNNMax+1 );
       //if this number is too large return fkNNMax+1
 
@@ -724,7 +725,7 @@ void TMVA::MethodPDERS::GetSample( const Event& e,
          t_times++;
 
          if (t_times == fMaxVIterations) {
-            Log() << kWARNING << "warining in event" << e
+            Log() << kWARNING << "warning in event" << e
                   << ": kNN volume adjustment reached "
                   << "max. #iterations (" << fMaxVIterations << ")"
                   << "[ kNN: " << fkNNMin << " " << fkNNMax << Endl;
@@ -749,7 +750,7 @@ void TMVA::MethodPDERS::GetSample( const Event& e,
 
          //counting the fkNNMin-th element
          std::vector<Double_t>::iterator wsk = distances->begin();
-         for (Int_t j=0;j<fkNNMin-1;j++) wsk++;
+         for (Int_t j=0;j<fkNNMin-1;++j) ++wsk;
          std::nth_element( distances->begin(), wsk, distances->end() );
 
          //getting all elements that are closer than fkNNMin-th element
@@ -843,19 +844,19 @@ Double_t TMVA::MethodPDERS::CKernelEstimate( const Event & event,
    Double_t pdfSumB = 0;
 
    // Iteration over sample points
-   for (std::vector<const BinarySearchTreeNode*>::iterator iev = events.begin(); iev != events.end(); iev++) {
+   for (std::vector<const BinarySearchTreeNode*>::iterator iev = events.begin(); iev != events.end(); ++iev) {
 
-   // First switch to the one dimensional distance
-   Double_t normalized_distance = GetNormalizedDistance (event, *(*iev), dim_normalization);
+      // First switch to the one dimensional distance
+      Double_t normalized_distance = GetNormalizedDistance (event, *(*iev), dim_normalization);
 
-   // always working within the hyperelipsoid, except for when we don't
-   // note that rejection ratio goes to 1 as nvar goes to infinity
-   if (normalized_distance > 1 && fKernelEstimator != kBox) continue;
+      // always working within the hyperelipsoid, except for when we don't
+      // note that rejection ratio goes to 1 as nvar goes to infinity
+      if (normalized_distance > 1 && fKernelEstimator != kBox) continue;
 
-   if ( (*iev)->GetClass()==fSignalClass )
-      pdfSumS += ApplyKernelFunction (normalized_distance) * (*iev)->GetWeight();
-   else
-      pdfSumB += ApplyKernelFunction (normalized_distance) * (*iev)->GetWeight();
+      if ( (*iev)->GetClass()==fSignalClass )
+         pdfSumS += ApplyKernelFunction (normalized_distance) * (*iev)->GetWeight();
+      else
+         pdfSumB += ApplyKernelFunction (normalized_distance) * (*iev)->GetWeight();
    }
    pdfSumS = KernelNormalization( pdfSumS < 0. ? 0. : pdfSumS );
    pdfSumB = KernelNormalization( pdfSumB < 0. ? 0. : pdfSumB );
@@ -884,13 +885,13 @@ void TMVA::MethodPDERS::RKernelEstimate( const Event & event,
    //   std::vector<Float_t> pdfSum;
    pdfSum->clear();
    Float_t pdfDiv = 0;
-    fNRegOut = 1; // for now, regression is just for 1 dimension
+   fNRegOut = 1; // for now, regression is just for 1 dimension
 
    for (Int_t ivar = 0; ivar < fNRegOut ; ivar++)
       pdfSum->push_back( 0 );
 
    // Iteration over sample points
-   for (std::vector<const BinarySearchTreeNode*>::iterator iev = events.begin(); iev != events.end(); iev++) {
+   for (std::vector<const BinarySearchTreeNode*>::iterator iev = events.begin(); iev != events.end(); ++iev) {
 
       // First switch to the one dimensional distance
       Double_t normalized_distance = GetNormalizedDistance (event, *(*iev), dim_normalization);
@@ -975,7 +976,7 @@ Double_t TMVA::MethodPDERS::ApplyKernelFunction (Double_t normalized_distance)
 Double_t TMVA::MethodPDERS::KernelNormalization (Double_t pdf)
 {
    // Caching jammed to disable function.
-   // It's not really useful afterall, badly implemented and untested :-)
+   // It's not really useful after all, badly implemented and untested :-)
    TTHREAD_TLS(Double_t) ret = 1.0;
 
    if (ret != 0.0) return ret*pdf;
@@ -1003,7 +1004,7 @@ Double_t TMVA::MethodPDERS::KernelNormalization (Double_t pdf)
    case kLanczos3:
    case kLanczos5:
    case kLanczos8:
-      // We use the full range integral here. Reasonable because the central lobe domintes it.
+      // We use the full range integral here. Reasonable because the central lobe dominates it.
       ret = 1 / TMath::Power ( 2., (Double_t) GetNvar() );
       break;
    default:
@@ -1122,10 +1123,10 @@ void TMVA::MethodPDERS::ReadWeightsFromXML( void* wghtnode)
    fBinaryTree->CalcStatistics();
    fBinaryTree->CountNodes();
    if (fBinaryTree->GetSumOfWeights( Types::kSignal ) > 0)
-     fScaleS = 1.0/fBinaryTree->GetSumOfWeights( Types::kSignal );
+      fScaleS = 1.0/fBinaryTree->GetSumOfWeights( Types::kSignal );
    else fScaleS = 1;
    if (fBinaryTree->GetSumOfWeights( Types::kBackground ) > 0)
-     fScaleB = 1.0/fBinaryTree->GetSumOfWeights( Types::kBackground );
+      fScaleB = 1.0/fBinaryTree->GetSumOfWeights( Types::kBackground );
    else fScaleB = 1;
    Log() << kINFO << "signal and background scales: " << fScaleS << " " << fScaleB << Endl;
    CalcAverages();

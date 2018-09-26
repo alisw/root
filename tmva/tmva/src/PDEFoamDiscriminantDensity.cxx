@@ -31,22 +31,21 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_____________________________________________________________________
-//
-// PDEFoamDiscriminantDensity
-//
-// This is a concrete implementation of PDEFoam.  Density(...)
-// estimates the discriminant density at a given phase-space point
-// using range-searching.  The discriminant D is defined as
-//
-//    D = #events with given class / total number of events
-// _____________________________________________________________________
+/*! \class TMVA::PDEFoamDiscriminantDensity
+\ingroup TMVA
 
+This is a concrete implementation of PDEFoam.  Density(...)
+estimates the discriminant density at a given phase-space point
+using range-searching.  The discriminant D is defined as
+
+     D = #events with given class / total number of events
+*/
 #include "TMVA/PDEFoamDiscriminantDensity.h"
 
 #include "TMVA/BinarySearchTree.h"
 #include "TMVA/BinarySearchTreeNode.h"
 #include "TMVA/MsgLogger.h"
+#include "TMVA/PDEFoamDensityBase.h"
 #include "TMVA/Types.h"
 #include "TMVA/Volume.h"
 
@@ -55,17 +54,17 @@
 #include <cmath>
 #include <vector>
 
-ClassImp(TMVA::PDEFoamDiscriminantDensity)
+ClassImp(TMVA::PDEFoamDiscriminantDensity);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TMVA::PDEFoamDiscriminantDensity::PDEFoamDiscriminantDensity()
-   : PDEFoamDensityBase()
+: PDEFoamDensityBase()
    , fClass(0)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
-/// User construcor:
+/// User constructor:
 ///
 /// Parameters:
 ///
@@ -115,7 +114,7 @@ Double_t TMVA::PDEFoamDiscriminantDensity::Density(std::vector<Double_t> &xev, D
    std::vector<Double_t> lb(GetBox().size());
    std::vector<Double_t> ub(GetBox().size());
 
-   // probevolume relative to hypercube with edge length 1:
+   // probe volume relative to hypercube with edge length 1:
    const Double_t probevolume_inv = 1.0 / GetBoxVolume();
 
    // set upper and lower bound for search volume

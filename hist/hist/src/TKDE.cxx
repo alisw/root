@@ -44,7 +44,7 @@
 #include "TKDE.h"
 
 
-ClassImp(TKDE)
+ClassImp(TKDE);
 
 class TKDE::TKernel {
    TKDE* fKDE;
@@ -503,11 +503,13 @@ void TKDE::SetMirroredEvents() {
    std::vector<Double_t> originalWeights = fEventWeights;
   if (fMirrorLeft) {
       fEvents.resize(2 * fNEvents, 0.0);
-      transform(fEvents.begin(), fEvents.begin() + fNEvents, fEvents.begin() + fNEvents, std::bind1st(std::minus<Double_t>(), 2 * fXMin));
+      transform(fEvents.begin(), fEvents.begin() + fNEvents, fEvents.begin() + fNEvents,
+                std::bind(std::minus<Double_t>(), 2 * fXMin, std::placeholders::_1));
    }
    if (fMirrorRight) {
       fEvents.resize((fMirrorLeft + 2) * fNEvents, 0.0);
-      transform(fEvents.begin(), fEvents.begin() + fNEvents, fEvents.begin() + (fMirrorLeft + 1) * fNEvents, std::bind1st(std::minus<Double_t>(), 2 * fXMax));
+      transform(fEvents.begin(), fEvents.begin() + fNEvents, fEvents.begin() + (fMirrorLeft + 1) * fNEvents,
+                std::bind(std::minus<Double_t>(), 2 * fXMax, std::placeholders::_1));
    }
    if (!fEventWeights.empty() && (fMirrorLeft || fMirrorRight)) {
       // copy weights too
@@ -718,7 +720,8 @@ void TKDE::TKernel::ComputeAdaptiveWeights() {
    }
    Double_t kAPPROX_GEO_MEAN = 0.241970724519143365; // 1 / TMath::Power(2 * TMath::Pi(), .5) * TMath::Exp(-.5). Approximated geometric mean over pointwise data (the KDE function is substituted by the "real Gaussian" pdf) and proportional to sigma. Used directly when the mirroring is enabled, otherwise computed from the data
    fKDE->fAdaptiveBandwidthFactor = fKDE->fUseMirroring ? kAPPROX_GEO_MEAN / fKDE->fSigmaRob : std::sqrt(std::exp(fKDE->fAdaptiveBandwidthFactor / fKDE->fData.size()));
-   transform(weights.begin(), weights.end(), fWeights.begin(), std::bind2nd(std::multiplies<Double_t>(), fKDE->fAdaptiveBandwidthFactor));
+   transform(weights.begin(), weights.end(), fWeights.begin(),
+             std::bind(std::multiplies<Double_t>(), std::placeholders::_1, fKDE->fAdaptiveBandwidthFactor));
    //printf("adaptive bandwidth factor % f weight 0 %f , %f \n",fKDE->fAdaptiveBandwidthFactor, weights[0],fWeights[0] );
 }
 
@@ -1127,12 +1130,13 @@ TF1* TKDE::GetKDEFunction(UInt_t npx, Double_t xMin , Double_t xMax) {
    TString name = "KDEFunc_"; name+= GetName();
    TString title = "KDE "; title+= GetTitle();
    if (xMin >= xMax) { xMin = fXMin; xMax = fXMax; }
+   //Do not register the TF1 to global list
+   bool previous = TF1::DefaultAddToGlobalList(kFALSE);
    TF1 * pdf = new TF1(name.Data(), this, xMin, xMax, 0);
+   TF1::DefaultAddToGlobalList(previous);
    if (npx > 0) pdf->SetNpx(npx);
    pdf->SetTitle(title);
-   TF1 * f =  (TF1*)pdf->Clone();
-   delete pdf;
-   return f;
+   return pdf;
 }
 
 TF1* TKDE::GetPDFUpperConfidenceInterval(Double_t confidenceLevel, UInt_t npx, Double_t xMin , Double_t xMax) {

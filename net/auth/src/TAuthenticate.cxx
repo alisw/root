@@ -40,6 +40,8 @@
 #include "TTimer.h"
 #include "TBase64.h"
 
+#include "rsafun.h"
+
 #ifndef R__LYNXOS
 #include <sys/stat.h>
 #endif
@@ -78,6 +80,15 @@ extern "C" char *crypt(const char *, const char *);
 #   include <openssl/rand.h>
 #   include <openssl/rsa.h>
 #   include <openssl/ssl.h>
+#   include <openssl/blowfish.h>
+#endif
+
+struct R__rsa_KEY: rsa_KEY { R__rsa_KEY(): rsa_KEY() {} };
+struct R__rsa_KEY_export: rsa_KEY_export {};
+struct R__rsa_NUMBER: rsa_NUMBER {};
+
+#ifdef R__SSL
+   static BF_KEY fgBFKey; // Blowfish symmetric key
 #endif
 
 // Statics initialization
@@ -100,12 +111,10 @@ Bool_t          TAuthenticate::fgReadHomeAuthrc = kTRUE; // on/off search for $H
 TString         TAuthenticate::fgRootAuthrc;    // Path to last rootauthrc-like file read
 Int_t           TAuthenticate::fgRSAKey  = -1;  // Default RSA key type to be used
 Int_t           TAuthenticate::fgRSAInit = 0;
-rsa_KEY         TAuthenticate::fgRSAPriKey;
-rsa_KEY_export  TAuthenticate::fgRSAPubExport[2] = {{0,0},{0,0}};
-rsa_KEY         TAuthenticate::fgRSAPubKey;
-#ifdef R__SSL
-BF_KEY          TAuthenticate::fgBFKey;
-#endif
+R__rsa_KEY         TAuthenticate::fgRSAPriKey;
+R__rsa_KEY_export R__fgRSAPubExport[2] = {{}, {}};
+R__rsa_KEY_export* TAuthenticate::fgRSAPubExport = R__fgRSAPubExport;
+R__rsa_KEY         TAuthenticate::fgRSAPubKey;
 SecureAuth_t    TAuthenticate::fgSecAuthHook;
 Bool_t          TAuthenticate::fgSRPPwd;
 TString         TAuthenticate::fgUser;
@@ -122,7 +131,7 @@ TVirtualMutex *gAuthenticateMutex = 0;
 Int_t StdCheckSecCtx(const char *, TRootSecContext *);
 
 
-ClassImp(TAuthenticate)
+ClassImp(TAuthenticate);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// rand() implementation using /udev/random or /dev/random, if available
@@ -842,8 +851,7 @@ negotia:
    }
 
    // Cleanup timer
-   if (alarm)
-      SafeDelete(alarm);
+   SafeDelete(alarm);
 
    return rc;
 
@@ -1664,38 +1672,40 @@ Int_t TAuthenticate::SshError(const char *errorfile)
       if (ferr) {
          // Get list of errors for which one should retry
          char *serr = StrDup(gEnv->GetValue("SSH.ErrorRetry", ""));
-         // Prepare for parsing getting rid of '"'s
-         Int_t lerr = strlen(serr);
-         char *pc = (char *)memchr(serr,'"',lerr);
-         while (pc) {
-            *pc = '\0';
-            pc = (char *)memchr(pc+1,'"',strlen(pc+1));
-         }
-         // Now read the file
-         char line[kMAXPATHLEN];
-         while (fgets(line,sizeof(line),ferr)) {
-            // Get rid of trailing '\n'
-            if (line[strlen(line)-1] == '\n')
-               line[strlen(line)-1] = '\0';
-            if (gDebug > 2)
-               Info("SshError","read line: %s",line);
-            pc = serr;
-            while (pc < serr + lerr) {
-               if (pc[0] == '\0' || pc[0] == ' ')
-                  pc++;
-               else {
-                  if (gDebug > 2)
-                     Info("SshError","checking error: '%s'",pc);
-                  if (strstr(line,pc))
-                     error = 1;
-                  pc += strlen(pc);
+         if (serr) {
+            // Prepare for parsing getting rid of '"'s
+            Int_t lerr = strlen(serr);
+            char *pc = (char *)memchr(serr,'"',lerr);
+            while (pc) {
+               *pc = '\0';
+               pc = (char *)memchr(pc+1,'"',strlen(pc+1));
+            }
+            // Now read the file
+            char line[kMAXPATHLEN];
+            while (fgets(line,sizeof(line),ferr)) {
+               // Get rid of trailing '\n'
+               if (line[strlen(line)-1] == '\n')
+                  line[strlen(line)-1] = '\0';
+               if (gDebug > 2)
+                  Info("SshError","read line: %s",line);
+               pc = serr;
+               while (pc < serr + lerr) {
+                  if (pc[0] == '\0' || pc[0] == ' ')
+                     pc++;
+                  else {
+                     if (gDebug > 2)
+                        Info("SshError","checking error: '%s'",pc);
+                     if (strstr(line,pc))
+                        error = 1;
+                     pc += strlen(pc);
+                  }
                }
             }
+            // Close file
+            fclose(ferr);
+            // Free allocated memory
+            delete [] serr;
          }
-         // Close file
-         fclose(ferr);
-         // Free allocated memory
-         if (serr) delete [] serr;
       }
    }
    return error;
@@ -1918,8 +1928,7 @@ Int_t TAuthenticate::SshAuth(TString &user)
          if (chmod(fileLoc, 0600) == -1) {
             Info("SshAuth", "fchmod error: %d", errno);
             ssh_rc = 2;
-         } else {
-            floc = fopen(fileLoc, "w");
+         } else if ((floc = fopen(fileLoc, "w"))) {
             if (reuse == 1) {
                // Send our public key
                if (fVersion > 4) {
@@ -3815,8 +3824,8 @@ Int_t TAuthenticate::SecureRecv(TSocket *sock, Int_t dec, Int_t key, char **str)
 ////////////////////////////////////////////////////////////////////////////////
 /// Store RSA public keys from export string rsaPubExport.
 
-Int_t TAuthenticate::DecodeRSAPublic(const char *rsaPubExport, rsa_NUMBER &rsa_n,
-                                     rsa_NUMBER &rsa_d, char **rsassl)
+Int_t TAuthenticate::DecodeRSAPublic(const char *rsaPubExport, R__rsa_NUMBER &rsa_n,
+                                     R__rsa_NUMBER &rsa_d, char **rsassl)
 {
    if (!rsaPubExport)
       return -1;
@@ -3870,10 +3879,8 @@ Int_t TAuthenticate::DecodeRSAPublic(const char *rsaPubExport, rsa_NUMBER &rsa_n
             TRSA_fun::RSA_num_sget()(&rsa_n, rsa_n_exp);
             TRSA_fun::RSA_num_sget()(&rsa_d, rsa_d_exp);
 
-            if (rsa_n_exp)
-               if (rsa_n_exp) delete[] rsa_n_exp;
-            if (rsa_d_exp)
-               if (rsa_d_exp) delete[] rsa_d_exp;
+            delete[] rsa_n_exp;
+            delete[] rsa_d_exp;
 
          } else
             ::Info("TAuthenticate::DecodeRSAPublic","bad format for input string");
@@ -3970,7 +3977,7 @@ Int_t TAuthenticate::SetRSAPublic(const char *rsaPubExport, Int_t klen)
       if (rsakey == 0) {
 
          // Decode input string
-         rsa_NUMBER rsa_n, rsa_d;
+         R__rsa_NUMBER rsa_n, rsa_d;
          rsakey = TAuthenticate::DecodeRSAPublic(rsaPubExport,rsa_n,rsa_d);
 
          // Save Public key
@@ -4010,7 +4017,7 @@ Int_t TAuthenticate::SendRSAPublicKey(TSocket *socket, Int_t key)
              "received key from server %ld bytes", (Long_t)strlen(serverPubKey));
 
    // Decode it
-   rsa_NUMBER rsa_n, rsa_d;
+   R__rsa_NUMBER rsa_n, rsa_d;
 #ifdef R__SSL
    char *tmprsa = 0;
    if (TAuthenticate::DecodeRSAPublic(serverPubKey,rsa_n,rsa_d,
@@ -4110,19 +4117,9 @@ Int_t TAuthenticate::ReadRootAuthrc()
          ::Info("TAuthenticate::ReadRootAuthrc",
                 "file %s cannot be read (errno: %d)", authrc, errno);
       delete [] authrc;
-#ifdef ROOTETCDIR
-      authrc = gSystem->ConcatFileName(ROOTETCDIR,"system.rootauthrc");
-#else
-      char etc[1024];
-#ifdef WIN32
-      snprintf(etc, 1024, "%s\\etc", gRootDir);
-#else
-      snprintf(etc, 1024, "%s/etc", gRootDir);
-#endif
-      authrc = gSystem->ConcatFileName(etc,"system.rootauthrc");
-#endif
+      authrc = gSystem->ConcatFileName(TROOT::GetEtcDir(), "system.rootauthrc");
       if (gDebug > 2)
-         ::Info("TAuthenticate::ReadRootAuthrc", "Checking system file:%s",authrc);
+         ::Info("TAuthenticate::ReadRootAuthrc", "Checking system file: %s", authrc);
       if (gSystem->AccessPathName(authrc, kReadPermission)) {
          if (gDebug > 1)
             ::Info("TAuthenticate::ReadRootAuthrc",
@@ -4207,6 +4204,7 @@ Int_t TAuthenticate::ReadRootAuthrc()
       if (!tmp) {
          ::Error("TAuthenticate::ReadRootAuthrc",
                  "could not allocate temporary buffer");
+         fclose(fd);
          return 0;
       }
       strlcpy(tmp, line, tmpSize);

@@ -10,12 +10,10 @@
  *                                                                           *
  *****************************************************************************/
 
-/**
-\file RooCFunction4Binding.cxx
-\class RooCFunction4Binding
-\ingroup Roofit
+/** \class RooCFunction4Binding
+    \ingroup Roofit
 
-RooCFunction4Binding is a templated implementation of class RooAbsReal that binds 
+RooCFunction4Binding is a templated implementation of class RooAbsReal that binds
 generic C(++) functions to a RooAbsReal argument thus allowing generic C++
 functions to be used as RooFit functions. Instances of function binding
 classes are fully functional RooFit function objects with one exception:
@@ -24,22 +22,16 @@ class cannot be persisted in a RooWorkspace without registering the function
 pointer first using RooCFunction4Binding<T1,T2,T3,T4>::register().
 **/
 
-#include "Riostream.h" 
-#include "RooCFunction4Binding.h" 
-#include "RooCintUtils.h"
+#include "Riostream.h"
+#include "RooCFunction4Binding.h"
 
 using namespace std ;
 
 #ifndef ROOFIT_R__NO_CLASS_TEMPLATE_SPECIALIZATION
 #define ROOFIT_R__NO_CLASS_TEMPLATE_SPECIALIZATION
-templateClassImp(RooCFunction4Binding) 
-templateClassImp(RooCFunction4Ref) 
-#endif 
-
-
-template<> RooCFunction4Map<double,double,double,double,double>* RooCFunction4Ref<double,double,double,double,double>::_fmap = 0 ;
-template<> RooCFunction4Map<double,double,double,double,int>* RooCFunction4Ref<double,double,double,double,int>::_fmap = 0 ;
-template<> RooCFunction4Map<double,double,double,double,bool>* RooCFunction4Ref<double,double,double,double,bool>::_fmap = 0 ;
+templateClassImp(RooCFunction4Binding);
+templateClassImp(RooCFunction4Ref);
+#endif
 
 
 namespace RooFit {

@@ -85,6 +85,30 @@ namespace cling {
     return Result(FD, true);
   }
 
+  bool DeclExtractor::ValidateCXXRecord(VarDecl* VD) const {
+    QualType QT = VD->getType();
+    if (CXXRecordDecl* RD = QT->getAsCXXRecordDecl()) {
+      if (RD->isLambda()) {
+        bool Copy = RD->getLambdaCaptureDefault() == LCD_ByCopy;
+        if (!Copy) {
+          for (auto&& Capture : RD->captures()) {
+            if ((Copy = Capture.getCaptureKind() == LCK_ByCopy)) break;
+          }
+        }
+        if (Copy) {
+          const int ID = m_Context->getDiagnostics().getCustomDiagID(
+              DiagnosticsEngine::Warning,
+              "captures will be by reference, not copy");
+          m_Context->getDiagnostics().Report(VD->getSourceRange().getBegin(),
+                                             ID);
+          // Warning is good enough, no reason to fail over this
+          return true;
+        }
+      }
+    }
+    return true;
+  }
+
   bool DeclExtractor::ExtractDecl(FunctionDecl* FD) {
     llvm::SmallVector<NamedDecl*, 4> TouchedDecls;
     CompoundStmt* CS = dyn_cast<CompoundStmt>(FD->getBody());
@@ -138,6 +162,8 @@ namespace cling {
           ND->setDeclContext(DC);
 
           if (VarDecl* VD = dyn_cast<VarDecl>(ND)) {
+            if (!ValidateCXXRecord(VD))
+              return false;
             VD->setStorageClass(SC_None);
           }
 
@@ -180,7 +206,7 @@ namespace cling {
       }
     }
 
-    CS->setStmts(*m_Context, Stmts.data(), Stmts.size());
+    CS->setStmts(*m_Context, Stmts);
 
     if (hasNoErrors && !TouchedDecls.empty()) {
       // Put the wrapper after its declarations. (Nice when AST dumping)
@@ -195,9 +221,8 @@ namespace cling {
     if (out.empty())
       out += '_';
 
-    out += "_init_order";
-    out += utils::Synthesize::UniquePrefix;
-    llvm::raw_string_ostream(out) << m_UniqueNameCounter++;
+    llvm::raw_string_ostream(out) << "_init_order"
+      << utils::Synthesize::UniquePrefix << m_UniqueNameCounter++;
   }
 
   void DeclExtractor::EnforceInitOrder(llvm::SmallVectorImpl<Stmt*>& Stmts){
@@ -255,7 +280,6 @@ namespace cling {
       VD->setInit(TheCall);
 
       Emit(VD); // Add it to the transaction for codegenning
-      VD->setHidden(true);
       TUDC->addHiddenDecl(VD);
       Stmts.clear();
       return;
@@ -277,7 +301,7 @@ namespace cling {
                               Sema::LookupTagName, Sema::ForRedeclaration
                               );
 
-        m_Sema->LookupName(Previous, S);
+        m_Sema->LookupQualifiedName(Previous, DC);
 
         // There is no function diagnosing the redeclaration of tags (eg. enums).
         // So either we have to do it by hand or we can call the top-most
@@ -290,8 +314,7 @@ namespace cling {
         LookupResult Previous(*m_Sema, ND->getDeclName(), ND->getLocation(),
                               Sema::LookupOrdinaryName, Sema::ForRedeclaration
                               );
-
-        m_Sema->LookupName(Previous, S);
+        m_Sema->LookupQualifiedName(Previous, DC);
         m_Sema->CheckVariableDeclaration(VD, Previous);
         if (VD->isInvalidDecl())
           return true;
@@ -514,7 +537,7 @@ namespace cling {
           SourceLocation KWLoc = NewTD->getLocStart();
           if (!m_Sema->isAcceptableTagRedeclaration(PrevTagDecl, Kind,
                                           NewTD->isThisDeclarationADefinition(),
-                                                    KWLoc, *Name)) {
+                                                    KWLoc, Name)) {
             bool SafeToContinue
               = (PrevTagDecl->getTagKind() != TTK_Enum && Kind != TTK_Enum);
 

@@ -28,6 +28,7 @@ End_Macro
 #include "TDirectoryFile.h"
 #include "TFile.h"
 #include "TBufferFile.h"
+#include "TBufferJSON.h"
 #include "TMapFile.h"
 #include "TClassTable.h"
 #include "TInterpreter.h"
@@ -50,7 +51,7 @@ End_Macro
 const UInt_t kIsBigFile = BIT(16);
 const Int_t  kMaxLen = 2048;
 
-ClassImp(TDirectoryFile)
+ClassImp(TDirectoryFile);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,6 +82,14 @@ TDirectoryFile::TDirectoryFile(const char *name, const char *title, Option_t *cl
    , fBufferSize(0), fSeekDir(0), fSeekParent(0), fSeekKeys(0)
    , fFile(0), fKeys(0)
 {
+   // We must not publish this objects to the list of RecursiveRemove (indirectly done
+   // by 'Appending' this object to it's mother) before the object is completely
+   // initialized.
+   // However a better option would be to delay the publishing until the very end,
+   // but it is currently done in the middle of the initialization (by Build which
+   // is a public interface) ....
+   R__LOCKGUARD(gROOTMutex);
+
    fName = name;
    fTitle = title;
 
@@ -126,8 +135,12 @@ TDirectoryFile::TDirectoryFile(const char *name, const char *title, Option_t *cl
 
    fModified = kFALSE;
 
-   R__LOCKGUARD2(gROOTMutex);
+   // Temporarily redundant, see comment on lock early in the function.
+   // R__LOCKGUARD(gROOTMutex);
    gROOT->GetUUIDs()->AddUUID(fUUID,this);
+   // We should really be doing this now rather than in Build, see
+   // comment at the start of the function.
+   // if (initMotherDir && strlen(GetName()) != 0) initMotherDir->Append(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -225,6 +238,11 @@ void TDirectoryFile::Append(TObject *obj, Bool_t replace /* = kFALSE */)
 
 Int_t TDirectoryFile::AppendKey(TKey *key)
 {
+   if (!fKeys) {
+      Error("AppendKey","TDirectoryFile not initialized yet.");
+      return 0;
+   }
+
    fModified = kTRUE;
 
    key->SetMotherDir(this);
@@ -316,6 +334,7 @@ void TDirectoryFile::Build(TFile* motherFile, TDirectory* motherDir)
    fSeekKeys   = 0;
    fList       = new THashList(100,50);
    fKeys       = new THashList(100,50);
+   fList->UseRWLock();
    fMother     = motherDir;
    fFile       = motherFile ? motherFile : TFile::CurrentFile();
    SetBit(kCanDelete);
@@ -426,7 +445,7 @@ TObject *TDirectoryFile::CloneObject(const TObject *obj, Bool_t autoadd /* = kTR
 TObject *TDirectoryFile::FindObjectAnyFile(const char *name) const
 {
    TFile *f;
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
    TIter next(gROOT->GetListOfFiles());
    while ((f = (TFile*)next())) {
       TObject *obj = f->GetList()->FindObject(name);
@@ -470,7 +489,7 @@ TDirectory *TDirectoryFile::GetDirectory(const char *apath,
    char *s = (char*)strchr(path, ':');
    if (s) {
       *s = '\0';
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       TDirectory *f = (TDirectory *)gROOT->GetListOfFiles()->FindObject(path);
       if (!f && !strcmp(gROOT->GetName(), path)) f = gROOT;
       if (s) *s = ':';
@@ -531,7 +550,7 @@ TDirectory *TDirectoryFile::GetDirectory(const char *apath,
 ////////////////////////////////////////////////////////////////////////////////
 /// Delete all objects from memory and directory structure itself.
 
-void TDirectoryFile::Close(Option_t *)
+void TDirectoryFile::Close(Option_t *option)
 {
    if (!fList || !fSeekDir) {
       return;
@@ -540,21 +559,24 @@ void TDirectoryFile::Close(Option_t *)
    // Save the directory key list and header
    Save();
 
-   Bool_t fast = kTRUE;
-   TObjLink *lnk = fList->FirstLink();
-   while (lnk) {
-      if (lnk->GetObject()->IsA() == TDirectoryFile::Class()) {fast = kFALSE;break;}
-      lnk = lnk->Next();
-   }
-   // Delete objects from directory list, this in turn, recursively closes all
-   // sub-directories (that were allocated on the heap)
-   // if this dir contains subdirs, we must use the slow option for Delete!
-   // we must avoid "slow" as much as possible, in particular Delete("slow")
-   // with a large number of objects (eg >10^5) would take for ever.
-   {
-      R__LOCKGUARD2(gROOTMutex);
-      if (fast) fList->Delete();
-      else      fList->Delete("slow");
+   Bool_t nodelete = option ? (!strcmp(option, "nodelete") ? kTRUE : kFALSE) : kFALSE;
+
+   if (!nodelete) {
+      Bool_t fast = kTRUE;
+      TObjLink *lnk = fList->FirstLink();
+      while (lnk) {
+         if (lnk->GetObject()->IsA() == TDirectoryFile::Class()) {fast = kFALSE;break;}
+         lnk = lnk->Next();
+      }
+      // Delete objects from directory list, this in turn, recursively closes all
+      // sub-directories (that were allocated on the heap)
+      // if this dir contains subdirs, we must use the slow option for Delete!
+      // we must avoid "slow" as much as possible, in particular Delete("slow")
+      // with a large number of objects (eg >10^5) would take for ever.
+      {
+         if (fast) fList->Delete();
+         else      fList->Delete("slow");
+      }
    }
 
    // Delete keys from key list (but don't delete the list header)
@@ -608,7 +630,8 @@ void TDirectoryFile::Delete(const char *namecycle)
    TDirectory::TContext ctxt(this);
    Short_t  cycle;
    char     name[kMaxLen];
-   DecodeNameCycle(namecycle, name, cycle, kMaxLen);
+   const char *nmcy = (namecycle) ? namecycle : "";
+   DecodeNameCycle(nmcy, name, cycle, kMaxLen);
 
    Int_t deleteall    = 0;
    Int_t deletetree   = 0;
@@ -1069,6 +1092,8 @@ Int_t TDirectoryFile::GetBufferSize() const
 
 TKey *TDirectoryFile::GetKey(const char *name, Short_t cycle) const
 {
+   if (!fKeys) return nullptr;
+
    // TIter::TIter() already checks for null pointers
    TIter next( ((THashList *)(GetListOfKeys()))->GetListForObject(name) );
 
@@ -1153,12 +1178,13 @@ TFile *TDirectoryFile::OpenFile(const char *name, Option_t *option,const char *f
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create a sub-directory and return a pointer to the created directory.
+/// Create a sub-directory "a" or a hierarchy of sub-directories "a/b/c/...".
 ///
-/// Returns 0 in case of error.
-/// Returns 0 if a directory with the same name already exists.
-/// Note that the directory name may be of the form "a/b/c" to create a hierarchy of directories.
-/// In this case, the function returns the pointer to the "a" directory if the operation is successful.
+/// Returns 0 in case of error or if a sub-directory (hierarchy) with the requested
+/// name already exists.
+/// Returns a pointer to the created sub-directory or to the top sub-directory of
+/// the hierarchy (in the above example, the returned TDirectory * always points
+/// to "a").
 
 TDirectory *TDirectoryFile::mkdir(const char *name, const char *title)
 {
@@ -1290,7 +1316,7 @@ void TDirectoryFile::ReadAll(Option_t* opt)
 
 Int_t TDirectoryFile::ReadKeys(Bool_t forceRead)
 {
-   if (fFile==0) return 0;
+   if (fFile==0 || fKeys==0) return 0;
 
    if (!fFile->IsBinary())
       return fFile->DirReadKeys(this);
@@ -1411,7 +1437,7 @@ void TDirectoryFile::ResetAfterMerge(TFileMergeInfo *info)
    fSeekParent = 0; // updated by Init
    fSeekKeys = 0;   // updated by Init
    // Does not change: fFile
-   TKey *key = (TKey*)fKeys->FindObject(fName);
+   TKey *key = fKeys ? (TKey*)fKeys->FindObject(fName) : nullptr;
    TClass *cl = IsA();
    if (key) {
       cl = TClass::GetClass(key->GetClassName());
@@ -1461,14 +1487,15 @@ void TDirectoryFile::Save()
    SaveSelf();
 
    // recursively save all sub-directories
-   if (fList) {
-      TObject *idcur;
-      TIter    next(fList);
-      while ((idcur = next())) {
-         if (idcur->InheritsFrom(TDirectoryFile::Class())) {
-            TDirectoryFile *dir = (TDirectoryFile*)idcur;
+   if (fList && fList->FirstLink()) {
+      auto lnk = fList->FirstLink()->shared_from_this();
+      while (lnk) {
+         TObject *idcur = lnk->GetObject();
+         if (idcur && idcur->InheritsFrom(TDirectoryFile::Class())) {
+            TDirectoryFile *dir = (TDirectoryFile *)idcur;
             dir->Save();
          }
+         lnk = lnk->NextSP();
       }
    }
 }
@@ -1481,6 +1508,10 @@ void TDirectoryFile::Save()
 /// If the operation is successful, it returns the number of bytes written to the file
 /// otherwise it returns 0.
 /// By default a message is printed. Use option "q" to not print the message.
+/// If filename contains ".json" extension, JSON representation of the object
+/// will be created and saved in the text file. Such file can be used in
+/// JavaScript ROOT (https://root.cern.ch/js/) to display object in web browser
+/// When creating JSON file, option string may contain compression level from 0 to 3 (default 0)
 
 Int_t TDirectoryFile::SaveObjectAs(const TObject *obj, const char *filename, Option_t *option) const
 {
@@ -1490,11 +1521,16 @@ Int_t TDirectoryFile::SaveObjectAs(const TObject *obj, const char *filename, Opt
    if (!filename || !filename[0]) {
       fname.Form("%s.root",obj->GetName());
    }
-   TFile *local = TFile::Open(fname.Data(),"recreate");
-   if (!local) return 0;
-   Int_t nbytes = obj->Write();
-   delete local;
-   if (dirsav) dirsav->cd();
+   Int_t nbytes = 0;
+   if (fname.Index(".json") > 0) {
+      nbytes = TBufferJSON::ExportToFile(fname, obj, option);
+   } else {
+      TFile *local = TFile::Open(fname.Data(),"recreate");
+      if (!local) return 0;
+      nbytes = obj->Write();
+      delete local;
+      if (dirsav) dirsav->cd();
+   }
    TString opt = option;
    opt.ToLower();
    if (!opt.Contains("q")) {
@@ -1670,7 +1706,8 @@ void TDirectoryFile::Streamer(TBuffer &b)
             fUUID.Streamer(b);
          }
       }
-      R__LOCKGUARD2(gROOTMutex);
+      fList->UseRWLock();
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetUUIDs()->AddUUID(fUUID,this);
       if (fSeekKeys) ReadKeys();
    } else {
@@ -1907,7 +1944,7 @@ Int_t TDirectoryFile::WriteTObject(const TObject *obj, const char *name, Option_
 /// TopClass *top = ....;
 /// directory->WriteObject(top,"name of object")
 /// ~~~
-/// See laso remarks in TDirectoryFile::WriteTObject
+/// See also remarks in TDirectoryFile::WriteTObject
 
 Int_t TDirectoryFile::WriteObjectAny(const void *obj, const char *classname, const char *name, Option_t *option, Int_t bufsize)
 {

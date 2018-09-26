@@ -46,7 +46,7 @@ const Int_t kIsBasic     = BIT(21);
 static Float_t gXsize, gYsize, gDx, gDy, gLabdx, gLabdy, gDxx, gCsize;
 static Int_t *gNtsons, *gNsons;
 
-ClassImp(TClassTree)
+ClassImp(TClassTree);
 
 /** \class TClassTree
 \ingroup gpad
@@ -195,11 +195,7 @@ TClassTree::TClassTree()
    fNdata    = 0;
    SetLabelDx();
    SetYoffset(0);
-#ifdef ROOTSRCDIR
-   SetSourceDir(".:src:" ROOTSRCDIR);
-#else
-   SetSourceDir(".:src:$ROOTSYS/src");
-#endif
+   SetSourceDir(".:src:" + TROOT::GetSourceDir());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -225,11 +221,7 @@ TClassTree::TClassTree(const char *name, const char *classes)
    fNdata    = 0;
    SetLabelDx();
    SetYoffset(0);
-#ifdef ROOTSRCDIR
-   SetSourceDir(".:src:" ROOTSRCDIR);
-#else
-   SetSourceDir(".:src:$ROOTSYS/src");
-#endif
+   SetSourceDir(".:src:" + TROOT::GetSourceDir());
 
    // draw list of classes (if specified)
    if (classes && strlen(classes)) {

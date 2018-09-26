@@ -1,5 +1,5 @@
 // @(#)root/tmva $Id$
-// Author: Andreas Hoecker, Joerg Stelzer, Helge Voss, Kai Voss 
+// Author: Andreas Hoecker, Joerg Stelzer, Helge Voss, Kai Voss
 
 /**********************************************************************************
  * Project: TMVA - a Root-integrated toolkit for multivariate data analysis       *
@@ -18,9 +18,9 @@
  *      Kai Voss        <Kai.Voss@cern.ch>       - U. of Victoria, Canada         *
  *                                                                                *
  * Copyright (c) 2005:                                                            *
- *      CERN, Switzerland                                                         * 
- *      U. of Victoria, Canada                                                    * 
- *      Heidelberg U., Germany                                                    * 
+ *      CERN, Switzerland                                                         *
+ *      U. of Victoria, Canada                                                    *
+ *      Heidelberg U., Germany                                                    *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
@@ -39,9 +39,7 @@
 //       criterion: 1-max(p, 1-p)                                       //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_SeparationBase
 #include "TMVA/SeparationBase.h"
-#endif
 
 namespace TMVA {
 
@@ -49,22 +47,22 @@ namespace TMVA {
 
    public:
 
-      // consturctor for the Misclassification error
+      // constructor for the Misclassification error
       MisClassificationError() { fName = "MisCl"; }
 
       // copy constructor
-      MisClassificationError( const MisClassificationError& g): SeparationBase(g) {}
+   MisClassificationError( const MisClassificationError& g): SeparationBase(g) {}
 
       // destructor
       virtual ~MisClassificationError() {}
 
       // Return the separation index: 1-max(p,1-p)
-      virtual Double_t  GetSeparationIndex( const Double_t &s, const Double_t &b );
+      virtual Double_t  GetSeparationIndex( const Double_t s, const Double_t b );
    protected:
 
-      ClassDef(MisClassificationError,0) // Implementation of the MisClassificationError as separation criterion
+      ClassDef(MisClassificationError,0); // Implementation of the MisClassificationError as separation criterion
    };
- 
+
 } // namespace TMVA
 
 #endif

@@ -21,9 +21,11 @@
 
 #include <string>
 
-ClassImp(TNtuple)
+ClassImp(TNtuple);
 
 /** \class TNtuple
+\ingroup tree
+
 A simple TTree restricted to a list of float variables only.
 
 Each variable goes to a separate branch.

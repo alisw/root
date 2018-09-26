@@ -31,30 +31,17 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_______________________________________________________________________
-//
-// Base class for all TMVA methods using artificial neural networks
-//
-//_______________________________________________________________________
+/*! \class TMVA::MethodANNBase
+\ingroup TMVA
 
-#include <vector>
-#include <cstdlib>
-#include <stdexcept>
-#if __cplusplus > 199711L
-#include <atomic>
-#endif
+Base class for all TMVA methods using artificial neural networks.
 
-#include "TString.h"
-#include "TTree.h"
-#include "TDirectory.h"
-#include "Riostream.h"
-#include "TRandom3.h"
-#include "TH2F.h"
-#include "TH1.h"
-#include "TMath.h"
+*/
 
-#include "TMVA/DataSetInfo.h"
 #include "TMVA/MethodBase.h"
+
+#include "TMVA/Configurable.h"
+#include "TMVA/DataSetInfo.h"
 #include "TMVA/MethodANNBase.h"
 #include "TMVA/MsgLogger.h"
 #include "TMVA/TNeuron.h"
@@ -67,9 +54,27 @@
 #include "TMVA/Ranking.h"
 #include "TMVA/Version.h"
 
+#include "TString.h"
+#include "TTree.h"
+#include "TDirectory.h"
+#include "Riostream.h"
+#include "TRandom3.h"
+#include "TH2F.h"
+#include "TH1.h"
+#include "TMath.h"
+#include "TMatrixT.h"
+
+#include <vector>
+#include <cstdlib>
+#include <stdexcept>
+#if __cplusplus > 199711L
+#include <atomic>
+#endif
+
+
 using std::vector;
 
-ClassImp(TMVA::MethodANNBase)
+ClassImp(TMVA::MethodANNBase);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// standard constructor
@@ -81,9 +86,8 @@ TMVA::MethodANNBase::MethodANNBase( const TString& jobName,
                                     Types::EMVA methodType,
                                     const TString& methodTitle,
                                     DataSetInfo& theData,
-                                    const TString& theOption,
-                                    TDirectory* theTargetDir )
-   : TMVA::MethodBase( jobName, methodType, methodTitle, theData, theOption, theTargetDir )
+                                    const TString& theOption )
+: TMVA::MethodBase( jobName, methodType, methodTitle, theData, theOption)
    , fEstimator(kMSE)
    , fUseRegulator(kFALSE)
    , fRandomSeed(0)
@@ -98,9 +102,8 @@ TMVA::MethodANNBase::MethodANNBase( const TString& jobName,
 
 TMVA::MethodANNBase::MethodANNBase( Types::EMVA methodType,
                                     DataSetInfo& theData,
-                                    const TString& theWeightFile,
-                                    TDirectory* theTargetDir )
-   : TMVA::MethodBase( methodType, theData, theWeightFile, theTargetDir )
+                                    const TString& theWeightFile)
+   : TMVA::MethodBase( methodType, theData, theWeightFile)
    , fEstimator(kMSE)
    , fUseRegulator(kFALSE)
    , fRandomSeed(0)
@@ -113,12 +116,14 @@ TMVA::MethodANNBase::MethodANNBase( Types::EMVA methodType,
 ////////////////////////////////////////////////////////////////////////////////
 /// define the options (their key words) that can be set in the option string
 /// here the options valid for ALL MVA methods are declared.
-/// know options: NCycles=xx              :the number of training cycles
-///               Normalize=kTRUE,kFALSe  :if normalised in put variables should be used
-///               HiddenLayser="N-1,N-2"  :the specification of the hidden layers
-///               NeuronType=sigmoid,tanh,radial,linar  : the type of activation function
-///                                                       used at the neuronn
 ///
+/// know options:
+///
+///  - NCycles=xx              :the number of training cycles
+///  - Normalize=kTRUE,kFALSe  :if normalised in put variables should be used
+///  - HiddenLayser="N-1,N-2"  :the specification of the hidden layers
+///  - NeuronType=sigmoid,tanh,radial,linar  : the type of activation function
+///    used at the neuron
 
 void TMVA::MethodANNBase::DeclareOptions()
 {
@@ -156,7 +161,7 @@ void TMVA::MethodANNBase::ProcessOptions()
 {
    if      ( DoRegression() || DoMulticlass())  fEstimatorS = "MSE";    //zjh
    else    fEstimatorS = "CE" ;                                         //hhv
-   if      (fEstimatorS == "MSE" )  fEstimator = kMSE;   
+   if      (fEstimatorS == "MSE" )  fEstimator = kMSE;
    else if (fEstimatorS == "CE")    fEstimator = kCE;      //zjh
    std::vector<Int_t>* layout = ParseLayoutString(fLayerSpec);
    BuildNetwork(layout);
@@ -194,7 +199,7 @@ std::vector<Int_t>* TMVA::MethodANNBase::ParseLayoutString(TString layerSpec)
       layout->push_back(1);  // one output node (for signal/background classification)
 
    int n = 0;
-   for( std::vector<Int_t>::iterator it = layout->begin(); it != layout->end(); it++ ){
+   for( std::vector<Int_t>::iterator it = layout->begin(); it != layout->end(); ++it ){
       n++;
    }
 
@@ -216,7 +221,7 @@ void TMVA::MethodANNBase::InitANNBase()
    fEstimatorHistTrain = NULL;
    fEstimatorHistTest  = NULL;
 
-   // reset monitorign histogram vectors
+   // reset monitoring histogram vectors
    fEpochMonHistS.clear();
    fEpochMonHistB.clear();
    fEpochMonHistW.clear();
@@ -295,7 +300,8 @@ void TMVA::MethodANNBase::BuildNetwork( std::vector<Int_t>* layout, std::vector<
    else Log()<<kWARNING<<"fEstimator="<<fEstimator<<"\tfEstimatorS="<<fEstimatorS<<Endl;
    if (fEstimator!=kMSE && fEstimator!=kCE) Log()<<kWARNING<<"Estimator type unspecified \t"<<Endl; //zjh
 
-   Log() << kINFO << "Building Network" << Endl;
+
+   Log() << kHEADER << "Building Network. " << Endl;
 
    DeleteNetwork();
    InitANNBase();
@@ -310,8 +316,8 @@ void TMVA::MethodANNBase::BuildNetwork( std::vector<Int_t>* layout, std::vector<
    fInputCalculator = iChooser.CreateNeuronInput(fNeuronInputType);
 
    fNetwork = new TObjArray();
-   fRegulatorIdx.clear();		//zjh
-   fRegulators.clear();			//zjh
+   fRegulatorIdx.clear();
+   fRegulators.clear();
    BuildLayers( layout, fromFile );
 
    // cache input layer and output neuron for fast access
@@ -325,9 +331,6 @@ void TMVA::MethodANNBase::BuildNetwork( std::vector<Int_t>* layout, std::vector<
    if (weights == NULL) InitWeights();
    else                 ForceWeights(weights);
 }
-
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// build the network layers
@@ -352,13 +355,13 @@ void TMVA::MethodANNBase::BuildLayers( std::vector<Int_t>* layout, Bool_t fromFi
       Int_t numNeurons = layer->GetEntriesFast();
       if (i!=0 && i!=numLayers-1) fRegulators.push_back(0.);  //zjh
       for (Int_t j = 0; j < numNeurons; j++) {
-         if (i==0) fRegulators.push_back(0.);			//zjh
+         if (i==0) fRegulators.push_back(0.);//zjh
          TNeuron* neuron = (TNeuron*)layer->At(j);
          Int_t numSynapses = neuron->NumPostLinks();
          for (Int_t k = 0; k < numSynapses; k++) {
             TSynapse* synapse = neuron->PostLinkAt(k);
             fSynapses->Add(synapse);
-            fRegulatorIdx.push_back(fRegulators.size()-1);	//zjh
+            fRegulatorIdx.push_back(fRegulators.size()-1);//zjh
          }
       }
    }
@@ -368,8 +371,8 @@ void TMVA::MethodANNBase::BuildLayers( std::vector<Int_t>* layout, Bool_t fromFi
 /// build a single layer with neurons and synapses connecting this
 /// layer to the previous layer
 
-void TMVA::MethodANNBase::BuildLayer( Int_t numNeurons, TObjArray* curLayer, 
-                                      TObjArray* prevLayer, Int_t layerIndex, 
+void TMVA::MethodANNBase::BuildLayer( Int_t numNeurons, TObjArray* curLayer,
+                                      TObjArray* prevLayer, Int_t layerIndex,
                                       Int_t numLayers, Bool_t fromFile )
 {
    TNeuron* neuron;
@@ -379,12 +382,12 @@ void TMVA::MethodANNBase::BuildLayer( Int_t numNeurons, TObjArray* curLayer,
          neuron->SetActivationEqn(fIdentity);
          neuron->SetBiasNeuron();
          neuron->ForceValue(1.0);
-         curLayer->Add(neuron);  
+         curLayer->Add(neuron);
       }
       else {
          neuron = new TNeuron();
          neuron->SetInputCalculator(fInputCalculator);
-         
+
          // input layer
          if (layerIndex == 0) {
             neuron->SetActivationEqn(fIdentity);
@@ -395,12 +398,12 @@ void TMVA::MethodANNBase::BuildLayer( Int_t numNeurons, TObjArray* curLayer,
             if (layerIndex == numLayers-1) {
                neuron->SetOutputNeuron();
                neuron->SetActivationEqn(fOutput);     //zjh
-         }
+            }
             // hidden layers
             else neuron->SetActivationEqn(fActivation);
             AddPreLinks(neuron, prevLayer);
          }
-         
+
          curLayer->Add(neuron);
       }
    }
@@ -441,8 +444,8 @@ void TMVA::MethodANNBase::AddPreLinks(TNeuron* neuron, TObjArray* prevLayer)
 
 void TMVA::MethodANNBase::InitWeights()
 {
-   PrintMessage("Initializing weights");
-   
+  PrintMessage("Initializing weights");
+
    // init synapse weights
    Int_t numSynapses = fSynapses->GetEntriesFast();
    TSynapse* synapse;
@@ -563,11 +566,11 @@ void TMVA::MethodANNBase::PrintLayer(TObjArray* layer) const
 {
    Int_t numNeurons = layer->GetEntriesFast();
    TNeuron* neuron;
-  
+
    for (Int_t j = 0; j < numNeurons; j++) {
       neuron = (TNeuron*) layer->At(j);
-      Log() << kINFO << "\tNeuron #" << j << " (LinksIn: " << neuron->NumPreLinks() 
-              << " , LinksOut: " << neuron->NumPostLinks() << ")" << Endl;
+      Log() << kINFO << "\tNeuron #" << j << " (LinksIn: " << neuron->NumPreLinks()
+            << " , LinksOut: " << neuron->NumPostLinks() << ")" << Endl;
       PrintNeuron( neuron );
    }
 }
@@ -577,10 +580,10 @@ void TMVA::MethodANNBase::PrintLayer(TObjArray* layer) const
 
 void TMVA::MethodANNBase::PrintNeuron(TNeuron* neuron) const
 {
-   Log() << kINFO 
-           << "\t\tValue:\t"     << neuron->GetValue()
-           << "\t\tActivation: " << neuron->GetActivationValue()
-           << "\t\tDelta: "      << neuron->GetDelta() << Endl;
+   Log() << kINFO
+         << "\t\tValue:\t"     << neuron->GetValue()
+         << "\t\tActivation: " << neuron->GetActivationValue()
+         << "\t\tDelta: "      << neuron->GetDelta() << Endl;
    Log() << kINFO << "\t\tActivationEquation:\t";
    neuron->PrintActivationEqn();
    Log() << kINFO << "\t\tLinksIn:" << Endl;
@@ -619,7 +622,7 @@ Double_t TMVA::MethodANNBase::GetMvaValue( Double_t* err, Double_t* errUpper )
 ////////////////////////////////////////////////////////////////////////////////
 /// get the regression value generated by the NN
 
-const std::vector<Float_t> &TMVA::MethodANNBase::GetRegressionValues() 
+const std::vector<Float_t> &TMVA::MethodANNBase::GetRegressionValues()
 {
    TNeuron* neuron;
 
@@ -655,14 +658,6 @@ const std::vector<Float_t> &TMVA::MethodANNBase::GetRegressionValues()
    return *fRegressionReturnVal;
 }
 
-
-
-
-
-
-
-
-
 ////////////////////////////////////////////////////////////////////////////////
 /// get the multiclass classification values generated by the NN
 
@@ -673,7 +668,7 @@ const std::vector<Float_t> &TMVA::MethodANNBase::GetMulticlassValues()
    TObjArray* inputLayer = (TObjArray*)fNetwork->At(0);
 
    const Event * ev = GetEvent();
-   
+
    for (UInt_t i = 0; i < GetNvar(); i++) {
       neuron = (TNeuron*)inputLayer->At(i);
       neuron->ForceValue( ev->GetValue(i) );
@@ -681,7 +676,7 @@ const std::vector<Float_t> &TMVA::MethodANNBase::GetMulticlassValues()
    ForceNetworkCalculations();
 
    // check the output of the network
- 
+
    if (fMulticlassReturnVal == NULL) fMulticlassReturnVal = new std::vector<Float_t>();
    fMulticlassReturnVal->clear();
    std::vector<Float_t> temp;
@@ -690,18 +685,18 @@ const std::vector<Float_t> &TMVA::MethodANNBase::GetMulticlassValues()
    for (UInt_t icls = 0; icls < nClasses; icls++) {
       temp.push_back(GetOutputNeuron( icls )->GetActivationValue() );
    }
-   
+
    for(UInt_t iClass=0; iClass<nClasses; iClass++){
       Double_t norm = 0.0;
       for(UInt_t j=0;j<nClasses;j++){
          if(iClass!=j)
             norm+=exp(temp[j]-temp[iClass]);
-         }
+      }
       (*fMulticlassReturnVal).push_back(1.0/(1.0+norm));
    }
 
 
-   
+
    return *fMulticlassReturnVal;
 }
 
@@ -709,7 +704,7 @@ const std::vector<Float_t> &TMVA::MethodANNBase::GetMulticlassValues()
 ////////////////////////////////////////////////////////////////////////////////
 /// create XML description of ANN classifier
 
-void TMVA::MethodANNBase::AddWeightsXMLTo( void* parent ) const 
+void TMVA::MethodANNBase::AddWeightsXMLTo( void* parent ) const
 {
    Int_t numLayers = fNetwork->GetEntriesFast();
    void* wght = gTools().xmlengine().NewChild(parent, 0, "Weights");
@@ -728,7 +723,7 @@ void TMVA::MethodANNBase::AddWeightsXMLTo( void* parent ) const
          void* neuronxml = gTools().AddChild(layerxml, "Neuron");
          gTools().AddAttr(neuronxml, "NSynapses", gTools().StringFromInt(numSynapses) );
          if(numSynapses==0) continue;
-	     std::stringstream s("");
+         std::stringstream s("");
          s.precision( 16 );
          for (Int_t k = 0; k < numSynapses; k++) {
             TSynapse* synapse = neuron->PostLinkAt(k);
@@ -761,7 +756,7 @@ void TMVA::MethodANNBase::AddWeightsXMLTo( void* parent ) const
          gTools().xmlengine().NewAttr(xmlRow, 0, "Index", gTools().StringFromInt(row) );
 
          // create the rows
-	     std::stringstream s("");
+         std::stringstream s("");
          s.precision( 16 );
          for( Int_t col = 0; col < nCols; ++col ){
             s << std::scientific << (*(elements+index)) << " ";
@@ -803,7 +798,7 @@ void TMVA::MethodANNBase::ReadWeightsFromXML( void* wghtnode )
    }
 
    BuildNetwork( layout, NULL, fromFile );
-   // use 'slow' (exact) TanH if processing old weighfile to ensure 100% compatible results
+   // use 'slow' (exact) TanH if processing old weigh file to ensure 100% compatible results
    // otherwise use the new default, the 'tast tanh' approximation
    if (GetTrainingTMVAVersionCode() < TMVA_VERSION(4,2,1) && fActivation->GetExpression().Contains("tanh")){
       TActivationTanh* act = dynamic_cast<TActivationTanh*>( fActivation );
@@ -870,7 +865,7 @@ void TMVA::MethodANNBase::ReadWeightsFromXML( void* wghtnode )
       return;
    } else {
       elements = new Double_t[nElements+10];
-   }     
+   }
 
 
 
@@ -884,8 +879,8 @@ void TMVA::MethodANNBase::ReadWeightsFromXML( void* wghtnode )
 
       std::stringstream s(content);
       for (Int_t iCol = 0; iCol<nCols; iCol++) { // columns
-	 s >> (*(elements+index));
-	 ++index;
+         s >> (*(elements+index));
+         ++index;
       }
       xmlRow = gTools().xmlengine().GetNext(xmlRow);
       ++row;
@@ -895,7 +890,6 @@ void TMVA::MethodANNBase::ReadWeightsFromXML( void* wghtnode )
 
    delete[] elements;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// destroy/clear the network then read it back in from the weights file
@@ -913,7 +907,7 @@ void TMVA::MethodANNBase::ReadWeightsFromStream( std::istream & istr)
    while (istr>> dummy >> weight) weights->push_back(weight); // use w/ slower write-out
 
    ForceWeights(weights);
-   
+
 
    delete weights;
 }
@@ -940,19 +934,19 @@ const TMVA::Ranking* TMVA::MethodANNBase::CreateRanking()
 
       // figure out average value of variable i
       Double_t meanS, meanB, rmsS, rmsB, xmin, xmax;
-      Statistics( TMVA::Types::kTraining, varName, 
+      Statistics( TMVA::Types::kTraining, varName,
                   meanS, meanB, rmsS, rmsB, xmin, xmax );
 
       avgVal = (TMath::Abs(meanS) + TMath::Abs(meanB))/2.0;
       double meanrms = (TMath::Abs(rmsS) + TMath::Abs(rmsB))/2.;
-      if (avgVal<meanrms) avgVal = meanrms;      
-      if (IsNormalised()) avgVal = 0.5*(1 + gTools().NormVariable( avgVal, GetXmin( ivar ), GetXmax( ivar ))); 
+      if (avgVal<meanrms) avgVal = meanrms;
+      if (IsNormalised()) avgVal = 0.5*(1 + gTools().NormVariable( avgVal, GetXmin( ivar ), GetXmax( ivar )));
 
       for (Int_t j = 0; j < numSynapses; j++) {
          synapse = neuron->PostLinkAt(j);
          importance += synapse->GetWeight() * synapse->GetWeight();
       }
-      
+
       importance *= avgVal * avgVal;
 
       fRanking->AddRank( Rank( varName, importance ) );
@@ -963,36 +957,36 @@ const TMVA::Ranking* TMVA::MethodANNBase::CreateRanking()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TMVA::MethodANNBase::CreateWeightMonitoringHists( const TString& bulkname, 
+void TMVA::MethodANNBase::CreateWeightMonitoringHists( const TString& bulkname,
                                                        std::vector<TH1*>* hv ) const
 {
    TH2F* hist;
    Int_t numLayers = fNetwork->GetEntriesFast();
 
    for (Int_t i = 0; i < numLayers-1; i++) {
-      
+
       TObjArray* layer1 = (TObjArray*)fNetwork->At(i);
       TObjArray* layer2 = (TObjArray*)fNetwork->At(i+1);
       Int_t numNeurons1 = layer1->GetEntriesFast();
       Int_t numNeurons2 = layer2->GetEntriesFast();
-      
+
       TString name = Form("%s%i%i", bulkname.Data(), i, i+1);
-      hist = new TH2F(name + "", name + "", 
+      hist = new TH2F(name + "", name + "",
                       numNeurons1, 0, numNeurons1, numNeurons2, 0, numNeurons2);
-      
+
       for (Int_t j = 0; j < numNeurons1; j++) {
-         
+
          TNeuron* neuron = (TNeuron*)layer1->At(j);
          Int_t numSynapses = neuron->NumPostLinks();
 
          for (Int_t k = 0; k < numSynapses; k++) {
-            
+
             TSynapse* synapse = neuron->PostLinkAt(k);
             hist->SetBinContent(j+1, k+1, synapse->GetWeight());
-            
+
          }
       }
-      
+
       if (hv) hv->push_back( hist );
       else {
          hist->Write();
@@ -1028,15 +1022,15 @@ void TMVA::MethodANNBase::WriteMonitoringHistosToFile() const
       epochdir = BaseDir()->mkdir( Form("EpochMonitoring_%4d",epochVal) );
 
    epochdir->cd();
-   for (std::vector<TH1*>::const_iterator it = fEpochMonHistS.begin(); it != fEpochMonHistS.end(); it++) {
+   for (std::vector<TH1*>::const_iterator it = fEpochMonHistS.begin(); it != fEpochMonHistS.end(); ++it) {
       (*it)->Write();
       delete (*it);
    }
-   for (std::vector<TH1*>::const_iterator it = fEpochMonHistB.begin(); it != fEpochMonHistB.end(); it++) {
+   for (std::vector<TH1*>::const_iterator it = fEpochMonHistB.begin(); it != fEpochMonHistB.end(); ++it) {
       (*it)->Write();
       delete (*it);
    }
-   for (std::vector<TH1*>::const_iterator it = fEpochMonHistW.begin(); it != fEpochMonHistW.end(); it++) {
+   for (std::vector<TH1*>::const_iterator it = fEpochMonHistW.begin(); it != fEpochMonHistW.end(); ++it) {
       (*it)->Write();
       delete (*it);
    }
@@ -1054,8 +1048,6 @@ void TMVA::MethodANNBase::MakeClassSpecific( std::ostream& fout, const TString& 
    fout << "   double ActivationFnc(double x) const;" << std::endl;
    fout << "   double OutputActivationFnc(double x) const;" << std::endl;     //zjh
    fout << std::endl;
-   fout << "   int fLayers;" << std::endl;
-   fout << "   int fLayerSize["<<numLayers<<"];" << std::endl;
    int numNodesFrom = -1;
    for (Int_t lIdx = 0; lIdx < numLayers; lIdx++) {
       int numNodesTo = ((TObjArray*)fNetwork->At(lIdx))->GetEntries();
@@ -1065,7 +1057,6 @@ void TMVA::MethodANNBase::MakeClassSpecific( std::ostream& fout, const TString& 
       numNodesFrom = numNodesTo;
    }
    fout << std::endl;
-   fout << "   double * fWeights["<<numLayers<<"];" << std::endl;
    fout << "};" << std::endl;
 
    fout << std::endl;
@@ -1073,12 +1064,6 @@ void TMVA::MethodANNBase::MakeClassSpecific( std::ostream& fout, const TString& 
    fout << "inline void " << className << "::Initialize()" << std::endl;
    fout << "{" << std::endl;
    fout << "   // build network structure" << std::endl;
-   fout << "   fLayers = " << numLayers << ";" << std::endl;
-   for (Int_t lIdx = 0; lIdx < numLayers; lIdx++) {
-      TObjArray* layer = (TObjArray*)fNetwork->At(lIdx);
-      int numNodes = layer->GetEntries();
-      fout << "   fLayerSize[" << lIdx << "] = " << numNodes << "; fWeights["<<lIdx<<"] = new double["<<numNodes<<"]; " << std::endl;
-   }
 
    for (Int_t i = 0; i < numLayers-1; i++) {
       fout << "   // weight matrix from layer " << i  << " to " << i+1 << std::endl;
@@ -1100,71 +1085,91 @@ void TMVA::MethodANNBase::MakeClassSpecific( std::ostream& fout, const TString& 
    // writing of the GetMvaValue__ method
    fout << "inline double " << className << "::GetMvaValue__( const std::vector<double>& inputValues ) const" << std::endl;
    fout << "{" << std::endl;
-   fout << "   if (inputValues.size() != (unsigned int)fLayerSize[0]-1) {" << std::endl;
-   fout << "      std::cout << \"Input vector needs to be of size \" << fLayerSize[0]-1 << std::endl;" << std::endl;
+   fout << "   if (inputValues.size() != (unsigned int)" << ((TObjArray *)fNetwork->At(0))->GetEntries() - 1 << ") {"
+        << std::endl;
+   fout << "      std::cout << \"Input vector needs to be of size \" << "
+        << ((TObjArray *)fNetwork->At(0))->GetEntries() - 1 << " << std::endl;" << std::endl;
    fout << "      return 0;" << std::endl;
    fout << "   }" << std::endl;
    fout << std::endl;
-   fout << "   for (int l=0; l<fLayers; l++)" << std::endl;
-   fout << "      for (int i=0; i<fLayerSize[l]; i++) fWeights[l][i]=0;" << std::endl;
-   fout << std::endl;
-   fout << "   for (int l=0; l<fLayers-1; l++)" << std::endl;
-   fout << "      fWeights[l][fLayerSize[l]-1]=1;" << std::endl;
-   fout << std::endl;
-   fout << "   for (int i=0; i<fLayerSize[0]-1; i++)" << std::endl;
-   fout << "      fWeights[0][i]=inputValues[i];" << std::endl;
-   fout << std::endl;
-   for (Int_t i = 0; i < numLayers-1; i++) {
-      fout << "   // layer " << i << " to " << i+1 << std::endl;
-      if (i+1 == numLayers-1) {
-         fout << "   for (int o=0; o<fLayerSize[" << i+1 << "]; o++) {" << std::endl;
-      } 
-      else {
-         fout << "   for (int o=0; o<fLayerSize[" << i+1 << "]-1; o++) {" << std::endl;
-      }
-      fout << "      for (int i=0; i<fLayerSize[" << i << "]; i++) {" << std::endl;
-      fout << "         double inputVal = fWeightMatrix" << i << "to" << i+1 << "[o][i] * fWeights[" << i << "][i];" << std::endl;
-
-      if ( fNeuronInputType == "sum") {
-         fout << "         fWeights[" << i+1 << "][o] += inputVal;" << std::endl;
-      } 
-      else if ( fNeuronInputType == "sqsum") {
-         fout << "         fWeights[" << i+1 << "][o] += inputVal*inputVal;" << std::endl;
-      } 
-      else { // fNeuronInputType == TNeuronInputChooser::kAbsSum
-         fout << "         fWeights[" << i+1 << "][o] += fabs(inputVal);" << std::endl;
-      }
-      fout << "      }" << std::endl;
-      if (i+1 != numLayers-1) // in the last layer no activation function is applied
-         fout << "      fWeights[" << i+1 << "][o] = ActivationFnc(fWeights[" << i+1 << "][o]);" << std::endl;
-      else	fout << "      fWeights[" << i+1 << "][o] = OutputActivationFnc(fWeights[" << i+1 << "][o]);" << std::endl; //zjh
-      fout << "   }" << std::endl;
+   for (Int_t lIdx = 1; lIdx < numLayers; lIdx++) {
+      TObjArray *layer = (TObjArray *)fNetwork->At(lIdx);
+      int numNodes = layer->GetEntries();
+      fout << "   std::array<double, " << numNodes << "> fWeights" << lIdx << " {{}};" << std::endl;
+   }
+   for (Int_t lIdx = 1; lIdx < numLayers - 1; lIdx++) {
+      fout << "   fWeights" << lIdx << ".back() = 1.;" << std::endl;
    }
    fout << std::endl;
-   fout << "   return fWeights[" << numLayers-1 << "][0];" << std::endl;   
+   for (Int_t i = 0; i < numLayers - 1; i++) {
+      fout << "   // layer " << i << " to " << i + 1 << std::endl;
+      if (i + 1 == numLayers - 1) {
+         fout << "   for (int o=0; o<" << ((TObjArray *)fNetwork->At(i + 1))->GetEntries() << "; o++) {" << std::endl;
+      } else {
+         fout << "   for (int o=0; o<" << ((TObjArray *)fNetwork->At(i + 1))->GetEntries() - 1 << "; o++) {"
+              << std::endl;
+      }
+      if (0 == i) {
+         fout << "      std::array<double, " << ((TObjArray *)fNetwork->At(i))->GetEntries()
+              << "> buffer; // no need to initialise" << std::endl;
+         fout << "      for (int i = 0; i<" << ((TObjArray *)fNetwork->At(i))->GetEntries() << " - 1; i++) {"
+              << std::endl;
+         fout << "         buffer[i] = fWeightMatrix" << i << "to" << i + 1 << "[o][i] * inputValues[i];" << std::endl;
+         fout << "      } // loop over i" << std::endl;
+         fout << "      buffer.back() = fWeightMatrix" << i << "to" << i + 1 << "[o]["
+              << ((TObjArray *)fNetwork->At(i))->GetEntries() - 1 << "];";
+      } else {
+         fout << "      std::array<double, " << ((TObjArray *)fNetwork->At(i))->GetEntries()
+              << "> buffer; // no need to initialise" << std::endl;
+         fout << "      for (int i=0; i<" << ((TObjArray *)fNetwork->At(i))->GetEntries() << "; i++) {" << std::endl;
+         fout << "         buffer[i] = fWeightMatrix" << i << "to" << i + 1 << "[o][i] * fWeights" << i << "[i];"
+              << std::endl;
+         fout << "      } // loop over i" << std::endl;
+      }
+      fout << "      for (int i=0; i<" << ((TObjArray *)fNetwork->At(i))->GetEntries() << "; i++) {" << std::endl;
+      if (fNeuronInputType == "sum") {
+         fout << "         fWeights" << i + 1 << "[o] += buffer[i];" << std::endl;
+      } else if (fNeuronInputType == "sqsum") {
+         fout << "         fWeights" << i + 1 << "[o] += buffer[i]*buffer[i];" << std::endl;
+      } else { // fNeuronInputType == TNeuronInputChooser::kAbsSum
+         fout << "         fWeights" << i + 1 << "[o] += fabs(buffer[i]);" << std::endl;
+      }
+      fout << "      } // loop over i" << std::endl;
+      fout << "    } // loop over o" << std::endl;
+      if (i + 1 == numLayers - 1) {
+         fout << "   for (int o=0; o<" << ((TObjArray *)fNetwork->At(i + 1))->GetEntries() << "; o++) {" << std::endl;
+      } else {
+         fout << "   for (int o=0; o<" << ((TObjArray *)fNetwork->At(i + 1))->GetEntries() - 1 << "; o++) {"
+              << std::endl;
+      }
+      if (i+1 != numLayers-1) // in the last layer no activation function is applied
+         fout << "      fWeights" << i + 1 << "[o] = ActivationFnc(fWeights" << i + 1 << "[o]);" << std::endl;
+      else
+         fout << "      fWeights" << i + 1 << "[o] = OutputActivationFnc(fWeights" << i + 1 << "[o]);"
+              << std::endl; // zjh
+      fout << "   } // loop over o" << std::endl;
+   }
+   fout << std::endl;
+   fout << "   return fWeights" << numLayers - 1 << "[0];" << std::endl;
    fout << "}" << std::endl;
 
    fout << std::endl;
    TString fncName = className+"::ActivationFnc";
    fActivation->MakeFunction(fout, fncName);
-   fncName = className+"::OutputActivationFnc";  	//zjh
-   fOutput->MakeFunction(fout, fncName); 			//zjh
+   fncName = className+"::OutputActivationFnc";   //zjh
+   fOutput->MakeFunction(fout, fncName);//zjh
 
-   fout << "   " << std::endl;
+   fout << std::endl;
    fout << "// Clean up" << std::endl;
-   fout << "inline void " << className << "::Clear() " << std::endl;
+   fout << "inline void " << className << "::Clear()" << std::endl;
    fout << "{" << std::endl;
-   fout << "   // clean up the arrays" << std::endl;
-   fout << "   for (int lIdx = 0; lIdx < "<<numLayers<<"; lIdx++) {" << std::endl;
-   fout << "      delete[] fWeights[lIdx];" << std::endl;
-   fout << "   }" << std::endl;
    fout << "}" << std::endl;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// who the hell makes such strange Debug flags that even use "global pointers"..
 
-Bool_t TMVA::MethodANNBase::Debug() const 
-{ 
-   return fgDEBUG; 
+Bool_t TMVA::MethodANNBase::Debug() const
+{
+   return fgDEBUG;
 }

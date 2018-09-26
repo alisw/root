@@ -34,9 +34,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_VariableTransformBase
 #include "TMVA/VariableTransformBase.h"
-#endif
 
 namespace TMVA {
 
@@ -71,7 +69,7 @@ namespace TMVA {
 
    private:
 
-      ClassDef(VariableRearrangeTransform,0) // Variable transformation: normalization
+      ClassDef(VariableRearrangeTransform,0); // Variable transformation: normalization
    };
 
 } // namespace TMVA

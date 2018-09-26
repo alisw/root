@@ -10,15 +10,13 @@
 #ifndef ROOT_snprintf
 #define ROOT_snprintf
 
-#ifndef ROOT_RConfig
-#include "RConfig.h"
-#endif
+#include <ROOT/RConfig.h>
+#include <stdio.h>
 
 #ifndef __CINT__
 
 #ifdef NEED_SNPRINTF
 
-#include <stdio.h>
 #include <stdarg.h>
 
 #ifdef __cplusplus

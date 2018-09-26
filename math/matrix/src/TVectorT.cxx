@@ -41,7 +41,7 @@
 #include "TROOT.h"
 #include "Varargs.h"
 
-templateClassImp(TVectorT)
+templateClassImp(TVectorT);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -260,7 +260,7 @@ TVectorT<Element>::TVectorT(const TMatrixTDiag_const<Element> &md) : TObject()
 /// TVectorT foo(1,3,0.0,1.0,1.5,"END");
 
 template<class Element>
-TVectorT<Element>::TVectorT(Int_t lwb,Int_t upb,Element va_(iv1), ...)
+TVectorT<Element>::TVectorT(Int_t lwb,Int_t upb,Double_t iv1, ...)
 {
    if (upb < lwb) {
       Error("TVectorT(Int_t, Int_t, ...)","upb(%d) < lwb(%d)",upb,lwb);
@@ -270,7 +270,7 @@ TVectorT<Element>::TVectorT(Int_t lwb,Int_t upb,Element va_(iv1), ...)
    Allocate(upb-lwb+1,lwb);
 
    va_list args;
-   va_start(args,va_(iv1));             // Init 'args' to the beginning of
+   va_start(args,iv1);             // Init 'args' to the beginning of
                                         // the variable length list of args
 
    (*this)(lwb) = iv1;
@@ -1842,7 +1842,7 @@ template<class Element>
 TVectorT<Element> &AddElemMult(TVectorT<Element> &target,Element scalar,
                       const TVectorT<Element> &source1,const TVectorT<Element> &source2)
 {
-   if (gMatrixCheck && !(AreCompatible(target,source1) && AreCompatible(target,source1))) {
+   if (gMatrixCheck && !(AreCompatible(target,source1) && AreCompatible(target,source2))) {
       Error("AddElemMult(TVectorT<Element> &,Element,const TVectorT<Element> &,const TVectorT<Element> &)",
              "vector's are incompatible");
       return target;
@@ -1875,7 +1875,7 @@ template<class Element>
 TVectorT<Element> &AddElemMult(TVectorT<Element> &target,Element scalar,
                       const TVectorT<Element> &source1,const TVectorT<Element> &source2,const TVectorT<Element> &select)
 {
-   if (gMatrixCheck && !( AreCompatible(target,source1) && AreCompatible(target,source1) &&
+   if (gMatrixCheck && !( AreCompatible(target,source1) && AreCompatible(target,source2) &&
           AreCompatible(target,select) )) {
       Error("AddElemMult(TVectorT<Element> &,Element,const TVectorT<Element> &,const TVectorT<Element> &,onst TVectorT<Element> &)",
              "vector's are incompatible");
@@ -1915,7 +1915,7 @@ template<class Element>
 TVectorT<Element> &AddElemDiv(TVectorT<Element> &target,Element scalar,
                      const TVectorT<Element> &source1,const TVectorT<Element> &source2)
 {
-   if (gMatrixCheck && !(AreCompatible(target,source1) && AreCompatible(target,source1))) {
+   if (gMatrixCheck && !(AreCompatible(target,source1) && AreCompatible(target,source2))) {
       Error("AddElemDiv(TVectorT<Element> &,Element,const TVectorT<Element> &,const TVectorT<Element> &)",
              "vector's are incompatible");
       return target;
@@ -1969,7 +1969,7 @@ template<class Element>
 TVectorT<Element> &AddElemDiv(TVectorT<Element> &target,Element scalar,
                      const TVectorT<Element> &source1,const TVectorT<Element> &source2,const TVectorT<Element> &select)
 {
-   if (gMatrixCheck && !( AreCompatible(target,source1) && AreCompatible(target,source1) &&
+   if (gMatrixCheck && !( AreCompatible(target,source1) && AreCompatible(target,source2) &&
           AreCompatible(target,select) )) {
       Error("AddElemDiv(TVectorT<Element> &,Element,const TVectorT<Element> &,const TVectorT<Element> &,onst TVectorT<Element> &)",
              "vector's are incompatible");
@@ -2359,15 +2359,9 @@ void TVectorT<Element>::Streamer(TBuffer &R__b)
    }
 }
 
-#ifndef ROOT_TMatrixFfwd
 #include "TMatrixFfwd.h"
-#endif
-#ifndef ROOT_TMatrixFSymfwd
 #include "TMatrixFSymfwd.h"
-#endif
-#ifndef ROOT_TMatrixFSparsefwd
 #include "TMatrixFSparsefwd.h"
-#endif
 
 template class TVectorT<Float_t>;
 
@@ -2417,15 +2411,9 @@ template void      Compare             <Float_t>         (const TVectorF &v1,con
 template Bool_t    VerifyVectorValue   <Float_t>         (const TVectorF &m,       Float_t   val,Int_t verbose,Float_t maxDevAllow);
 template Bool_t    VerifyVectorIdentity<Float_t>         (const TVectorF &m1,const TVectorF &m2, Int_t verbose,Float_t maxDevAllow);
 
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
-#ifndef ROOT_TMatrixDSymfwd
 #include "TMatrixDSymfwd.h"
-#endif
-#ifndef ROOT_TMatrixDSparsefwd
 #include "TMatrixDSparsefwd.h"
-#endif
 
 template class TVectorT<Double_t>;
 

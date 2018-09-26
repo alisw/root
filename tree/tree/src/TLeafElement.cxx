@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TLeafElement
+\ingroup tree
+
 A TLeaf for the general case when using the branches created via
 a TStreamerInfo (i.e. using TBranchElement).
 */
@@ -17,7 +19,9 @@ a TStreamerInfo (i.e. using TBranchElement).
 #include "TLeafElement.h"
 //#include "TMethodCall.h"
 
-ClassImp(TLeafElement)
+#include "TVirtualStreamerInfo.h"
+
+ClassImp(TLeafElement);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for LeafObject.
@@ -38,6 +42,17 @@ TLeafElement::TLeafElement(TBranch *parent, const char *name, Int_t id, Int_t ty
    fAbsAddress = 0;
    fID         = id;
    fType       = type;
+   if (type < TVirtualStreamerInfo::kObject) {
+      Int_t bareType = type;
+      if (bareType > TVirtualStreamerInfo::kOffsetP)
+         bareType -= TVirtualStreamerInfo::kOffsetP;
+      else if (bareType > TVirtualStreamerInfo::kOffsetL)
+         bareType -= TVirtualStreamerInfo::kOffsetL;
+
+      if ((bareType >= TVirtualStreamerInfo::kUChar && bareType <= TVirtualStreamerInfo::kULong)
+          || bareType == TVirtualStreamerInfo::kULong64)
+      SetUnsigned();
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -55,6 +70,21 @@ TLeafElement::~TLeafElement()
 TMethodCall *TLeafElement::GetMethodCall(const char * /*name*/)
 {
    return 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Copy/set fMinimum and fMaximum to include/be wide than those of the parameter
+
+Bool_t TLeafElement::IncludeRange(TLeaf *input)
+{
+    if (input) {
+        if (input->GetMaximum() > this->GetMaximum())
+            ((TBranchElement*)fBranch)->fMaximum = input->GetMaximum();
+        return kTRUE;
+    } else {
+        return kFALSE;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

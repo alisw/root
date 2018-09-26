@@ -9,15 +9,16 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TPackMgr                                                             //
-//                                                                      //
-// The PROOF package manager contains tools to  manage packages.        //
-// This class has been created to eliminate duplications, waiting for   //
-// a proper package manager for ROOT.                                   //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+/** \class TPackMgr
+\ingroup proofkernel
+
+The PROOF package manager contains tools to  manage packages.
+This class has been created to eliminate duplications, and to allow for
+standalone usage.
+
+*/
+
+#include "TPackMgr.h"
 
 #include "TError.h"
 #include "TFile.h"
@@ -29,30 +30,14 @@
 #include "TMethodArg.h"
 #include "TMethodCall.h"
 #include "TObjString.h"
-#include "TPackMgr.h"
 #include "TParameter.h"
 #include "TMap.h"
+#include "TProof.h" // for constants such as kRM and kLS.
 #include "TROOT.h"
 #include "TSystem.h"
 
-ClassImp(TPackMgr)
+ClassImp(TPackMgr);
 
-
-#ifndef R__WIN32
-const char* const kRM     = "/bin/rm -rf";
-const char* const kLS     = "/bin/ls -l";
-const char* const kUNTAR  = "%s -c %s/%s | (cd %s; tar xf -)";
-const char* const kUNTAR3 = "%s -c %s | (tar xf -)";
-const char* const kGUNZIP = "gunzip";
-#else
-const char* const kCP     = "copy";
-const char* const kRM     = "delete";
-const char* const kLS     = "dir";
-const char* const kUNTAR  = "...";
-const char* const kUNTAR2 = "...";
-const char* const kUNTAR3 = "...";
-const char* const kGUNZIP = "gunzip";
-#endif
 
 static void DefaultLogger(const char *msg) { Printf("%s", msg); }
 
@@ -64,6 +49,9 @@ THashList *TPackMgr::fgGlobalPackMgrList = 0; // list of package managers for gl
 TPackMgr::TPackMgr(const char *dir, const char *key)
          : fLogger(DefaultLogger), fName(key), fDir(dir), fLock(dir), fEnabledPackages(0)
 {
+   // Work with full names
+   if (gSystem->ExpandPathName(fDir))
+      Warning("TPackMgr", "problems expanding path '%s'", fDir.Data());
    // The lock file in temp
    TString lockname = TString::Format("%s/packdir-lock-%s",
                       gSystem->TempDirectory(), TString(fDir).ReplaceAll("/","%").Data());
@@ -602,10 +590,10 @@ Int_t TPackMgr::Clean(const char *pack)
 /// If 'pack' is null or empty all packages are cleared
 ///
 
-Int_t TPackMgr::Remove(const char *pack)
+Int_t TPackMgr::Remove(const char *pack, Bool_t dolock)
 {
    // Shared lock from here
-   TLockPathGuard lp(&fLock);
+   if (dolock) fLock.Lock();
    Int_t rc1 = 0, rc2 = 0, rc3 = 0;
    if (pack && strlen(pack)) {
       // remove package directory and par file
@@ -622,6 +610,7 @@ Int_t TPackMgr::Remove(const char *pack)
       // Clear all packages
       rc1 = gSystem->Exec(TString::Format("%s %s/*", kRM, fDir.Data()));
    }
+   if (dolock) fLock.Unlock();
    return (rc1 + rc2 + rc3);
 }
 
@@ -774,11 +763,12 @@ Int_t TPackMgr::Unpack(const char *pack, TMD5 *sum)
 /// is removed if existing.
 /// Returns 0 on success, <0 otherwise
 
-Int_t TPackMgr::Install(const char *par, Bool_t rmold)
+Int_t TPackMgr::Install(const char *parpath, Bool_t rmold)
 {
    Int_t rc = 0;
 
-   Info("Install", "installing %s ...", par);
+   Info("Install", "installing %s ...", parpath);
+   const char *par = gSystem->ExpandPathName(parpath);
 
    // Does par exists?
    if (gSystem->AccessPathName(par, kReadPermission)) {
@@ -796,7 +786,7 @@ Int_t TPackMgr::Install(const char *par, Bool_t rmold)
    // Dowload checksum file, if available
    TString dldir;
    if (GetDownloadDir(dldir) != 0) {
-      Error("Install", "could not create/get di download directory");
+      Error("Install", "could not create/get download directory");
       return -1;
    }
 
@@ -822,8 +812,9 @@ Int_t TPackMgr::Install(const char *par, Bool_t rmold)
       install = kFALSE;
       if (rmold) {
          // Asked to remove: do it
-         if (Remove(pack) < 0) {
+         if (Remove(pack, kFALSE) < 0) {
             Error("Install", "could not remove existing version of '%s'", pack.Data());
+            if (md5) delete md5;
             return -1;
          }
          install = kTRUE;
@@ -842,20 +833,21 @@ Int_t TPackMgr::Install(const char *par, Bool_t rmold)
          }
          // Now we need to compare with the local one
          sums = TMD5::FileChecksum(dest);
-         if (*sums != *md5) install = kTRUE;
+         if (sums && md5 && (*sums != *md5)) install = kTRUE;
       }
    }
+   if (sums) delete sums;
 
    // Install if required
    if (install) {
       if (!TFile::Cp(psrc, dest)) {
          Error("Install", "could not copy %s to %s", psrc.Data(), dest.Data());
+         if (md5) delete md5;
          return -1;
       }
    }
    md5d = TMD5::FileChecksum(dest);
 
-   if (sums) delete sums;
    if (md5 && *md5 != *md5d)
       Warning("Install", "checksums do not match:\n\tdownloaded:\t%s\n\texpected:\t%s",
                          md5d->AsString(), md5->AsString());
@@ -864,6 +856,7 @@ Int_t TPackMgr::Install(const char *par, Bool_t rmold)
       rc = -1;
    }
    if (md5) delete md5;
+   if (md5d) delete md5d;
    return rc;
 }
 

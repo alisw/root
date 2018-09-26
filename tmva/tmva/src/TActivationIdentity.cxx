@@ -1,5 +1,5 @@
 // @(#)root/tmva $Id$
-// Author: Matt Jachowski 
+// Author: Matt Jachowski
 
 /**********************************************************************************
  * Project: TMVA - a Root-integrated toolkit for multivariate data analysis       *
@@ -21,20 +21,26 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::TActivationIdentity
+\ingroup TMVA
+Identity activation function for TNeuron
+*/
+
 #include "TMVA/TActivationIdentity.h"
 
 #include "Rtypes.h"
+#include "TString.h"
 
 #include <iostream>
 
 class TString;
 
-ClassImp(TMVA::TActivationIdentity)
+ClassImp(TMVA::TActivationIdentity);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// writes the identity function source code
 
-void TMVA::TActivationIdentity::MakeFunction( std::ostream& fout, const TString& fncName ) 
+void TMVA::TActivationIdentity::MakeFunction( std::ostream& fout, const TString& fncName )
 {
    fout << "double " << fncName << "(double x) const {" << std::endl;
    fout << "   // identity" << std::endl;

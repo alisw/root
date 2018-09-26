@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TVirtualMonitoring
+\ingroup Base
+
 Provides the interface for externel Monitoring
 */
 
@@ -17,8 +19,8 @@ Provides the interface for externel Monitoring
 #include "TVirtualMonitoring.h"
 
 
-ClassImp(TVirtualMonitoringWriter)
-ClassImp(TVirtualMonitoringReader)
+ClassImp(TVirtualMonitoringWriter);
+ClassImp(TVirtualMonitoringReader);
 
 
 TVirtualMonitoringWriter *gMonitoringWriter = 0;

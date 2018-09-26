@@ -15,12 +15,10 @@
 Interface to the freetype 2 library.
 */
 
-// RConfigure.h is needed for TTFFONTDIR
-#include "RConfigure.h"
-
 #  include <ft2build.h>
 #  include FT_FREETYPE_H
 #  include FT_GLYPH_H
+#include "TROOT.h"
 #include "TTF.h"
 #include "TSystem.h"
 #include "TEnv.h"
@@ -51,7 +49,7 @@ FT_Face        TTF::fgFace[kTTMaxFonts];
 FT_CharMap     TTF::fgCharMap[kTTMaxFonts];
 TTF::TTGlyph   TTF::fgGlyphs[kMaxGlyphs];
 
-ClassImp(TTF)
+ClassImp(TTF);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Cleanup TTF environment.
@@ -415,13 +413,7 @@ Int_t TTF::SetTextFont(const char *fontname, Int_t italic)
 
    // try to load font (font must be in Root.TTFontPath resource)
    const char *ttpath = gEnv->GetValue("Root.TTFontPath",
-# ifdef TTFFONTDIR
-                                       TTFFONTDIR
-# else
-                                       "$(ROOTSYS)/fonts"
-# endif
-                                      );
-
+                                       TROOT::GetTTFFontDir());
    char *ttfont = gSystem->Which(ttpath, fontname, kReadPermission);
 
    if (!ttfont) {
@@ -479,7 +471,7 @@ Int_t TTF::SetTextFont(const char *fontname, Int_t italic)
 /// |---------|---------------------------|------------------|
 /// |      1  | times-medium-i-normal     | timesi.ttf       |
 /// |      2  | times-bold-r-normal       | timesbd.ttf      |
-/// |      3  | times-bold-i-normal       | timesi.ttf       |
+/// |      3  | times-bold-i-normal       | timesbi.ttf      |
 /// |      4  | helvetica-medium-r-normal | arial.ttf        |
 /// |      5  | helvetica-medium-o-normal | ariali.ttf       |
 /// |      6  | helvetica-bold-r-normal   | arialbd.ttf      |
@@ -543,12 +535,7 @@ void TTF::SetTextFont(Font_t fontnumber)
       // try to load font (font must be in Root.TTFontPath resource)
       // to see which fontset we have available
       const char *ttpath = gEnv->GetValue("Root.TTFontPath",
-#ifdef TTFFONTDIR
-                                          TTFFONTDIR
-#else
-                                          "$(ROOTSYS)/fonts"
-#endif
-                                         );
+                                          TROOT::GetTTFFontDir());
       char *ttfont = gSystem->Which(ttpath, gEnv->GetValue(fonttable[fontid][0], fonttable[fontid][1]), kReadPermission);
       if (ttfont) {
          delete [] ttfont;

@@ -28,12 +28,8 @@
 #ifndef ROOT_TMVA_PDEFoamKernelLinN
 #define ROOT_TMVA_PDEFoamKernelLinN
 
-#ifndef ROOT_TMVA_PDEFoam
 #include "TMVA/PDEFoam.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamKernelBase
 #include "TMVA/PDEFoamKernelBase.h"
-#endif
 
 namespace TMVA
 {
@@ -57,7 +53,7 @@ namespace TMVA
       virtual Float_t Estimate(PDEFoam*, std::vector<Float_t>&, ECellValue);
 
       ClassDef(PDEFoamKernelLinN, 1) // next neighbor PDEFoam kernel estimator
-   }; // end of PDEFoamKernelLinN
+         }; // end of PDEFoamKernelLinN
 }  // namespace TMVA
 
 #endif

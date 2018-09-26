@@ -1,5 +1,5 @@
-// @(#)root/tmva $Id$    
-// Author: Andreas Hoecker, Joerg Stelzer, Helge Voss, Kai Voss 
+// @(#)root/tmva $Id$
+// Author: Andreas Hoecker, Joerg Stelzer, Helge Voss, Kai Voss
 
 /**********************************************************************************
  * Project: TMVA - a Root-integrated toolkit for multivariate data analysis       *
@@ -46,11 +46,11 @@
  *                                                                                *
  *        This artificial neural network usually needs a relatively large         *
  *        number of cycles to converge (8000 and more). Overtraining can          *
- *        be efficienctly tested by comparing the signal and background           *
+ *        be efficiently tested by comparing the signal and background            *
  *        output of the NN for the events that were used for training and         *
  *        an independent data sample (with equal properties). If the separation   *
  *        performance is significantly better for the training sample, the        *
- *        NN interprets statistical effects, and is hence overtrained. In         * 
+ *        NN interprets statistical effects, and is hence overtrained. In         *
  *        this case, the number of cycles should be reduced, or the size          *
  *        of the training sample increased.                                       *
  *                                                                                *
@@ -61,9 +61,9 @@
  *      Kai Voss        <Kai.Voss@cern.ch>       - U. of Victoria, Canada         *
  *                                                                                *
  * Copyright (c) 2005:                                                            *
- *      CERN, Switzerland                                                         * 
- *      U. of Victoria, Canada                                                    * 
- *      MPI-K Heidelberg, Germany                                                 * 
+ *      CERN, Switzerland                                                         *
+ *      U. of Victoria, Canada                                                    *
+ *      MPI-K Heidelberg, Germany                                                 *
  *      LAPP, Annecy, France                                                      *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
@@ -85,15 +85,9 @@
 
 #include <iosfwd>
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
-#ifndef ROOT_TMVA_MethodCFMlpANN_Utils
 #include "TMVA/MethodCFMlpANN_Utils.h"
-#endif
-#ifndef ROOT_TMatrixF
 #include "TMatrixF.h"
-#endif
 
 namespace TMVA {
 
@@ -102,17 +96,15 @@ namespace TMVA {
    public:
 
       MethodCFMlpANN( const TString& jobName,
-                      const TString& methodTitle, 
+                      const TString& methodTitle,
                       DataSetInfo& theData,
-                      const TString& theOption = "3000:N-1:N-2",
-                      TDirectory* theTargetDir = 0 );
+                      const TString& theOption = "3000:N-1:N-2");
 
-      MethodCFMlpANN( DataSetInfo& theData, 
-                      const TString& theWeightFile,  
-                      TDirectory* theTargetDir = NULL );
+      MethodCFMlpANN( DataSetInfo& theData,
+                      const TString& theWeightFile);
 
       virtual ~MethodCFMlpANN( void );
-    
+
       virtual Bool_t HasAnalysisType( Types::EAnalysisType type, UInt_t numberClasses, UInt_t /*numberTargets*/ );
 
       // training method
@@ -133,9 +125,6 @@ namespace TMVA {
       Double_t GetData ( Int_t isel, Int_t ivar ) const { return (*fData)(isel, ivar); }
       Int_t    GetClass( Int_t ivar             ) const { return (*fClass)[ivar]; }
 
-      // static pointer to this object (required for external functions
-      //NOTE: removed static value for new design
-      MethodCFMlpANN* This( void );
 
       // ranking of input variables
       const Ranking* CreateRanking() { return 0; }
@@ -153,7 +142,7 @@ namespace TMVA {
 
       Int_t DataInterface( Double_t*, Double_t*, Int_t*, Int_t*, Int_t*, Int_t*,
                            Double_t*, Int_t*, Int_t* );
-  
+
    private:
 
       void PrintWeights( std::ostream & o ) const;
@@ -161,8 +150,6 @@ namespace TMVA {
       // the option handling methods
       void DeclareOptions();
       void ProcessOptions();
-      
-      MethodCFMlpANN* fgThis; // this carrier
 
       // LUTs
       TMatrixF       *fData;     // the (data,var) string
@@ -175,16 +162,17 @@ namespace TMVA {
       // additional member variables for the independent NN::Evaluation phase
       Double_t**    fYNN;       // weights
       TString       fLayerSpec; // the hidden layer specification string
+      Int_t MethodCFMlpANN_nsel;
 
       // auxiliary member functions
       Double_t EvalANN( std::vector<Double_t>&, Bool_t& isOK );
       void     NN_ava ( Double_t* );
       Double_t NN_fonc( Int_t, Double_t ) const;
 
-      // default initialisation 
+      // default initialisation
       void Init( void );
 
-      ClassDef(MethodCFMlpANN,0) // Interface for Clermond-Ferrand artificial neural network
+      ClassDef(MethodCFMlpANN,0); // Interface for Clermond-Ferrand artificial neural network
    };
 
 } // namespace TMVA

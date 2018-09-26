@@ -893,7 +893,7 @@ void TRootIconBox::RemoveAll()
 // ROOT object browser (looking like Windows Explorer).
 //_____________________________________________________________________________
 
-ClassImp(TRootBrowserLite)
+ClassImp(TRootBrowserLite);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create browser with a specified width and height.
@@ -1563,11 +1563,8 @@ TGFileContainer *TRootBrowserLite::GetIconBox() const
 
 void TRootBrowserLite::ReallyDelete()
 {
-   gInterpreter->DeleteGlobal(fBrowser);
-   if (fBrowser->IsOnHeap())
-      delete fBrowser; // will in turn delete this object
-   else
-      fBrowser->Destructor(); // will in turn delete this object
+   fBrowser->SetBrowserImp(0);
+   delete this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1962,14 +1959,7 @@ Bool_t TRootBrowserLite::ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2)
                   case kHelpAbout:
                      {
 #ifdef R__UNIX
-                        TString rootx;
-# ifdef ROOTBINDIR
-                        rootx = ROOTBINDIR;
-# else
-                        rootx = gSystem->Getenv("ROOTSYS");
-                        if (!rootx.IsNull()) rootx += "/bin";
-# endif
-                        rootx += "/root -a &";
+                        TString rootx = TROOT::GetBinDir() + "/root -a &";
                         gSystem->Exec(rootx);
 #else
 #ifdef WIN32

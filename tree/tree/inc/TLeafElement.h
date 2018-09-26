@@ -22,27 +22,25 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TLeaf
 #include "TLeaf.h"
-#endif
-#ifndef ROOT_TBranchElement
 #include "TBranchElement.h"
-#endif
 
 class TMethodCall;
 
 class TLeafElement : public TLeaf {
 
 protected:
-   char               *fAbsAddress;   //! Absolute leaf Address
-   Int_t               fID;           //element serial number in fInfo
-   Int_t               fType;         //leaf type
+   char               *fAbsAddress;   ///<! Absolute leaf Address
+   Int_t               fID;           ///<  element serial number in fInfo
+   Int_t               fType;         ///<  leaf type
 
 public:
    TLeafElement();
    TLeafElement(TBranch *parent, const char *name, Int_t id, Int_t type);
    virtual ~TLeafElement();
 
+   virtual Bool_t   CanGenerateOffsetArray() { return false; }
+   virtual Int_t   *GenerateOffsetArrayBase(Int_t /*base*/, Int_t /*events*/) { return nullptr; }
    virtual Int_t    GetLen() const {return ((TBranchElement*)fBranch)->GetNdata()*fLen;}
    TMethodCall     *GetMethodCall(const char *name);
    virtual Int_t    GetMaximum() const {return ((TBranchElement*)fBranch)->GetMaximum();}
@@ -55,6 +53,7 @@ public:
    template<typename T> T GetTypedValueSubArray(Int_t i=0, Int_t j=0) const {return ((TBranchElement*)fBranch)->GetTypedValue<T>(i, j, kTRUE);}
 
    virtual void    *GetValuePointer() const { return ((TBranchElement*)fBranch)->GetValuePointer(); }
+   virtual Bool_t   IncludeRange(TLeaf *);
    virtual Bool_t   IsOnTerminalBranch() const;
    virtual void     PrintValue(Int_t i=0) const {((TBranchElement*)fBranch)->PrintValue(i);}
    virtual void     SetLeafCount(TLeaf *leaf) {fLeafCount = leaf;}

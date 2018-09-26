@@ -36,7 +36,7 @@ class PTHLexer : public PreprocessorLexer {
   const unsigned char* LastHashTokPtr;
 
   /// PPCond - Pointer to a side table in the PTH file that provides a
-  ///  a consise summary of the preproccessor conditional block structure.
+  ///  a concise summary of the preprocessor conditional block structure.
   ///  This is used to perform quick skipping of conditional blocks.
   const unsigned char* PPCond;
 
@@ -44,8 +44,8 @@ class PTHLexer : public PreprocessorLexer {
   ///  to process when doing quick skipping of preprocessor blocks.
   const unsigned char* CurPPCondPtr;
 
-  PTHLexer(const PTHLexer &) LLVM_DELETED_FUNCTION;
-  void operator=(const PTHLexer &) LLVM_DELETED_FUNCTION;
+  PTHLexer(const PTHLexer &) = delete;
+  void operator=(const PTHLexer &) = delete;
 
   /// ReadToken - Used by PTHLexer to read tokens TokBuf.
   void ReadToken(Token& T);
@@ -64,8 +64,7 @@ protected:
   PTHLexer(Preprocessor& pp, FileID FID, const unsigned char *D,
            const unsigned char* ppcond, PTHManager &PM);
 public:
-
-  ~PTHLexer() {}
+  ~PTHLexer() override {}
 
   /// Lex - Return the next token.
   bool Lex(Token &Tok);

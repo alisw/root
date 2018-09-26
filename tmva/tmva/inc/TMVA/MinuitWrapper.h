@@ -33,12 +33,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMinuit
 #include "TMinuit.h"
-#endif
-#ifndef ROOT_TMVA_IFitterTarget
 #include "TMVA/IFitterTarget.h"
-#endif
 
 class TMinuit;
 
@@ -69,7 +65,7 @@ namespace TMVA {
       std::vector<Double_t> fParameters;   // vector holding the current parameters 
       Int_t                 fNumPar;       // number of parameters
       
-      ClassDef(MinuitWrapper,0) // Wrapper around TMinuit
+      ClassDef(MinuitWrapper,0); // Wrapper around TMinuit
    };
 
 } // namespace TMVA

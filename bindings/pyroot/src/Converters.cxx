@@ -24,6 +24,10 @@
 #include <utility>
 #include <sstream>
 
+// FIXME: Should refer to PyROOT::TParameter in the code.
+#ifdef R__CXXMODULES
+  #define TParameter PyROOT::TParameter
+#endif
 
 //- data ______________________________________________________________________
 namespace PyROOT {
@@ -35,6 +39,24 @@ namespace PyROOT {
    R__EXTERN PyObject* gNullPtrObject;
 
 }
+
+//- pretend-ctypes helpers ----------------------------------------------------
+#if PY_VERSION_HEX >= 0x02050000
+
+struct PyROOT_tagCDataObject { // non-public (but so far very stable)
+    PyObject_HEAD
+    char* b_ptr;
+};
+
+static inline PyTypeObject* GetCTypesType( const char* name ) {
+   PyObject* ct = PyImport_ImportModule( "ctypes" );
+   if ( ! ct ) return nullptr;
+   PyTypeObject* ct_t = (PyTypeObject*)PyObject_GetAttrString( ct, name );
+   Py_DECREF( ct );
+   return ct_t;
+}
+
+#endif
 
 //- custom helpers to check ranges --------------------------------------------
 
@@ -58,12 +80,12 @@ static inline Char_t PyROOT_PyUnicode_AsChar( PyObject* pyobject ) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// range-checking python integer to C++ unsigend short int conversion
+/// range-checking python integer to C++ unsigned short int conversion
 static inline UShort_t PyROOT_PyLong_AsUShort( PyObject* pyobject )
 {
 // prevent p2.7 silent conversions and do a range check
    if ( ! (PyLong_Check( pyobject ) || PyInt_Check( pyobject )) ) {
-      PyErr_SetString( PyExc_TypeError, "unsigned short converion expects an integer object" );
+      PyErr_SetString( PyExc_TypeError, "unsigned short conversion expects an integer object" );
       return (UShort_t)-1;
    }
    Long_t l = PyLong_AsLong( pyobject );
@@ -81,7 +103,7 @@ static inline Short_t PyROOT_PyLong_AsShort( PyObject* pyobject )
 {
 // prevent p2.7 silent conversions and do a range check
    if ( ! (PyLong_Check( pyobject ) || PyInt_Check( pyobject )) ) {
-      PyErr_SetString( PyExc_TypeError, "short int converion expects an integer object" );
+      PyErr_SetString( PyExc_TypeError, "short int conversion expects an integer object" );
       return (Short_t)-1;
    }
    Long_t l = PyLong_AsLong( pyobject );
@@ -102,7 +124,7 @@ static inline Long_t PyROOT_PyLong_AsStrictLong( PyObject* pyobject )
 // check; earlier pythons may raise a SystemError which should be avoided as
 // it is confusing
    if ( ! (PyLong_Check( pyobject ) || PyInt_Check( pyobject )) ) {
-      PyErr_SetString( PyExc_TypeError, "int/long converion expects an integer object" );
+      PyErr_SetString( PyExc_TypeError, "int/long conversion expects an integer object" );
       return (Long_t)-1;
    }
    return (Long_t)PyLong_AsLong( pyobject );
@@ -132,7 +154,7 @@ Bool_t PyROOT::TConverter::ToMemory( PyObject*, void* )
 Bool_t PyROOT::T##name##Converter::SetArg(                                    \
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )        \
 {                                                                             \
-/* convert <pyobject> to C++ 'type', set arg for call */                      \
+/* convert `pyobject` to C++ 'type', set arg for call */                      \
    type val = (type)F2( pyobject );                                           \
    if ( val == (type)-1 && PyErr_Occurred() )                                 \
       return kFALSE;                                                          \
@@ -198,7 +220,7 @@ Bool_t PyROOT::TConst##name##RefConverter::SetArg(                            \
 Bool_t PyROOT::TConst##name##RefConverter::SetArg(                            \
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )        \
 {                                                                             \
-/* convert <pyobject> to C++ <<type>>, set arg for call, allow int -> char */ \
+/* convert `pyobject` to C++ <<type>>, set arg for call, allow int -> char */ \
    type val = (type)ExtractChar( pyobject, #type, low, high );                \
    if ( val == (type)-1 && PyErr_Occurred() )                                 \
       return kFALSE;                                                          \
@@ -214,7 +236,7 @@ Bool_t PyROOT::TConst##name##RefConverter::SetArg(                            \
 Bool_t PyROOT::T##name##Converter::SetArg(                                    \
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )        \
 {                                                                             \
-/* convert <pyobject> to C++ <<type>>, set arg for call, allow int -> char */ \
+/* convert `pyobject` to C++ <<type>>, set arg for call, allow int -> char */ \
    Long_t val = ExtractChar( pyobject, #type, low, high );                    \
    if ( val == -1 && PyErr_Occurred() )                                       \
       return kFALSE;                                                          \
@@ -259,26 +281,34 @@ Bool_t PyROOT::T##name##Converter::ToMemory( PyObject* value, void* address ) \
 PYROOT_IMPLEMENT_BASIC_CONVERTER( Long, Long_t, Long_t, PyLong_FromLong, PyROOT_PyLong_AsStrictLong, 'l' )
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ long&, set arg for call
+/// convert `pyobject` to C++ long&, set arg for call
 
 Bool_t PyROOT::TLongRefConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
 {
-   if ( ! TCustomInt_CheckExact( pyobject ) ) {
-      if ( PyInt_Check( pyobject ) )
-         PyErr_SetString( PyExc_TypeError, "use ROOT.Long for pass-by-ref of longs" );
-      return kFALSE;
+#if PY_VERSION_HEX < 0x03000000
+   if ( TCustomInt_CheckExact( pyobject ) ) {
+      para.fValue.fVoidp = (void*)&((PyIntObject*)pyobject)->ob_ival;
+      para.fTypeCode = 'V';
+      return kTRUE;
+   }
+#endif
+
+#if PY_VERSION_HEX < 0x02050000
+   PyErr_SetString( PyExc_TypeError, "use ROOT.Long for pass-by-ref of longs" );
+   return kFALSE;
+#endif
+
+// TODO: this keeps a refcount to the type .. it should be okay to drop that
+   static PyTypeObject* c_long_type = GetCTypesType( "c_long" );
+   if ( Py_TYPE( pyobject ) == c_long_type ) {
+      para.fValue.fVoidp = (void*)((PyROOT_tagCDataObject*)pyobject)->b_ptr;
+      para.fTypeCode = 'V';
+      return kTRUE;
    }
 
-#if PY_VERSION_HEX < 0x03000000
-   para.fValue.fVoidp = (void*)&((PyIntObject*)pyobject)->ob_ival;
-   para.fTypeCode = 'V';
-   return kTRUE;
-#else
-   (void)para;
-   PyErr_SetString( PyExc_NotImplementedError, "int pass-by-ref not implemented in p3" );
-   return kFALSE; // there no longer is a PyIntObject in p3
-#endif
+   PyErr_SetString( PyExc_TypeError, "use ctypes.c_long for pass-by-ref of longs" );
+   return kFALSE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -297,21 +327,28 @@ PYROOT_IMPLEMENT_BASIC_CONST_REF_CONVERTER( LongLong,  Long64_t,  PyLong_AsLongL
 PYROOT_IMPLEMENT_BASIC_CONST_REF_CONVERTER( ULongLong, ULong64_t, PyLongOrInt_AsULong64 )
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ (pseudo)int&, set arg for call
+/// convert `pyobject` to C++ (pseudo)int&, set arg for call
 
 Bool_t PyROOT::TIntRefConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
 {
-   if ( TCustomInt_CheckExact( pyobject ) ) {
 #if PY_VERSION_HEX < 0x03000000
+   if ( TCustomInt_CheckExact( pyobject ) ) {
       para.fValue.fVoidp = (void*)&((PyIntObject*)pyobject)->ob_ival;
       para.fTypeCode = 'V';
       return kTRUE;
-#else
-      PyErr_SetString( PyExc_NotImplementedError, "int pass-by-ref not implemented in p3" );
-      return kFALSE; // there no longer is a PyIntObject in p3
-#endif
    }
+#endif
+
+#if PY_VERSION_HEX >= 0x02050000
+// TODO: this keeps a refcount to the type .. it should be okay to drop that
+   static PyTypeObject* c_int_type = GetCTypesType( "c_int" );
+   if ( Py_TYPE( pyobject ) == c_int_type ) {
+      para.fValue.fVoidp = (void*)((PyROOT_tagCDataObject*)pyobject)->b_ptr;
+      para.fTypeCode = 'V';
+      return kTRUE;
+   }
+#endif
 
 // alternate, pass pointer from buffer
    int buflen = Utility::GetBuffer( pyobject, 'i', sizeof(int), para.fValue.fVoidp );
@@ -320,12 +357,16 @@ Bool_t PyROOT::TIntRefConverter::SetArg(
       return kTRUE;
    };
 
+#if PY_VERSION_HEX < 0x02050000
    PyErr_SetString( PyExc_TypeError, "use ROOT.Long for pass-by-ref of ints" );
+#else
+   PyErr_SetString( PyExc_TypeError, "use ctypes.c_int for pass-by-ref of ints" );
+#endif
    return kFALSE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ bool, allow int/long -> bool, set arg for call
+/// convert `pyobject` to C++ bool, allow int/long -> bool, set arg for call
 
 PYROOT_IMPLEMENT_BASIC_CONVERTER( Bool, Bool_t, Long_t, PyInt_FromLong, PyROOT_PyLong_AsBool, 'l' )
 
@@ -341,7 +382,7 @@ PYROOT_IMPLEMENT_BASIC_CONVERTER( UShort, UShort_t, Long_t, PyInt_FromLong,  PyR
 PYROOT_IMPLEMENT_BASIC_CONVERTER( Int,    Int_t,    Long_t, PyInt_FromLong,  PyROOT_PyLong_AsStrictLong, 'l' )
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ unsigned long, set arg for call
+/// convert `pyobject` to C++ unsigned long, set arg for call
 
 Bool_t PyROOT::TULongConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
@@ -402,7 +443,7 @@ PYROOT_IMPLEMENT_BASIC_CONVERTER( Double, Double_t, Double_t, PyFloat_FromDouble
 PYROOT_IMPLEMENT_BASIC_CONVERTER( LongDouble, LongDouble_t, LongDouble_t, PyFloat_FromDouble, PyFloat_AsDouble, 'D' )
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ double&, set arg for call
+/// convert `pyobject` to C++ double&, set arg for call
 
 Bool_t PyROOT::TDoubleRefConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
@@ -440,7 +481,7 @@ Bool_t PyROOT::TVoidConverter::SetArg( PyObject*, TParameter&, TCallContext* )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ long long, set arg for call
+/// convert `pyobject` to C++ long long, set arg for call
 
 Bool_t PyROOT::TLongLongConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
@@ -476,7 +517,7 @@ Bool_t PyROOT::TLongLongConverter::ToMemory( PyObject* value, void* address )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ unsigned long long, set arg for call
+/// convert `pyobject` to C++ unsigned long long, set arg for call
 
 Bool_t PyROOT::TULongLongConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
@@ -702,7 +743,7 @@ PyObject* PyROOT::TVoidArrayConverter::FromMemory( void* address )
       Py_INCREF( gNullPtrObject );
       return gNullPtrObject;
    }
-   return BufFac_t::Instance()->PyBuffer_FromMemory( (Long_t*)*(ptrdiff_t**)address, 1 );
+   return BufFac_t::Instance()->PyBuffer_FromMemory( (Long_t*)*(ptrdiff_t**)address, sizeof(void*) );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -756,7 +797,7 @@ Bool_t PyROOT::T##name##ArrayRefConverter::SetArg(                           \
                                                                              \
 PyObject* PyROOT::T##name##ArrayConverter::FromMemory( void* address )       \
 {                                                                            \
-   return BufFac_t::Instance()->PyBuffer_FromMemory( *(type**)address, fSize );\
+   return BufFac_t::Instance()->PyBuffer_FromMemory( *(type**)address, fSize * sizeof(type) );\
 }                                                                            \
                                                                              \
 Bool_t PyROOT::T##name##ArrayConverter::ToMemory( PyObject* value, void* address )\
@@ -789,7 +830,7 @@ PYROOT_IMPLEMENT_ARRAY_CONVERTER( Float,  Float_t,  'f' )
 PYROOT_IMPLEMENT_ARRAY_CONVERTER( Double, Double_t, 'd' )
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ long long*, set arg for call
+/// convert `pyobject` to C++ long long*, set arg for call
 
 Bool_t PyROOT::TLongLongArrayConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* ctxt )
@@ -848,9 +889,10 @@ Bool_t PyROOT::T##name##Converter::ToMemory( PyObject* value, void* address ) \
 
 PYROOT_IMPLEMENT_STRING_AS_PRIMITIVE_CONVERTER( TString,   TString,     Data, Length )
 PYROOT_IMPLEMENT_STRING_AS_PRIMITIVE_CONVERTER( STLString, std::string, c_str, size )
+PYROOT_IMPLEMENT_STRING_AS_PRIMITIVE_CONVERTER( STLStringView, std::string_view, data, size )
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ instance*, set arg for call
+/// convert `pyobject` to C++ instance*, set arg for call
 
 Bool_t PyROOT::TCppObjectConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* ctxt )
@@ -938,56 +980,118 @@ Bool_t PyROOT::TCppObjectConverter::ToMemory( PyObject* value, void* address )
 // TODO: CONSOLIDATE ValueCpp, RefCpp, and CppObject ...
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ instance, set arg for call
+/// convert `pyobject` to C++ instance, set arg for call
 
 Bool_t PyROOT::TValueCppObjectConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
 {
-   if ( ! ObjectProxy_Check( pyobject ) )
-      return kFALSE;
+   if ( ObjectProxy_Check( pyobject ) ) {
+      ObjectProxy* pyobj = (ObjectProxy*)pyobject;
+      if ( pyobj->ObjectIsA() && Cppyy::IsSubtype( pyobj->ObjectIsA(), fClass ) ) {
+         // calculate offset between formal and actual arguments
+         para.fValue.fVoidp = pyobj->GetObject();
+         if ( ! para.fValue.fVoidp )
+            return kFALSE;
 
-   ObjectProxy* pyobj = (ObjectProxy*)pyobject;
-   if ( pyobj->ObjectIsA() && Cppyy::IsSubtype( pyobj->ObjectIsA(), fClass ) ) {
-   // calculate offset between formal and actual arguments
-      para.fValue.fVoidp = pyobj->GetObject();
-      if ( ! para.fValue.fVoidp )
-         return kFALSE;
-
-      if ( pyobj->ObjectIsA() != fClass ) {
-         para.fValue.fLong += Cppyy::GetBaseOffset(
+         if ( pyobj->ObjectIsA() != fClass ) {
+            para.fValue.fLong += Cppyy::GetBaseOffset(
             pyobj->ObjectIsA(), fClass, para.fValue.fVoidp, 1 /* up-cast */ );
+         }
+
+         para.fTypeCode = 'V';
+         return kTRUE;
+      }
+   }
+   else if ( PyTuple_Check( pyobject ) ){  // It is a Python tuple (equivalent to a C++ initializer list)
+
+      // instantiate an object proxy of this class
+      if( ! fObjProxy ) {
+         // retrieve the python class from which we will create an instance
+         PyObject* pyclass = CreateScopeProxy( fClass );
+         if ( ! pyclass ) return kFALSE;                  // error has been set in CreateScopeProxy
+         fObjProxy = (ObjectProxy*)((PyTypeObject*)pyclass)->tp_new( (PyTypeObject*)pyclass, NULL, NULL );
+         Py_DECREF( pyclass );
       }
 
+      if( fObjProxy->GetObject() ) {
+         // the actual C++ object was already created (in a previous call), so we need to destroy it
+         Cppyy::CallDestructor( fObjProxy->ObjectIsA(), fObjProxy->GetObject() );
+         Cppyy::Deallocate( fObjProxy->ObjectIsA(), fObjProxy->GetObject() );
+         fObjProxy->Set(nullptr);
+      }
+
+      // get the constructor (i.e. __init__)
+      PyObject* constructor = PyObject_GetAttr( (PyObject*)fObjProxy, PyStrings::gInit );
+      if( ! constructor ) return kFALSE;
+
+      // call the constructor with the arguments in the given tuple
+      PyObject* obj = PyObject_CallObject( constructor, pyobject );
+      Py_DECREF( constructor );
+      if ( ! obj ) return kFALSE;
+      Py_DECREF( obj );
+
+      para.fValue.fVoidp = fObjProxy->GetObject();
       para.fTypeCode = 'V';
       return kTRUE;
-   }
 
+   }
    return kFALSE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ instance&, set arg for call
+/// convert `pyobject` to C++ instance&, set arg for call
 
 Bool_t PyROOT::TRefCppObjectConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
 {
-   if ( ! ObjectProxy_Check( pyobject ) )
-      return kFALSE;
+   if ( ObjectProxy_Check( pyobject ) ) {   // It is PyROOT object
+      ObjectProxy* pyobj = (ObjectProxy*)pyobject;
+      if ( pyobj->ObjectIsA() && Cppyy::IsSubtype( pyobj->ObjectIsA(), fClass ) ) {
+      // calculate offset between formal and actual arguments
+            para.fValue.fVoidp = pyobj->GetObject();
+            if ( pyobj->ObjectIsA() != fClass ) {
+            para.fValue.fLong += Cppyy::GetBaseOffset(
+                  pyobj->ObjectIsA(), fClass, para.fValue.fVoidp, 1 /* up-cast */ );
+            }
 
-   ObjectProxy* pyobj = (ObjectProxy*)pyobject;
-   if ( pyobj->ObjectIsA() && Cppyy::IsSubtype( pyobj->ObjectIsA(), fClass ) ) {
-   // calculate offset between formal and actual arguments
-      para.fValue.fVoidp = pyobj->GetObject();
-      if ( pyobj->ObjectIsA() != fClass ) {
-         para.fValue.fLong += Cppyy::GetBaseOffset(
-            pyobj->ObjectIsA(), fClass, para.fValue.fVoidp, 1 /* up-cast */ );
+            para.fTypeCode = 'V';
+            return kTRUE;
+      } else if ( ! TClass::GetClass( Cppyy::GetFinalName( fClass ).c_str() )->GetClassInfo() ) {
+      // assume "user knows best" to allow anonymous reference passing
+            para.fValue.fVoidp = pyobj->GetObject();
+            para.fTypeCode = 'V';
+            return kTRUE;
+      }
+   }
+   else if ( PyTuple_Check( pyobject ) ){  // It is a Python tuple (equivalent to a C++ initializer list)
+
+      // instantiate an object proxy of this class
+      if( ! fObjProxy ) {
+         // retrieve the python class from which we will create an instance
+         PyObject* pyclass = CreateScopeProxy( fClass );
+         if ( ! pyclass ) return kFALSE;                  // error has been set in CreateScopeProxy
+         fObjProxy = (ObjectProxy*)((PyTypeObject*)pyclass)->tp_new( (PyTypeObject*)pyclass, NULL, NULL );
+         Py_DECREF( pyclass );
       }
 
-      para.fTypeCode = 'V';
-      return kTRUE;
-   } else if ( ! TClass::GetClass( Cppyy::GetFinalName( fClass ).c_str() )->GetClassInfo() ) {
-   // assume "user knows best" to allow anonymous reference passing
-      para.fValue.fVoidp = pyobj->GetObject();
+      if( fObjProxy->GetObject() ) {
+         // the actual C++ object was already created (in a previous call), so we need to destroy it
+         Cppyy::CallDestructor( fObjProxy->ObjectIsA(), fObjProxy->GetObject() );
+         Cppyy::Deallocate( fObjProxy->ObjectIsA(), fObjProxy->GetObject() );
+         fObjProxy->Set(nullptr);
+      }
+
+      // get the constructor (i.e. __init__)
+      PyObject* constructor = PyObject_GetAttr( (PyObject*)fObjProxy, PyStrings::gInit );
+      if( ! constructor ) return kFALSE;
+
+      // call the constructor with the arguments in the given tuple
+      PyObject* obj = PyObject_CallObject( constructor, pyobject );
+      Py_DECREF( constructor );
+      if ( ! obj ) return kFALSE;
+      Py_DECREF( obj );
+
+      para.fValue.fVoidp = fObjProxy->GetObject();
       para.fTypeCode = 'V';
       return kTRUE;
    }
@@ -996,7 +1100,7 @@ Bool_t PyROOT::TRefCppObjectConverter::SetArg(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ instance**, set arg for call
+/// convert `pyobject` to C++ instance**, set arg for call
 
 template <bool ISREFERENCE>
 Bool_t PyROOT::TCppObjectPtrConverter<ISREFERENCE>::SetArg(
@@ -1011,7 +1115,11 @@ Bool_t PyROOT::TCppObjectPtrConverter<ISREFERENCE>::SetArg(
          ((ObjectProxy*)pyobject)->Release();
 
    // set pointer (may be null) and declare success
-      para.fValue.fVoidp = &((ObjectProxy*)pyobject)->fObject;
+      if( ((ObjectProxy*)pyobject)->fFlags & ObjectProxy::kIsReference)
+        // If given object is already a reference (aka pointer) then we should not take the address of it
+        para.fValue.fVoidp = ((ObjectProxy*)pyobject)->fObject;
+      else
+        para.fValue.fVoidp = &((ObjectProxy*)pyobject)->fObject;
       para.fTypeCode = ISREFERENCE ? 'V' : 'p';
       return kTRUE;
    }
@@ -1060,7 +1168,7 @@ template class TCppObjectPtrConverter<false>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ instance**, set arg for call
+/// convert `pyobject` to C++ instance**, set arg for call
 
 Bool_t PyROOT::TCppObjectArrayConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* txt */ )
@@ -1127,7 +1235,7 @@ Bool_t PyROOT::TSTLIteratorConverter::SetArg(
 // -- END CLING WORKAROUND
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ void*&, set arg for call
+/// convert `pyobject` to C++ void*&, set arg for call
 
 Bool_t PyROOT::TVoidPtrRefConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
@@ -1142,7 +1250,7 @@ Bool_t PyROOT::TVoidPtrRefConverter::SetArg(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// convert <pyobject> to C++ void**, set arg for call
+/// convert `pyobject` to C++ void**, set arg for call
 
 Bool_t PyROOT::TVoidPtrPtrConverter::SetArg(
       PyObject* pyobject, TParameter& para, TCallContext* /* ctxt */ )
@@ -1175,7 +1283,7 @@ PyObject* PyROOT::TVoidPtrPtrConverter::FromMemory( void* address )
       Py_INCREF( gNullPtrObject );
       return gNullPtrObject;
    }
-   return BufFac_t::Instance()->PyBuffer_FromMemory( (Long_t*)*(ptrdiff_t**)address, 1 );
+   return BufFac_t::Instance()->PyBuffer_FromMemory( (Long_t*)*(ptrdiff_t**)address, sizeof(void*) );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1493,6 +1601,7 @@ namespace {
    PYROOT_BASIC_CONVERTER_FACTORY( LongLongArray )
    PYROOT_BASIC_CONVERTER_FACTORY( TString )
    PYROOT_BASIC_CONVERTER_FACTORY( STLString )
+   PYROOT_BASIC_CONVERTER_FACTORY( STLStringView )
    PYROOT_BASIC_CONVERTER_FACTORY( VoidPtrRef )
    PYROOT_BASIC_CONVERTER_FACTORY( VoidPtrPtr )
    PYROOT_BASIC_CONVERTER_FACTORY( PyObject )
@@ -1500,6 +1609,7 @@ namespace {
 // converter factories for ROOT types
    typedef std::pair< const char*, ConverterFactory_t > NFp_t;
 
+   // clang-format off
    NFp_t factories_[] = {
    // factories for built-ins
       NFp_t( "bool",                      &CreateBoolConverter               ),
@@ -1576,12 +1686,22 @@ namespace {
       NFp_t( "string",                    &CreateSTLStringConverter          ),
       NFp_t( "const std::string&",        &CreateSTLStringConverter          ),
       NFp_t( "const string&",             &CreateSTLStringConverter          ),
+      NFp_t( "std::string_view",          &CreateSTLStringViewConverter      ),
+      NFp_t( "string_view",               &CreateSTLStringViewConverter      ),
+      NFp_t( "experimental::basic_string_view<char,char_traits<char> >",&CreateSTLStringViewConverter),
+      NFp_t( "basic_string_view<char,char_traits<char> >",&CreateSTLStringViewConverter),
       NFp_t( "void*&",                    &CreateVoidPtrRefConverter         ),
       NFp_t( "void**",                    &CreateVoidPtrPtrConverter         ),
       NFp_t( "PyObject*",                 &CreatePyObjectConverter           ),
       NFp_t( "_object*",                  &CreatePyObjectConverter           ),
-      NFp_t( "FILE*",                     &CreateVoidArrayConverter          )
+      NFp_t( "FILE*",                     &CreateVoidArrayConverter          ),
+      NFp_t( "Float16_t",                 &CreateFloatConverter              ),
+      NFp_t( "const Float16_t&",          &CreateConstFloatRefConverter      ),
+      NFp_t( "Double32_t",                &CreateDoubleConverter             ),
+      NFp_t( "Double32_t&",               &CreateDoubleRefConverter          ),
+      NFp_t( "const Double32_t&",         &CreateConstDoubleRefConverter     )
    };
+   // clang-format on
 
    struct InitConvFactories_t {
    public:

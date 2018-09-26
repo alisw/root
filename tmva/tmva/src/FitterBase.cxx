@@ -1,4 +1,4 @@
-// @(#)root/tmva $Id$ 
+// @(#)root/tmva $Id$
 // Author: Andreas Hoecker, Peter Speckmayer, Joerg Stelzer, Helge Voss
 
 /**********************************************************************************
@@ -17,38 +17,33 @@
  *      Helge Voss       <Helge.Voss@cern.ch>     - MPI-K Heidelberg, Germany     *
  *                                                                                *
  * Copyright (c) 2005:                                                            *
- *      CERN, Switzerland                                                         * 
- *      MPI-K Heidelberg, Germany                                                 * 
+ *      CERN, Switzerland                                                         *
+ *      MPI-K Heidelberg, Germany                                                 *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-////////////////////////////////////////////////////////////////////////////////
+/*! \class TMVA::FitterBase
+\ingroup TMVA
 
-/*
-  FitterBase
+Base class for TMVA fitters. Also defines generalised fitting interface
 
-  Baseclass for TMVA fitters. Also defines generalised fitting interface
 */
-//_______________________________________________________________________
 
 #include "TMVA/FitterBase.h"
-#ifndef ROOT_TMVA_Interval
 #include "TMVA/Interval.h"
-#endif
-#ifndef ROOT_TMVA_IFitterTarget
 #include "TMVA/IFitterTarget.h"
-#endif
 
 #include "TMVA/Configurable.h"
 #include "TMVA/MsgLogger.h"
 #include "TMVA/Types.h"
 
 #include "Rtypes.h"
+#include "TString.h"
 
-ClassImp(TMVA::FitterBase)
+ClassImp(TMVA::FitterBase);
 
 #ifdef _WIN32
 /*Disable warning C4355: 'this' : used in base member initializer list*/
@@ -56,39 +51,39 @@ ClassImp(TMVA::FitterBase)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
-/// constructor   
+/// constructor
 
-TMVA::FitterBase::FitterBase( IFitterTarget& target, 
-                              const TString& name, 
-                              const std::vector<Interval*> ranges, 
-                              const TString& theOption ) 
-   : Configurable( theOption ),
-     fFitterTarget( target ),
-     fRanges( ranges ),
-     fNpars( ranges.size() ),
-     fLogger( new MsgLogger("FitterBase", kINFO) ),
-     fClassName( name )
+TMVA::FitterBase::FitterBase( IFitterTarget& target,
+                              const TString& name,
+                              const std::vector<Interval*> ranges,
+                              const TString& theOption )
+: Configurable( theOption ),
+   fFitterTarget( target ),
+   fRanges( ranges ),
+   fNpars( ranges.size() ),
+   fLogger( new MsgLogger("FitterBase", kINFO) ),
+   fClassName( name )
 {
    SetConfigName( GetName() );
    SetConfigDescription( "Configuration options for setup and tuning of specific fitter" );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// estimator function interface for fitting 
+/// estimator function interface for fitting
 
 Double_t TMVA::FitterBase::Run()
 {
    std::vector<Double_t> pars;
-   for (std::vector<Interval*>::const_iterator parIt = fRanges.begin(); parIt != fRanges.end(); parIt++) {
+   for (std::vector<Interval*>::const_iterator parIt = fRanges.begin(); parIt != fRanges.end(); ++parIt) {
       pars.push_back( (*parIt)->GetMean() );
    }
-                                                                   
+
    //   delete fLogger;
    return this->Run( pars );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// estimator function interface for fitting 
+/// estimator function interface for fitting
 
 Double_t TMVA::FitterBase::EstimatorFunction( std::vector<Double_t>& parameters )
 {

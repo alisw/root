@@ -13,7 +13,7 @@
 A graphic user interface designed to handle ROOT trees and to take advantage of
 TTree class features.
 
-It uses ROOT native GUI widgets adapted for 'drag and drop' functionality.
+It uses ROOT native GUI widgets adapted for "drag and drop" functionality.
 in the same session.
 
 ### The following capabilities are making the viewer a helpful tool for analysis:
@@ -59,17 +59,17 @@ in the same session.
 
 ### Opening a new tree and saving a session :
 
-  To open a new tree in the viewer use <File/Open tree file> menu
-The content of the file (keys) will be listed. Use <SetTreeName> function
+  To open a new tree in the viewer use `<File/Open tree file>` menu
+The content of the file (keys) will be listed. Use `<SetTreeName>` function
 from the context menu of the right panel, entering a tree name among those
 listed.
 
-  To save the current session, use <File/Save> menu or the <SaveSource>
+  To save the current session, use `<File/Save>` menu or the `<SaveSource>`
 function from the context menu of the right panel (to specify the name of the
 file - name.C)
 
   To open a previously saved session for the tree MyTree, first open MyTree
-in the browser, then use <File/Open session> menu.
+in the browser, then use `<File/Open session>` menu.
 
 ### Dragging items:
 
@@ -89,8 +89,8 @@ operators have a specific icon and may be dragged to the active cut (scissors
 item) position.
 
    The expression editor can be activated by double-clicking empty expression,
-using <EditExpression> from the selected expression context menu or using
-<Edit/Expression> menu.
+using `<EditExpression>` from the selected expression context menu or using
+`<Edit/Expression>` menu.
 
    The editor will pop-up in the left part, but it can be moved.
 The editor usage is the following :
@@ -137,7 +137,7 @@ Context menu for the right panel:
   - Process         : equivalent of TTree::Process();
   - SaveSource      : save the current session as a C++ macro;
   - SetScanFileName : define a name for the file where TTree::Scan command
-    is redirected when the <Scan> button is checked;
+    is redirected when the `<Scan>` button is checked;
   - SetTreeName     : open a new tree with this name in the viewer;
 
   A specific context menu is activated if expressions/leaves are right-clicked.
@@ -308,7 +308,7 @@ enum EButtonIdentifiers {
    kBGLast
 };
 
-ClassImp(TTreeViewer)
+ClassImp(TTreeViewer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// TTreeViewer default constructor
@@ -322,13 +322,18 @@ TTreeViewer::TTreeViewer(const char* treeName) :
    fTree = 0;
    if (!gClient) return;
    char command[128];
-   snprintf(command,128, "TTreeViewer *gTV = (TTreeViewer*)0x%lx", (ULong_t)this);
+   gROOT->ProcessLine("#ifndef GTV_DEFINED\n\
+                       TTreeViewer *gTV = 0;\n\
+                       TTree *tv__tree = 0;\n\
+                       TList *tv__tree_list = 0;\n\
+                       TFile *tv__tree_file = 0;\n\
+                       #define GTV_DEFINED\n\
+                       #endif");
+   snprintf(command,128, "gTV = (TTreeViewer*)0x%lx", (ULong_t)this);
    gROOT->ProcessLine(command);
-   gROOT->ProcessLine("TTree *tv__tree = 0;");
    fTreeList = new TList;
-   gROOT->ProcessLine("TList *tv__tree_list = new TList;");
+   gROOT->ProcessLine("tv__tree_list = new TList;");
    fFilename = "";
-   gROOT->ProcessLine("TFile *tv__tree_file = 0;");
    gInterpreter->SaveContext();
    BuildInterface();
    SetTreeName(treeName);
@@ -347,14 +352,19 @@ TTreeViewer::TTreeViewer(const TTree *tree) :
 
    fTree = 0;
    char command[128];
-   snprintf(command,128, "TTreeViewer *gTV = (TTreeViewer*)0x%lx", (ULong_t)this);
+   gROOT->ProcessLine("#ifndef GTV_DEFINED\n\
+                       TTreeViewer *gTV = 0;\n\
+                       TTree *tv__tree = 0;\n\
+                       TList *tv__tree_list = 0;\n\
+                       TFile *tv__tree_file = 0;\n\
+                       #define GTV_DEFINED\n\
+                       #endif");
+   snprintf(command,128, "gTV = (TTreeViewer*)0x%lx", (ULong_t)this);
    gROOT->ProcessLine(command);
    if (!tree) return;
-   gROOT->ProcessLine("TTree *tv__tree = 0;");
    fTreeList = new TList;
-   gROOT->ProcessLine("TList *tv__tree_list = new TList;");
+   gROOT->ProcessLine("tv__tree_list = new TList;");
    fFilename = "";
-   gROOT->ProcessLine("TFile *tv__tree_file = 0;");
    gInterpreter->SaveContext();
    BuildInterface();
    TDirectory *dirsav = gDirectory;
@@ -446,7 +456,7 @@ void TTreeViewer::SetNexpressions(Int_t expr)
    for (Int_t i=0; i<TMath::Abs(diff); i++) NewExpression();
 }
 ////////////////////////////////////////////////////////////////////////////////
-/// Set the name of the file where to redirect <Scan> output.
+/// Set the name of the file where to redirect `<Scan>` output.
 
 void TTreeViewer::SetScanFileName(const char *name)
 {
@@ -1489,8 +1499,7 @@ void TTreeViewer::ExecuteDraw()
    }
    // send draw command
    fLastOption = fBarOption->GetText();
-   if (!gopt[0] && dimension!=3)
-   //{
+   //if (!gopt[0] && dimension!=3) {
    //   gopt = "hist";
    //   fLastOption = "hist";
    //}
@@ -2049,14 +2058,7 @@ Bool_t TTreeViewer::ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2)
                   case kHelpAbout:
                      {
 #ifdef R__UNIX
-                        TString rootx;
-# ifdef ROOTBINDIR
-                        rootx = ROOTBINDIR;
-# else
-                        rootx = gSystem->Getenv("ROOTSYS");
-                        if (!rootx.IsNull()) rootx += "/bin";
-# endif
-                        rootx += "/root -a &";
+                        TString rootx = TROOT::GetBinDir() + "/root -a &";
                         gSystem->Exec(rootx);
 #else
 #ifdef WIN32
@@ -2456,10 +2458,14 @@ void TTreeViewer::MapTree(TTree *tree, TGListTreeItem *parent, Bool_t listIt)
 void TTreeViewer::MapBranch(TBranch *branch, const char *prefix, TGListTreeItem *parent, Bool_t listIt)
 {
    if (!branch) return;
-   TString   name;
-   if (prefix && strlen(prefix) >0) name = Form("%s.%s",prefix,branch->GetName());
-   else                             name = branch->GetName();
-   Int_t     ind;
+   TString name;
+   if (prefix && strlen(prefix) > 0) {
+      name = prefix;
+      if (!name.EndsWith(".")) name += ".";
+      name += branch->GetName();
+   }
+   else name = branch->GetName();
+   Int_t ind;
    TGListTreeItem *branchItem = 0;
    ULong_t *itemType;
    // map this branch
@@ -2496,7 +2502,8 @@ void TTreeViewer::MapBranch(TBranch *branch, const char *prefix, TGListTreeItem 
                for (Int_t lf=0; lf<leaves->GetEntries(); lf++) {
                   leaf = (TLeaf *)leaves->At(lf);
                   leafName = name;
-                  leafName.Append(".").Append(EmptyBrackets(leaf->GetName()));
+                  if (!leafName.EndsWith(".")) leafName.Append(".");
+                  leafName.Append(EmptyBrackets(leaf->GetName()));
                   itemType = new ULong_t(kLTLeafType);
                   pic = gClient->GetPicture("leaf_t.xpm");
                   spic = gClient->GetPicture("leaf_t.xpm");
@@ -2563,7 +2570,8 @@ void TTreeViewer::MapBranch(TBranch *branch, const char *prefix, TGListTreeItem 
                for (Int_t lf=0; lf<leaves->GetEntries(); lf++) {
                   leaf = (TLeaf *)leaves->At(lf);
                   leafName = name;
-                  leafName.Append(".").Append(EmptyBrackets(leaf->GetName()));
+                  if (!leafName.EndsWith(".")) leafName.Append(".");
+                  leafName.Append(EmptyBrackets(leaf->GetName()));
                   textEntry = new TGString(leafName.Data());
                   pic = gClient->GetPicture("leaf_t.xpm");
                   spic = gClient->GetPicture("leaf_t.xpm");

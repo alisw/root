@@ -53,7 +53,7 @@ different number can be forced on construction.
 #include "TSelector.h"
 #include "TPackMgr.h"
 
-ClassImp(TProofLite)
+ClassImp(TProofLite);
 
 Int_t TProofLite::fgWrksMax = -2; // Unitialized max number of workers
 
@@ -331,7 +331,8 @@ Int_t TProofLite::Init(const char *, const char *conffile,
       TString globpack = gEnv->GetValue("Proof.GlobalPackageDirs","");
       TProofServ::ResolveKeywords(globpack);
       Int_t nglb = TPackMgr::RegisterGlobalPath(globpack);
-      Info("Init", " %d global package directories registered", nglb);
+      if (gDebug > 0)
+         Info("Init", " %d global package directories registered", nglb);
    }
 
    // Start workers
@@ -361,7 +362,7 @@ Int_t TProofLite::Init(const char *, const char *conffile,
       SetRunStatus(TProof::kRunning);
    }
    // We register the session as a socket so that cleanup is done properly
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfSockets()->Add(this);
 
    AskParallel();
@@ -408,17 +409,7 @@ Int_t TProofLite::GetNumberOfWorkers(const char *url)
    if (fgWrksMax == -2) {
       // Find the max number of workers, if any
       TString sysname = "system.rootrc";
-#ifdef ROOTETCDIR
-      char *s = gSystem->ConcatFileName(ROOTETCDIR, sysname);
-#else
-      TString etc = gRootDir;
-#ifdef WIN32
-      etc += "\\etc";
-#else
-      etc += "/etc";
-#endif
-      char *s = gSystem->ConcatFileName(etc, sysname);
-#endif
+      char *s = gSystem->ConcatFileName(TROOT::GetEtcDir(), sysname);
       TEnv sysenv(0);
       sysenv.ReadFile(s, kEnvGlobal);
       fgWrksMax = sysenv.GetValue("ProofLite.MaxWorkers", -1);
@@ -500,7 +491,7 @@ Int_t TProofLite::SetupWorkers(Int_t opt, TList *startedWorkers)
    // Create server socket on the assigned UNIX sock path
    if (!fServSock) {
       if ((fServSock = new TServerSocket(fSockPath))) {
-         R__LOCKGUARD2(gROOTMutex);
+         R__LOCKGUARD(gROOTMutex);
          // Remove from the list so that cleanup can be done in the correct order
          gROOT->GetListOfSockets()->Remove(fServSock);
       }
@@ -612,7 +603,7 @@ Int_t TProofLite::SetupWorkers(Int_t opt, TList *startedWorkers)
                   // representing all worker sockets, will be added to this list. This will
                   // ensure the correct termination of all proof servers in case the
                   // root session terminates.
-                  {  R__LOCKGUARD2(gROOTMutex);
+                  {  R__LOCKGUARD(gROOTMutex);
                      gROOT->GetListOfSockets()->Remove(s);
                   }
                   if (wrk->IsValid()) {
@@ -764,17 +755,9 @@ Int_t TProofLite::SetProofServEnv(const char *ord)
       return -1;
    }
    // ROOTSYS
-#ifdef R__HAVE_CONFIG
-   fprintf(fenv, "export ROOTSYS=%s\n", ROOTPREFIX);
-#else
-   fprintf(fenv, "export ROOTSYS=%s\n", gSystem->Getenv("ROOTSYS"));
-#endif
+   fprintf(fenv, "export ROOTSYS=%s\n", TROOT::GetRootSys().Data());
    // Conf dir
-#ifdef R__HAVE_CONFIG
-   fprintf(fenv, "export ROOTCONFDIR=%s\n", ROOTETCDIR);
-#else
-   fprintf(fenv, "export ROOTCONFDIR=%s\n", gSystem->Getenv("ROOTSYS"));
-#endif
+   fprintf(fenv, "export ROOTCONFDIR=%s\n", TROOT::GetRootSys().Data());
    // TMPDIR
    fprintf(fenv, "export TMPDIR=%s\n", gSystem->TempDirectory());
    // Log file in the log dir
@@ -1423,44 +1406,6 @@ Long64_t TProofLite::Process(TDSet *dset, const char *selector, Option_t *option
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create in each worker sandbox symlinks to the files in the list
-/// Used to make the cache information available to workers.
-
-Int_t TProofLite::CreateSymLinks(TList *files, TList *wrks)
-{
-   Int_t rc = 0;
-   if (files) {
-      TList *wls = (wrks) ? wrks : fActiveSlaves;
-      TIter nxf(files);
-      TObjString *os = 0;
-      while ((os = (TObjString *) nxf())) {
-         // Expand target
-         TString tgt(os->GetName());
-         gSystem->ExpandPathName(tgt);
-         // Loop over active workers
-         TIter nxw(wls);
-         TSlave *wrk = 0;
-         while ((wrk = (TSlave *) nxw())) {
-            // Link name
-            TString lnk = Form("%s/%s", wrk->GetWorkDir(), gSystem->BaseName(os->GetName()));
-            gSystem->Unlink(lnk);
-            if (gSystem->Symlink(tgt, lnk) != 0) {
-               rc++;
-               Warning("CreateSymLinks", "problems creating sym link: %s", lnk.Data());
-            } else {
-               PDB(kGlobal,1)
-                  Info("CreateSymLinks", "created sym link: %s", lnk.Data());
-            }
-         }
-      }
-   } else {
-      Warning("CreateSymLinks", "files list is undefined");
-   }
-   // Done
-   return rc;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// Initialize the dataset manager from directives or from defaults
 /// Return 0 on success, -1 on failure
 
@@ -1625,8 +1570,6 @@ Int_t TProofLite::Load(const char *macro, Bool_t notOnClient, Bool_t uniqueOnly,
             }
             gSystem->FreeDirectory(dirp);
          }
-         // Create the relevant symlinks
-         CreateSymLinks(&cachedFiles, wrks);
       }
    }
 
@@ -1648,7 +1591,7 @@ Int_t TProofLite::Load(const char *macro, Bool_t notOnClient, Bool_t uniqueOnly,
 /// Return -1 in case of error, 0 otherwise.
 
 Int_t TProofLite::CopyMacroToCache(const char *macro, Int_t headerRequired,
-                                   TSelector **selector, Int_t opt, TList *wrks)
+                                   TSelector **selector, Int_t opt, TList *)
 {
    // Relevant pointers
    TString cacheDir = fCacheDir;
@@ -1759,6 +1702,7 @@ Int_t TProofLite::CopyMacroToCache(const char *macro, Int_t headerRequired,
    dot = binname.Last('.');
    if (dot != kNPOS)
       binname.Replace(dot,1,"_");
+   TString pcmname = TString::Format("%s_ACLiC_dict_rdict.pcm", binname.Data());
    binname += ".";
 
    FileStat_t stlocal, stcache;
@@ -1770,7 +1714,8 @@ Int_t TProofLite::CopyMacroToCache(const char *macro, Int_t headerRequired,
       if (dirp) {
          const char *e = 0;
          while ((e = gSystem->GetDirEntry(dirp))) {
-            if (!strncmp(e, binname.Data(), binname.Length())) {
+            if (!strncmp(e, binname.Data(), binname.Length()) ||
+                !strncmp(e, pcmname.Data(), pcmname.Length())) {
                TString fncache = Form("%s/%s", cacheDir.Data(), e);
                Bool_t docp = kTRUE;
                if (!gSystem->GetPathInfo(fncache, stcache)) {
@@ -1809,7 +1754,8 @@ Int_t TProofLite::CopyMacroToCache(const char *macro, Int_t headerRequired,
    if (dirp) {
       const char *e = 0;
       while ((e = gSystem->GetDirEntry(dirp))) {
-         if (!strncmp(e, binname.Data(), binname.Length())) {
+         if (!strncmp(e, binname.Data(), binname.Length()) ||
+             !strncmp(e, pcmname.Data(), pcmname.Length())) {
             Bool_t docp = kTRUE;
             if (!gSystem->GetPathInfo(e, stlocal)) {
                TString fncache = Form("%s/%s", cacheDir.Data(), e);
@@ -1862,10 +1808,6 @@ Int_t TProofLite::CopyMacroToCache(const char *macro, Int_t headerRequired,
    }
 
    cacheLock->Unlock();
-
-   // Create symlinks
-   if (opt & (kCp | kCpBin))
-      CreateSymLinks(cachedFiles, wrks);
 
    cachedFiles->SetOwner();
    delete cachedFiles;
@@ -2677,7 +2619,7 @@ Int_t TProofLite::PollForNewWorkers()
                   // representing all worker sockets, will be added to this list. This will
                   // ensure the correct termination of all proof servers in case the
                   // root session terminates.
-                  {  R__LOCKGUARD2(gROOTMutex);
+                  {  R__LOCKGUARD(gROOTMutex);
                      gROOT->GetListOfSockets()->Remove(s);
                   }
                   if (wrk->IsValid()) {
@@ -2696,7 +2638,7 @@ Int_t TProofLite::PollForNewWorkers()
                      fActiveSlaves->Add(wrk);             // Is this required? Check!
                      fAllMonitor->Add(wrk->GetSocket());
                      // Record also in the list for termination
-                     if (addedWorkers) addedWorkers->Add(wrk);
+                     addedWorkers->Add(wrk);
                      // Notify startup operations
                      NotifyStartUp("Setting up added worker servers", ++nWrksDone, nWrksTot);
                   } else {

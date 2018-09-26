@@ -35,7 +35,6 @@ category modifies its list of states
 #include "Riostream.h"
 #include "Riostream.h"
 #include <stdlib.h>
-#include <stdio.h>
 #include "TString.h"
 #include "TClass.h"
 #include "RooSuperCategory.h"
@@ -47,7 +46,7 @@ category modifies its list of states
 
 using namespace std;
 
-ClassImp(RooSuperCategory)
+ClassImp(RooSuperCategory);
 ;
 
 

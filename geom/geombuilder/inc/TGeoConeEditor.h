@@ -1,5 +1,5 @@
 // @(#):$Id$
-// Author: M.Gheata 
+// Author: M.Gheata
 /*************************************************************************
  * Copyright (C) 1995-2002, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
@@ -11,20 +11,8 @@
 #ifndef ROOT_TGeoConeEditor
 #define ROOT_TGeoConeEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoConeEditor                                                      //
-//                                                                      //
-//  Editor for a TGeoCone.                                              //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TGButton
 #include "TGWidget.h"
-#endif
-#ifndef ROOT_TGeoGedFrame
 #include "TGeoGedFrame.h"
-#endif
 
 class TGeoCone;
 class TGeoConeSeg;
@@ -63,7 +51,7 @@ protected:
    TGCompositeFrame *fDFrame;          // Frame containing Delayed draw
 
    virtual void ConnectSignals2Slots();   // Connect the signals to the slots
-   Bool_t       IsDelayed() const;   
+   Bool_t       IsDelayed() const;
 
 public:
    TGeoConeEditor(const TGWindow *p = 0,
@@ -82,17 +70,10 @@ public:
    void           DoName();
    virtual void   DoApply();
    virtual void   DoUndo();
-   
-   ClassDef(TGeoConeEditor,0)   // TGeoCone editor
-};   
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoConeSegEditor                                                   //
-//                                                                      //
-//  Editor for a cone segment.                                          //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+   ClassDef(TGeoConeEditor,0)   // TGeoCone editor
+};
+
 
 class TGDoubleVSlider;
 
@@ -105,8 +86,8 @@ protected:
    Double_t         fPmaxi;             // Initial phi max
    TGDoubleVSlider *fSPhi;              // Phi slider
    TGNumberEntry   *fEPhi1;             // Number entry for phi1
-   TGNumberEntry   *fEPhi2;             // Number entry for phi2  
-   
+   TGNumberEntry   *fEPhi2;             // Number entry for phi2
+
    virtual void ConnectSignals2Slots();   // Connect the signals to the slots
 
 public:
@@ -122,8 +103,8 @@ public:
    void           DoPhi2();
    virtual void   DoApply();
    virtual void   DoUndo();
-   
+
    ClassDef(TGeoConeSegEditor,0)   // TGeoConeSeg editor
-};   
-  
-#endif                    
+};
+
+#endif

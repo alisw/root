@@ -12,7 +12,7 @@
 #include "TSQLiteResult.h"
 #include "TSQLiteRow.h"
 
-ClassImp(TSQLiteResult)
+ClassImp(TSQLiteResult);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// SQLite query result.
@@ -84,6 +84,15 @@ const char *TSQLiteResult::GetFieldName(Int_t field)
       return 0;
    }
    return sqlite3_column_name(fResult, field);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// SQLite can not determine the row count for a Query, return -1 instead.
+/// For similar functionality, call Next() until it retruns nullptr.
+
+Int_t TSQLiteResult::GetRowCount() const
+{
+   return -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

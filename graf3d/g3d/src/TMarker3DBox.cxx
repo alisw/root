@@ -25,7 +25,7 @@
 
 #include <assert.h>
 
-ClassImp(TMarker3DBox)
+ClassImp(TMarker3DBox);
 
 /** \class TMarker3DBox
 \ingroup g3d
@@ -297,21 +297,8 @@ void TMarker3DBox::PaintH3(TH1 *h, Option_t *option)
    TAxis *yaxis = h->GetYaxis();
    TAxis *zaxis = h->GetZaxis();
 
-   //compute min and max of all cells
-   wmin = wmax = 0;
-   for (iz=zaxis->GetFirst();iz<=zaxis->GetLast();iz++) {
-      for (iy=yaxis->GetFirst();iy<=yaxis->GetLast();iy++) {
-         for (ix=xaxis->GetFirst();ix<=xaxis->GetLast();ix++) {
-            bin = h->GetBin(ix,iy,iz);
-            w = h->GetBinContent(bin);
-            if (w > wmax) wmax = w;
-            if (w < wmin) wmin = w;
-         }
-      }
-   }
-
-   if (wmin < h->GetMinimum()) wmin = h->GetMinimum();
-   if (wmax > h->GetMaximum()) wmax = h->GetMaximum();
+   wmin = h->GetMinimum();
+   wmax = h->GetMaximum();
 
    //Create or modify 3-d view object
    TView *view = gPad->GetView();
@@ -349,7 +336,8 @@ void TMarker3DBox::PaintH3(TH1 *h, Option_t *option)
             w = h->GetBinContent(bin);
             if (w < wmin) continue;
             if (w > wmax) w = wmax;
-            scale = (w-wmin)/(wmax-wmin);
+            scale = (TMath::Power((w-wmin)/(wmax-wmin),1./3.))/2.;
+            if (scale == 0) continue;
             m3.SetPosition(0.5*(xmin+xmax),0.5*(ymin+ymax),0.5*(zmin+zmax));
             m3.SetSize(scale*(xmax-xmin),scale*(ymax-ymin),scale*(zmax-zmin));
             m3.Paint(option);
@@ -470,11 +458,7 @@ void TMarker3DBox::Streamer(TBuffer &R__b)
       TObject::Streamer(R__b);
       TAttLine::Streamer(R__b);
       TAttFill::Streamer(R__b);
-      if (R__b.GetVersionOwner() > 22300) {
-         TAtt3D::Streamer(R__b);
-      } else {
-         TAtt3D::Streamer(R__b);
-      }
+      TAtt3D::Streamer(R__b);
       R__b >> fX;
       R__b >> fY;
       R__b >> fZ;

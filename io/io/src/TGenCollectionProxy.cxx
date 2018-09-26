@@ -105,21 +105,9 @@ public:
 
       // However we can 'take' the address of the content of std::vector<bool>.
       if ( fEnv && fEnv->fObject ) {
-         switch( idx ) {
-            case 0:
-               fEnv->fStart = fFirst.invoke(fEnv);
-               fEnv->fIdx = idx;
-               break;
-            default:
-               fEnv->fIdx = idx - fEnv->fIdx;
-               if (! fEnv->fStart ) fEnv->fStart = fFirst.invoke(fEnv);
-               fNext.invoke(fEnv);
-               fEnv->fIdx = idx;
-               break;
-         }
-         typedef ROOT::TCollectionProxyInfo::Type<std::vector<Bool_t> >::Env_t EnvType_t;
-         EnvType_t *e = (EnvType_t*)fEnv;
-         fLastValue = *(e->iter());
+         auto vec = (std::vector<bool> *)(fEnv->fObject);
+         fLastValue = (*vec)[idx];
+         fEnv->fIdx = idx;
          return &fLastValue;
       }
       Fatal("TGenVectorProxy","At> Logic error - no proxy object set.");
@@ -377,7 +365,7 @@ TGenCollectionProxy::Value::Value(const std::string& inside_type, Bool_t silent)
          fDtor   = fType->GetDestructor();
          fDelete = fType->GetDelete();
       } else {
-         R__LOCKGUARD2(gInterpreterMutex);
+         R__LOCKGUARD(gInterpreterMutex);
 
          // Try to avoid autoparsing.
 
@@ -390,9 +378,6 @@ TGenCollectionProxy::Value::Value(const std::string& inside_type, Bool_t silent)
          TDataType *fundType = (TDataType *)typeTable->THashTable::FindObject( intype.c_str() );
          if (fundType && fundType->GetType() < 0x17 && fundType->GetType() > 0) {
             fKind = (EDataType)fundType->GetType();
-            if ( 0 == strcmp("bool",fundType->GetFullTypeName()) ) {
-               fKind = (EDataType)kBOOL_t;
-            }
             // R__ASSERT((fKind>0 && fKind<0x17) || (fKind==-1&&(prop&kIsPointer)) );
 
             fCase |= kIsFundamental;
@@ -476,9 +461,6 @@ TGenCollectionProxy::Value::Value(const std::string& inside_type, Bool_t silent)
                      fKind = kInt_t;
                   } else {
                      fKind = (EDataType)fundType->GetType();
-                     if ( 0 == strcmp("bool",fundType->GetFullTypeName()) ) {
-                        fKind = (EDataType)kBOOL_t;
-                     }
                      fSize = gCling->TypeInfo_Size(ti);
                      R__ASSERT((fKind>0 && fKind<0x17) || (fKind==-1&&(prop&kIsPointer)) );
                   }
@@ -516,7 +498,7 @@ TGenCollectionProxy::Value::Value(const std::string& inside_type, Bool_t silent)
 
 Bool_t TGenCollectionProxy::Value::IsValid()
 {
-   
+
 
    return fSize != std::string::npos;
 }
@@ -746,7 +728,7 @@ TVirtualCollectionProxy* TGenCollectionProxy::Generate() const
          return new TGenBitsetProxy(*this);
       }
       case ROOT::kSTLvector: {
-         if ((*fValue).fKind == (EDataType)kBOOL_t) {
+         if ((*fValue).fKind == kBool_t) {
             return new TGenVectorBoolProxy(*this);
          } else {
             return new TGenVectorProxy(*this);
@@ -834,7 +816,7 @@ static TGenCollectionProxy::Value *R__CreateValue(const std::string &name, Bool_
 
 TGenCollectionProxy *TGenCollectionProxy::InitializeEx(Bool_t silent)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    if (fValue.load()) return this;
 
    TClass *cl = fClass ? fClass.GetClass() : TClass::GetClass(fTypeinfo,kTRUE,silent);
@@ -852,7 +834,7 @@ TGenCollectionProxy *TGenCollectionProxy::InitializeEx(Bool_t silent)
             inside[0].replace(3,10,"::");
          if ( inside[0].find("__gnu_cxx::hash_") != std::string::npos )
             inside[0].replace(0,16,"std::");
-         fSTL_type = TClassEdit::STLKind(inside[0].c_str());
+         fSTL_type = TClassEdit::STLKind(inside[0]);
          switch ( fSTL_type ) {
             case ROOT::kSTLmap:
             case ROOT::kSTLunorderedmap:
@@ -864,6 +846,11 @@ TGenCollectionProxy *TGenCollectionProxy::InitializeEx(Bool_t silent)
             case ROOT::kSTLunorderedmultiset:
             case ROOT::kSTLbitset: // not really an associate container but it has no real iterator.
                fProperties |= kIsAssociative;
+               if (num > 3 && !inside[3].empty()) {
+                  if (! TClassEdit::IsDefAlloc(inside[3].c_str(),inside[0].c_str())) {
+                     fProperties |= kCustomAlloc;
+                  }
+               }
                break;
          };
 
@@ -903,6 +890,11 @@ TGenCollectionProxy *TGenCollectionProxy::InitializeEx(Bool_t silent)
                if ( 0 == fValDiff ) {
                   fValDiff = fVal->fSize;
                   fValDiff += (slong - fValDiff%slong)%slong;
+               }
+               if (num > 2 && !inside[2].empty()) {
+                  if (! TClassEdit::IsDefAlloc(inside[2].c_str(),inside[0].c_str())) {
+                     fProperties |= kCustomAlloc;
+                  }
                }
                break;
          }
@@ -971,7 +963,8 @@ Bool_t TGenCollectionProxy::HasPointers() const
    // The content of a map and multimap is always a 'pair' and hence
    // fPointers means "Flag to indicate if containee has pointers (key or value)"
    // so we need to ignore its value for map and multimap;
-   return fPointers && !(fSTL_type == ROOT::kSTLmap || fSTL_type == ROOT::kSTLmultimap);
+   return fPointers && !(fSTL_type == ROOT::kSTLmap || fSTL_type == ROOT::kSTLmultimap ||
+                         fSTL_type == ROOT::kSTLunorderedmap || fSTL_type == ROOT::kSTLunorderedmultimap);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1015,6 +1008,12 @@ void* TGenCollectionProxy::At(UInt_t idx)
    if ( fEnv && fEnv->fObject ) {
       switch (fSTL_type) {
       case ROOT::kSTLvector:
+         if ((*fValue).fKind == kBool_t) {
+            auto vec = (std::vector<bool> *)(fEnv->fObject);
+            fEnv->fLastValueVecBool = (*vec)[idx];
+            fEnv->fIdx = idx;
+            return &(fEnv->fLastValueVecBool);
+         }
          fEnv->fIdx = idx;
          switch( idx ) {
          case 0:
@@ -1023,6 +1022,23 @@ void* TGenCollectionProxy::At(UInt_t idx)
             if (! fEnv->fStart ) fEnv->fStart = fFirst.invoke(fEnv);
             return ((char*)fEnv->fStart) + fValDiff*idx;
          }
+      case ROOT::kSTLbitset: {
+         switch (idx) {
+         case 0:
+            fEnv->fStart = fFirst.invoke(fEnv);
+            fEnv->fIdx = idx;
+            break;
+         default:
+            fEnv->fIdx = idx - fEnv->fIdx;
+            if (!fEnv->fStart) fEnv->fStart = fFirst.invoke(fEnv);
+            fNext.invoke(fEnv);
+            fEnv->fIdx = idx;
+            break;
+         }
+         typedef ROOT::TCollectionProxyInfo::Environ <std::pair<size_t, Bool_t>> EnvType_t;
+         EnvType_t *e = (EnvType_t *) fEnv;
+         return &(e->fIterator.second);
+      }
       case ROOT::kSTLset:
       case ROOT::kSTLunorderedset:
       case ROOT::kSTLmultiset:
@@ -1275,7 +1291,9 @@ void TGenCollectionProxy::DeleteItem(Bool_t force, void* ptr) const
    if ( force && ptr ) {
       switch (fSTL_type) {
          case ROOT::kSTLmap:
-         case ROOT::kSTLmultimap: {
+         case ROOT::kSTLunorderedmap:
+         case ROOT::kSTLmultimap:
+         case ROOT::kSTLunorderedmultimap:{
             if ( fKey->fCase&kIsPointer ) {
                if (fKey->fProperties&kNeedDelete) {
                   TVirtualCollectionProxy *proxy = fKey->fType->GetCollectionProxy();

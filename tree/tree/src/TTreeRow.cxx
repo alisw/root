@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TTreeRow
+\ingroup tree
+
 Class defining interface to a row of a TTree query result.
 Objects of this class are created by TTreeResult methods.
 
@@ -20,7 +22,7 @@ Related classes are TTreeResult.
 #include "TBuffer.h"
 #include "TObjArray.h"
 
-ClassImp(TTreeRow)
+ClassImp(TTreeRow);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Single row of a query result.
@@ -185,7 +187,7 @@ void TTreeRow::Streamer(TBuffer &R__b)
       TSQLRow::Streamer(R__b);
       R__b << fColumnCount;
       R__b.WriteFastArray(fFields,fColumnCount);
-      Int_t nch = fFields[fColumnCount-1];
+      Int_t nch = fFields ? fFields[fColumnCount-1] : 0;
       R__b << nch;
       R__b.WriteFastArray(fRow,nch);
       R__b.SetByteCount(R__c,kTRUE);

@@ -37,6 +37,8 @@
 
 #include "TMatrixTSymCramerInv.h"
 
+#include "TError.h"
+
 #if !defined(R__SOLARIS) && !defined(R__ACC) && !defined(R__FBSD)
 NamespaceImp(TMatrixTSymCramerInv);
 #endif
@@ -812,9 +814,7 @@ Bool_t TMatrixTSymCramerInv::Inv6x6(TMatrixTSym<Element> &m,Double_t *determ)
    return kTRUE;
 }
 
-#ifndef ROOT_TMatrixFSymfwd
 #include "TMatrixFSymfwd.h"
-#endif
 
 template Bool_t TMatrixTSymCramerInv::Inv2x2<Float_t>(TMatrixFSym&,Double_t*);
 template Bool_t TMatrixTSymCramerInv::Inv3x3<Float_t>(TMatrixFSym&,Double_t*);
@@ -822,9 +822,7 @@ template Bool_t TMatrixTSymCramerInv::Inv4x4<Float_t>(TMatrixFSym&,Double_t*);
 template Bool_t TMatrixTSymCramerInv::Inv5x5<Float_t>(TMatrixFSym&,Double_t*);
 template Bool_t TMatrixTSymCramerInv::Inv6x6<Float_t>(TMatrixFSym&,Double_t*);
 
-#ifndef ROOT_TMatrixDSymfwd
 #include "TMatrixDSymfwd.h"
-#endif
 
 template Bool_t TMatrixTSymCramerInv::Inv2x2<Double_t>(TMatrixDSym&,Double_t*);
 template Bool_t TMatrixTSymCramerInv::Inv3x3<Double_t>(TMatrixDSym&,Double_t*);

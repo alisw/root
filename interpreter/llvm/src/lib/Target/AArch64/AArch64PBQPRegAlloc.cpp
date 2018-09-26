@@ -17,8 +17,8 @@
 
 #define DEBUG_TYPE "aarch64-pbqp"
 
-#include "AArch64.h"
 #include "AArch64PBQPRegAlloc.h"
+#include "AArch64.h"
 #include "AArch64RegisterInfo.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -235,7 +235,7 @@ bool A57ChainingConstraint::addIntraChainConstraint(PBQPRAGraph &G, unsigned Rd,
           costs[i + 1][j + 1] = sameParityMax + 1.0;
     }
   }
-  G.setEdgeCosts(edge, std::move(costs));
+  G.updateEdgeCosts(edge, std::move(costs));
 
   return true;
 }
@@ -312,15 +312,15 @@ void A57ChainingConstraint::addInterChainConstraint(PBQPRAGraph &G, unsigned Rd,
               costs[i + 1][j + 1] = sameParityMax + 1.0;
         }
       }
-      G.setEdgeCosts(edge, std::move(costs));
+      G.updateEdgeCosts(edge, std::move(costs));
     }
   }
 }
 
 static bool regJustKilledBefore(const LiveIntervals &LIs, unsigned reg,
                                 const MachineInstr &MI) {
-  LiveInterval LI = LIs.getInterval(reg);
-  SlotIndex SI = LIs.getInstructionIndex(&MI);
+  const LiveInterval &LI = LIs.getInterval(reg);
+  SlotIndex SI = LIs.getInstructionIndex(MI);
   return LI.expiredAt(SI);
 }
 

@@ -22,16 +22,16 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
+
+#include <memory>
 
 class TVirtualMutex;
 
 // Global mutex set in TThread::Init
 R__EXTERN TVirtualMutex *gGlobalMutex;
 
-class TVirtualMutex : public TObject {
+class TVirtualMutex {
 
 public:
    TVirtualMutex(Bool_t /* recursive */ = kFALSE) { }
@@ -46,7 +46,7 @@ public:
 
    virtual TVirtualMutex *Factory(Bool_t /*recursive*/ = kFALSE) = 0;
 
-   ClassDef(TVirtualMutex,0)  // Virtual mutex lock class
+   ClassDef(TVirtualMutex, 0)  // Virtual mutex lock class
 };
 
 
@@ -103,18 +103,37 @@ public:
 #define R__LOCKGUARD_NAMED(name,mutex) TLockGuard _NAME2_(R__guard,name)(mutex)
 #define R__LOCKGUARD_UNLOCK(name) _NAME2_(R__guard,name).UnLock()
 #else
-#define R__LOCKGUARD(mutex)  if (mutex) { }
-#define R__LOCKGUARD_NAMED(name,mutex) if (mutex) { }
-#define R__LOCKGUARD2(mutex) if (mutex) { }
+#define R__LOCKGUARD(mutex)  (void)(mutex); { }
+#define R__LOCKGUARD_NAMED(name,mutex) (void)(mutex); { }
+#define R__LOCKGUARD2(mutex) (void)(mutex); { }
 #define R__LOCKGUARD_UNLOCK(name) { }
 #endif
 
 #ifdef R__USE_IMT
-#define R__LOCKGUARD_IMT(mutex)  R__LOCKGUARD(mutex)
-#define R__LOCKGUARD_IMT2(mutex) R__LOCKGUARD2(mutex)
+#define R__LOCKGUARD_IMT(mutex)  R__LOCKGUARD(ROOT::Internal::IsParBranchProcessingEnabled() ? mutex : nullptr)
+#define R__LOCKGUARD_IMT2(mutex)                                                   \
+   if (gGlobalMutex && !mutex && ROOT::Internal::IsParBranchProcessingEnabled()) { \
+      gGlobalMutex->Lock();                                                        \
+      if (!mutex)                                                                  \
+         mutex = gGlobalMutex->Factory(kTRUE);                                     \
+      gGlobalMutex->UnLock();                                                      \
+   }                                                                               \
+   R__LOCKGUARD_IMT(mutex)
 #else
 #define R__LOCKGUARD_IMT(mutex)  { }
 #define R__LOCKGUARD_IMT2(mutex) { }
+#endif
+
+#ifdef R__USE_IMT
+#define R__RWLOCK_ACQUIRE_READ(rwlock)  if (ROOT::Internal::IsParTreeProcessingEnabled()) rwlock.ReadLock();
+#define R__RWLOCK_RELEASE_READ(rwlock)  if (ROOT::Internal::IsParTreeProcessingEnabled()) rwlock.ReadUnLock();
+#define R__RWLOCK_ACQUIRE_WRITE(rwlock) if (ROOT::Internal::IsParTreeProcessingEnabled()) rwlock.WriteLock();
+#define R__RWLOCK_RELEASE_WRITE(rwlock) if (ROOT::Internal::IsParTreeProcessingEnabled()) rwlock.WriteUnLock();
+#else
+#define R__RWLOCK_ACQUIRE_READ(rwlock)  { }
+#define R__RWLOCK_RELEASE_READ(rwlock)  { }
+#define R__RWLOCK_ACQUIRE_WRITE(rwlock) { }
+#define R__RWLOCK_RELEASE_WRITE(rwlock) { }
 #endif
 
 #endif

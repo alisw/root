@@ -389,7 +389,6 @@ volumes (or volume assemblies) as content.
 #include "TMap.h"
 #include "TFile.h"
 #include "TKey.h"
-#include "TThread.h"
 
 #include "TGeoManager.h"
 #include "TGeoNode.h"
@@ -402,7 +401,7 @@ volumes (or volume assemblies) as content.
 #include "TGeoVoxelFinder.h"
 #include "TGeoExtension.h"
 
-ClassImp(TGeoVolume)
+ClassImp(TGeoVolume);
 
 TGeoMedium *TGeoVolume::fgDummyMedium = 0;
 
@@ -1083,7 +1082,7 @@ void TGeoVolume::AddNodeOverlap(TGeoVolume *vol, Int_t copy_no, TGeoMatrix *mat,
    node->SetNumber(copy_no);
    node->SetOverlapping();
    if (vol->GetMedium() == fMedium)
-   node->SetVirtual();
+      node->SetVirtual();
    vol->Grab();
 }
 
@@ -1432,6 +1431,8 @@ void TGeoVolume::SaveAs(const char *filename, Option_t *option) const
    if (ind>0) fname.Remove(ind);
    out << "void "<<fname<<"() {" << std::endl;
    out << "   gSystem->Load(\"libGeom\");" << std::endl;
+   const UInt_t prec = TGeoManager::GetExportPrecision();
+   out << std::setprecision(prec);
    ((TGeoVolume*)this)->SavePrimitive(out,option);
    out << "}" << std::endl;
 }
@@ -1493,8 +1494,6 @@ TGeoExtension *TGeoVolume::GrabFWExtension() const
 
 void TGeoVolume::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
 {
-   out.precision(6);
-   out.setf(std::ios::fixed);
    Int_t i,icopy;
    Int_t nd = GetNdaughters();
    TGeoVolume *dvol;
@@ -2418,7 +2417,7 @@ Double_t TGeoVolume::WeightA() const
    return weight;
 }
 
-ClassImp(TGeoVolumeMulti)
+ClassImp(TGeoVolumeMulti);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2767,7 +2766,7 @@ void TGeoVolumeMulti::SetVisibility(Bool_t vis)
    }
 }
 
-ClassImp(TGeoVolumeAssembly)
+ClassImp(TGeoVolumeAssembly);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
@@ -2789,18 +2788,6 @@ TGeoVolumeAssembly::ThreadData_t::~ThreadData_t()
 TGeoVolumeAssembly::ThreadData_t& TGeoVolumeAssembly::GetThreadData() const
 {
    Int_t tid = TGeoManager::ThreadId();
-/*
-   TThread::Lock();
-   if (tid >= fThreadSize)
-   {
-      Error("GetThreadData", "Thread id=%d bigger than maximum declared thread number %d. \nUse TGeoManager::SetMaxThreads properly !!!",
-             tid, fThreadSize);
-      fThreadData.resize(tid + 1);
-      fThreadSize = tid + 1;
-   }
-   if (fThreadData[tid] == 0) fThreadData[tid] = new ThreadData_t;
-   TThread::UnLock();
-*/
    return *fThreadData[tid];
 }
 
@@ -2808,7 +2795,7 @@ TGeoVolumeAssembly::ThreadData_t& TGeoVolumeAssembly::GetThreadData() const
 
 void TGeoVolumeAssembly::ClearThreadData() const
 {
-   TThread::Lock();
+   std::lock_guard<std::mutex> guard(fMutex);
    TGeoVolume::ClearThreadData();
    std::vector<ThreadData_t*>::iterator i = fThreadData.begin();
    while (i != fThreadData.end())
@@ -2818,14 +2805,13 @@ void TGeoVolumeAssembly::ClearThreadData() const
    }
    fThreadData.clear();
    fThreadSize = 0;
-   TThread::UnLock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TGeoVolumeAssembly::CreateThreadData(Int_t nthreads)
 {
-   TThread::Lock();
+   std::lock_guard<std::mutex> guard(fMutex);
    // Create assembly thread data here
    fThreadData.resize(nthreads);
    fThreadSize = nthreads;
@@ -2835,7 +2821,6 @@ void TGeoVolumeAssembly::CreateThreadData(Int_t nthreads)
       }
    }
    TGeoVolume::CreateThreadData(nthreads);
-   TThread::UnLock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

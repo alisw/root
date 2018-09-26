@@ -40,29 +40,20 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TH2
 #include "TH2.h"
-#endif
 
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
-#ifndef ROOT_TMVA_DecisionTreeNode
 #include "TMVA/DecisionTreeNode.h"
-#endif
-#ifndef ROOT_TMVA_BinaryTree
 #include "TMVA/BinaryTree.h"
-#endif
-#ifndef ROOT_TMVA_BinarySearchTree
 #include "TMVA/BinarySearchTree.h"
-#endif
-#ifndef ROOT_TMVA_SeparationBase
 #include "TMVA/SeparationBase.h"
-#endif
-#ifndef ROOT_TMVA_RegressionVariance
 #include "TMVA/RegressionVariance.h"
-#endif
 #include "TMVA/DataSetInfo.h"
+
+#ifdef R__USE_IMT
+#include <ROOT/TThreadExecutor.hxx>
+#include "TSystem.h"
+#endif
 
 class TRandom3;
 
@@ -99,7 +90,7 @@ namespace TMVA {
       virtual ~DecisionTree( void );
 
       // Retrieves the address of the root node
-      virtual DecisionTreeNode* GetRoot() const { return dynamic_cast<TMVA::DecisionTreeNode*>(fRoot); }
+      virtual DecisionTreeNode* GetRoot() const { return static_cast<TMVA::DecisionTreeNode*>(fRoot); }
       virtual DecisionTreeNode * CreateNode(UInt_t) const { return new DecisionTreeNode(); }
       virtual BinaryTree* CreateTree() const { return new DecisionTree(); }
       static  DecisionTree* CreateFromXML(void* node, UInt_t tmva_Version_Code = TMVA_VERSION_CODE);
@@ -107,8 +98,8 @@ namespace TMVA {
 
       // building of a tree by recursivly splitting the nodes
 
-//      UInt_t BuildTree( const EventList & eventSample,
-//                        DecisionTreeNode *node = NULL);
+      //      UInt_t BuildTree( const EventList & eventSample,
+      //                        DecisionTreeNode *node = NULL);
       UInt_t BuildTree( const EventConstList & eventSample,
                         DecisionTreeNode *node = NULL);
       // determine the way how a node is split (which variable, which cut value)
@@ -201,7 +192,6 @@ namespace TMVA {
       inline void SetUseExclusiveVars(Bool_t t=kTRUE){fUseExclusiveVars = t;}
       inline void SetNVars(Int_t n){fNvars = n;}
 
-
    private:
       // utility functions
      
@@ -249,8 +239,7 @@ namespace TMVA {
 
       DataSetInfo*  fDataSetInfo;
 
-
-      ClassDef(DecisionTree,0)               // implementation of a Decision Tree
+      ClassDef(DecisionTree,0);               // implementation of a Decision Tree
    };
   
 } // namespace TMVA

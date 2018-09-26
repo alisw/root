@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TVirtualTreePlayer
+\ingroup tree
+
 Abstract base class defining the interface for the plugins that
 implement Draw, Scan, Process, MakeProxy, etc. for a TTree object.
 See the individual documentations in TTree.
@@ -23,7 +25,7 @@ See the individual documentations in TTree.
 TClass              *TVirtualTreePlayer::fgPlayer  = 0;
 TVirtualTreePlayer  *TVirtualTreePlayer::fgCurrent = 0;
 
-ClassImp(TVirtualTreePlayer)
+ClassImp(TVirtualTreePlayer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Static function returning a pointer to a Tree player.

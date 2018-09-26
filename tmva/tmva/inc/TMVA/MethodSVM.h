@@ -41,21 +41,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
-#ifndef ROOT_TMVA_TMatrixD
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
-#endif
 #ifndef ROOT_TMVA_TVectorD
-#ifndef ROOT_TVectorD
 #include "TVectorD.h"
-#endif
-#ifndef ROOT_TMVA_SVKernelFunction
 #include "TMVA/SVKernelFunction.h"
-#endif
 #endif
 
 namespace TMVA 
@@ -69,9 +59,9 @@ namespace TMVA
    public:
 
       MethodSVM( const TString& jobName, const TString& methodTitle, DataSetInfo& theData,
-                 const TString& theOption = "", TDirectory* theTargetDir = 0 );
+                 const TString& theOption = "" );
       
-      MethodSVM( DataSetInfo& theData, const TString& theWeightFile, TDirectory* theTargetDir = NULL );
+      MethodSVM( DataSetInfo& theData, const TString& theWeightFile);
 
       virtual ~MethodSVM( void );
     
@@ -168,7 +158,7 @@ namespace TMVA
       Int_t                 fDataSize;
       TString fLoss;
       
-      ClassDef(MethodSVM,0)  // Support Vector Machine
+      ClassDef(MethodSVM,0);  // Support Vector Machine
    };
 
 } // namespace TMVA

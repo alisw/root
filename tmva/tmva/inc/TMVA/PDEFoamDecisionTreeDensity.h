@@ -34,16 +34,10 @@
 
 #include <vector>
 
-#ifndef ROOT_TH2
 #include "TH2.h"
-#endif
 
-#ifndef ROOT_TMVA_PDEFoamDensityBase
 #include "TMVA/PDEFoamDensityBase.h"
-#endif
-#ifndef ROOT_TMVA_Volume
 #include "TMVA/Volume.h"
-#endif
 
 namespace TMVA
 {
@@ -61,14 +55,14 @@ namespace TMVA
       PDEFoamDecisionTreeDensity(const PDEFoamDecisionTreeDensity&);
       virtual ~PDEFoamDecisionTreeDensity() {}
 
-      // returns allways 0
+      // returns always 0
       virtual Double_t Density(std::vector<Double_t> &Xarg, Double_t &event_density);
 
       // fill histograms with events found in volume
       virtual void FillHistograms(TMVA::Volume&, std::vector<TH1D*>&, std::vector<TH1D*>&, std::vector<TH1D*>&, std::vector<TH1D*>&);
 
       ClassDef(PDEFoamDecisionTreeDensity, 1) // Class for decision tree like PDEFoam density
-   };  //end of PDEFoamDecisionTreeDensity
+         };  //end of PDEFoamDecisionTreeDensity
 
 }  // namespace TMVA
 

@@ -1,5 +1,5 @@
 // @(#):$Id$
-// Author: M.Gheata 
+// Author: M.Gheata
 /*************************************************************************
  * Copyright (C) 1995-2002, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
@@ -11,20 +11,8 @@
 #ifndef ROOT_TGeoTubeEditor
 #define ROOT_TGeoTubeEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoTubeEditor                                                      //
-//                                                                      //
-//  Editor for a TGeoTube.                                              //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TGButton
 #include "TGWidget.h"
-#endif
-#ifndef ROOT_TGeoGedFrame
 #include "TGeoGedFrame.h"
-#endif
 
 class TGeoTube;
 class TGeoTabManager;
@@ -59,7 +47,7 @@ protected:
    TGCompositeFrame *fDFrame;          // Frame containing Delayed draw
 
    virtual void ConnectSignals2Slots();   // Connect the signals to the slots
-   Bool_t       IsDelayed() const;   
+   Bool_t       IsDelayed() const;
 
 public:
    TGeoTubeEditor(const TGWindow *p = 0,
@@ -76,17 +64,10 @@ public:
    void           DoName();
    virtual void   DoApply();
    virtual void   DoUndo();
-   
-   ClassDef(TGeoTubeEditor,0)   // TGeoTube editor
-};   
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoTubeSegEditor                                                   //
-//                                                                      //
-//  Editor for a tube segment.                                          //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+   ClassDef(TGeoTubeEditor,0)   // TGeoTube editor
+};
+
 
 class TGDoubleVSlider;
 
@@ -99,8 +80,8 @@ protected:
    Double_t         fPmaxi;             // Initial phi max
    TGDoubleVSlider *fSPhi;              // Phi slider
    TGNumberEntry   *fEPhi1;             // Number entry for phi1
-   TGNumberEntry   *fEPhi2;             // Number entry for phi2  
-   
+   TGNumberEntry   *fEPhi2;             // Number entry for phi2
+
    virtual void ConnectSignals2Slots();   // Connect the signals to the slots
 
 public:
@@ -116,17 +97,9 @@ public:
    void           DoPhi2();
    virtual void   DoApply();
    virtual void   DoUndo();
-   
-   ClassDef(TGeoTubeSegEditor,0)   // TGeoTubeSeg editor
-};   
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoCtubEditor                                                      //
-//                                                                      //
-//  Editor for a tube segment cut with 2 planes.                        //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+   ClassDef(TGeoTubeSegEditor,0)   // TGeoTubeSeg editor
+};
 
 class TGeoCtubEditor : public TGeoTubeSegEditor {
 
@@ -154,8 +127,8 @@ public:
    void           DoPhhi();
    virtual void   DoApply();
    virtual void   DoUndo();
-   
+
    ClassDef(TGeoCtubEditor,0)   // TGeoCtub editor
 };
-  
-#endif                    
+
+#endif

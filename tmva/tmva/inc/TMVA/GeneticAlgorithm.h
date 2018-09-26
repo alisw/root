@@ -37,15 +37,9 @@
 #include <deque>
 #include <iosfwd>
 
-#ifndef ROOT_TMVA_IFitterTarget
 #include "TMVA/IFitterTarget.h"
-#endif
-#ifndef ROOT_TMVA_GeneticPopulation
 #include "TMVA/GeneticPopulation.h"
-#endif
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
 
 namespace TMVA {
      
@@ -107,7 +101,7 @@ namespace TMVA {
       mutable MsgLogger* fLogger;         // message logger
       MsgLogger& Log() const { return *fLogger; }          
 
-      ClassDef(GeneticAlgorithm, 0)  // Genetic algorithm controller
+      ClassDef(GeneticAlgorithm, 0);  // Genetic algorithm controller
    };
    
 } // namespace TMVA

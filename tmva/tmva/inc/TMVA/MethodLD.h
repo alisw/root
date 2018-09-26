@@ -42,12 +42,8 @@
 
 #include <vector>
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
 
 namespace TMVA {
 
@@ -59,13 +55,11 @@ namespace TMVA {
       MethodLD( const TString& jobName, 
                 const TString& methodTitle, 
                 DataSetInfo& dsi,
-                const TString& theOption = "LD",
-                TDirectory* theTargetDir = 0 );
+                const TString& theOption = "LD");
       
       // constructor
       MethodLD( DataSetInfo& dsi, 
-                const TString& theWeightFile, 
-                TDirectory* theTargetDir = 0 );
+                const TString& theWeightFile);
 
       // destructor
       virtual ~MethodLD( void );
@@ -124,8 +118,8 @@ namespace TMVA {
       // nice output
       void PrintCoefficients( void );
 
-      ClassDef(MethodLD,0) //Linear discriminant analysis
-         };
+      ClassDef(MethodLD,0); //Linear discriminant analysis
+   };
 } // namespace TMVA
 
 #endif // MethodLD_H

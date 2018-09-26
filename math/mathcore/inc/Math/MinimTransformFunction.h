@@ -15,13 +15,9 @@
 #define ROOT_Math_MinimTransformFunction
 
 
-#ifndef ROOT_Math_IFunction
 #include "Math/IFunction.h"
-#endif
 
-#ifndef ROOT_Math_MinimTransformVariable
 #include "Math/MinimTransformVariable.h"
-#endif
 
 
 #include <vector>
@@ -72,7 +68,7 @@ public:
 
    unsigned int NTot() const { return fFunc->NDim(); }
 
-   /// clone:  not supported (since auto_ptr used in the fVariables)
+   /// clone:  not supported (since unique_ptr used in the fVariables)
    IMultiGenFunction * Clone() const {
       return 0;
    }

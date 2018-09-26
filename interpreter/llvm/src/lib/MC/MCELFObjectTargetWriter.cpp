@@ -7,10 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/MC/MCELFObjectWriter.h"
-#include "llvm/MC/MCExpr.h"
-#include "llvm/MC/MCValue.h"
 
 using namespace llvm;
 
@@ -24,7 +21,12 @@ MCELFObjectTargetWriter::MCELFObjectTargetWriter(bool Is64Bit_,
     IsN64(IsN64_){
 }
 
-bool MCELFObjectTargetWriter::needsRelocateWithSymbol(const MCSymbolData &SD,
+bool MCELFObjectTargetWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
                                                       unsigned Type) const {
   return false;
+}
+
+void
+MCELFObjectTargetWriter::sortRelocs(const MCAssembler &Asm,
+                                    std::vector<ELFRelocationEntry> &Relocs) {
 }

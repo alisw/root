@@ -24,33 +24,15 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TBits
 #include "TBits.h"
-#endif
-#ifndef ROOT_TInetAddress
 #include "TInetAddress.h"
-#endif
-#ifndef ROOT_MessageTypes
 #include "MessageTypes.h"
-#endif
-#ifndef ROOT_TVirtualAuth
 #include "TVirtualAuth.h"
-#endif
-#ifndef ROOT_TSecContext
 #include "TSecContext.h"
-#endif
-#ifndef ROOT_TTimeStamp
 #include "TTimeStamp.h"
-#endif
-#ifndef ROOT_TVirtualMutex
 #include "TVirtualMutex.h"
-#endif
-#ifndef ROOT_TSocket
 #include "TSocket.h"
-#endif
 
 class TUDPSocket : public TNamed {
 
@@ -150,8 +132,8 @@ public:
    virtual Int_t         SendRaw(const void *buffer, Int_t length,
                                  ESendRecvOptions opt = kDefault);
    void                  SetCompressionAlgorithm(Int_t algorithm=0);
-   void                  SetCompressionLevel(Int_t level=1);
-   void                  SetCompressionSettings(Int_t settings=1);
+   void                  SetCompressionLevel(Int_t level=4);
+   void                  SetCompressionSettings(Int_t settings=4);
    virtual Int_t         SetOption(ESockOptions opt, Int_t val);
    void                  SetRemoteProtocol(Int_t rproto) { fRemoteProtocol = rproto; }
    void                  SetSecContext(TSecContext *ctx) { fSecContext = ctx; }

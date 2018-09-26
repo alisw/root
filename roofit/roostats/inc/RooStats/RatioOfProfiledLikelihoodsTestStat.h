@@ -12,184 +12,142 @@
 #define ROOSTATS_RatioOfProfiledLikelihoodsTestStat
 
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
-#ifndef ROO_NLL_VAR
 #include "RooNLLVar.h"
-#endif
 
-#ifndef ROOSTATS_TestStatistic
 #include "RooStats/TestStatistic.h"
-#endif
 
-#ifndef ROOSTATS_ProfileLikelihoodTestStat
 #include "RooStats/ProfileLikelihoodTestStat.h"
-#endif
-
-
 
 
 namespace RooStats {
 
-   /**
+   class RatioOfProfiledLikelihoodsTestStat: public TestStatistic {
 
-TestStatistic that returns the ratio of profiled likelihoods.
+   public:
 
-By default the calculation is:
-
-\f[
-	\log{    \frac{  \lambda( \mu_{alt} , {conditional \: MLE \: for \: alt \: nuisance}) }
-   	              { \lambda(\mu_{null} , {conditional \: MLE \: for \:  null \: nuisance}) } }
-\f]
-
-where \f$ \lambda \f$ is the profile likeihood ratio, so the 
-MLE for the null and alternate are subtracted off.
-
-If ``SetSubtractMLE(false)`` then it calculates:
-
-\f[
-
-	\log{    \frac{ L( \mu_alt , {conditional \: MLE \: for \: alt \: nuisance} ) }         
-                      { L(\mu_null , {conditional \: MLE \: for \:  null \: nuisance}) } }
-
-where \f$ L\$ is the Likelihood function. 
-
-The values of the parameters of interest for the alternative 
-hypothesis are taken at the time of the construction.
-If empty, it treats all free parameters as nuisance parameters.
-
-The value of the parameters of interest for the null hypotheses 
-are given at each call of Evaluate.
-
-This test statitsic is often called the Tevatron test statistic, because it has been used by the Tevatron experiments. 
-
- \ingroup Roostats
-
-*/
-
-
-class RatioOfProfiledLikelihoodsTestStat: public TestStatistic {
-
-  public:
-
-   RatioOfProfiledLikelihoodsTestStat() :
-      fNullProfile(),
-      fAltProfile(),
-      fAltPOI(NULL),
-      fSubtractMLE(true),
-      fDetailedOutputEnabled(false),
-      fDetailedOutput(NULL)
-   {
-      // Proof constructor. Don't use.
-   }
-
-  RatioOfProfiledLikelihoodsTestStat(RooAbsPdf& nullPdf, RooAbsPdf& altPdf, 
-				     const RooArgSet* altPOI=0) :
-    fNullProfile(nullPdf), 
-    fAltProfile(altPdf), 
-    fSubtractMLE(true),
-    fDetailedOutputEnabled(false),
-    fDetailedOutput(NULL)
+      RatioOfProfiledLikelihoodsTestStat() :
+         fNullProfile(),
+         fAltProfile(),
+         fAltPOI(NULL),
+         fSubtractMLE(true),
+         fDetailedOutputEnabled(false),
+         fDetailedOutput(NULL)
       {
-         //  Calculates the ratio of profiled likelihoods. 
+         // Proof constructor. Don't use.
+      }
 
-	if(altPOI)
-	  fAltPOI = (RooArgSet*) altPOI->snapshot();
-	else
-	  fAltPOI = new RooArgSet(); // empty set
+      RatioOfProfiledLikelihoodsTestStat(RooAbsPdf& nullPdf, RooAbsPdf& altPdf,
+                                         const RooArgSet* altPOI=0) :
+         fNullProfile(nullPdf),
+         fAltProfile(altPdf),
+         fSubtractMLE(true),
+         fDetailedOutputEnabled(false),
+         fDetailedOutput(NULL)
+      {
+         //  Calculates the ratio of profiled likelihoods.
+
+         if(altPOI)
+            fAltPOI = (RooArgSet*) altPOI->snapshot();
+         else
+            fAltPOI = new RooArgSet(); // empty set
 
       }
 
-    //__________________________________________
-    ~RatioOfProfiledLikelihoodsTestStat(void) {
-      if(fAltPOI) delete fAltPOI;
-      if(fDetailedOutput) delete fDetailedOutput;
-    }
-   
-   
-   // returns -logL(poi, conditional MLE of nuisance params)
-   // it does not subtract off the global MLE
-   // because  nuisance parameters of null and alternate may not
-   // be the same.
-   Double_t ProfiledLikelihood(RooAbsData& data, RooArgSet& poi, RooAbsPdf& pdf);
-    
-    // evaluate the ratio of profile likelihood
-   virtual Double_t Evaluate(RooAbsData& data, RooArgSet& nullParamsOfInterest);
-    
-   virtual void EnableDetailedOutput( bool e=true ) { 
-      fDetailedOutputEnabled = e; 
-      fNullProfile.EnableDetailedOutput(fDetailedOutputEnabled);
-      fAltProfile.EnableDetailedOutput(fDetailedOutputEnabled);
-   }
-
-   static void SetAlwaysReuseNLL(Bool_t flag); 
-
-   void SetReuseNLL(Bool_t flag) { 
-      fNullProfile.SetReuseNLL(flag);  
-      fAltProfile.SetReuseNLL(flag);  
-   }
-
-   void SetMinimizer(const char* minimizer){ 
-      fNullProfile.SetMinimizer(minimizer);  
-      fAltProfile.SetMinimizer(minimizer);  
-   }
-   void SetStrategy(Int_t strategy){
-      fNullProfile.SetStrategy(strategy);  
-      fAltProfile.SetStrategy(strategy);  
-   }
-   void SetTolerance(Double_t tol){
-      fNullProfile.SetTolerance(tol);  
-      fAltProfile.SetTolerance(tol);  
-   }
-   void SetPrintLevel(Int_t printLevel){
-      fNullProfile.SetPrintLevel(printLevel);  
-      fAltProfile.SetPrintLevel(printLevel);  
-   }
-  
-     // set the conditional observables which will be used when creating the NLL
-     // so the pdf's will not be normalized on the conditional observables when computing the NLL 
-     virtual void SetConditionalObservables(const RooArgSet& set) { 
-        fNullProfile.SetConditionalObservables(set);  
-        fAltProfile.SetConditionalObservables(set);  
-    }
-
-     virtual const RooArgSet* GetDetailedOutput(void) const {
-	     // Returns detailed output. The value returned by this function is updated after each call to Evaluate().
-	     // The returned RooArgSet contains the following for the alternative and null hypotheses:
-	     // <ul>
-	     // <li> the minimum nll, fitstatus and convergence quality for each fit </li> 
-	     // <li> for each fit and for each non-constant parameter, the value, error and pull of the parameter are stored </li>
-	     // </ul>
-	     return fDetailedOutput;
-     }
+      //__________________________________________
+      ~RatioOfProfiledLikelihoodsTestStat(void) {
+         if(fAltPOI) delete fAltPOI;
+         if(fDetailedOutput) delete fDetailedOutput;
+      }
 
 
-    
+      // returns -logL(poi, conditional MLE of nuisance params)
+      // it does not subtract off the global MLE
+      // because  nuisance parameters of null and alternate may not
+      // be the same.
+      Double_t ProfiledLikelihood(RooAbsData& data, RooArgSet& poi, RooAbsPdf& pdf);
 
-   virtual const TString GetVarName() const { return "log(L(#mu_{1},#hat{#nu}_{1}) / L(#mu_{0},#hat{#nu}_{0}))"; }
-    
-    //    const bool PValueIsRightTail(void) { return false; } // overwrites default
-    
-    void SetSubtractMLE(bool subtract){fSubtractMLE = subtract;}
-    
-  private:
+      // evaluate the ratio of profile likelihood
+      virtual Double_t Evaluate(RooAbsData& data, RooArgSet& nullParamsOfInterest);
 
-    ProfileLikelihoodTestStat fNullProfile;
-    ProfileLikelihoodTestStat fAltProfile;
+      virtual void EnableDetailedOutput( bool e=true ) {
+         fDetailedOutputEnabled = e;
+         fNullProfile.EnableDetailedOutput(fDetailedOutputEnabled);
+         fAltProfile.EnableDetailedOutput(fDetailedOutputEnabled);
+      }
 
-    RooArgSet* fAltPOI;
-    Bool_t fSubtractMLE;
-   static Bool_t fgAlwaysReuseNll ;
+      static void SetAlwaysReuseNLL(Bool_t flag);
 
-    bool fDetailedOutputEnabled;
-    RooArgSet* fDetailedOutput;
+      void SetReuseNLL(Bool_t flag) {
+         fNullProfile.SetReuseNLL(flag);
+         fAltProfile.SetReuseNLL(flag);
+      }
 
-    
-  protected:
-    ClassDef(RatioOfProfiledLikelihoodsTestStat,3)  // implements the ratio of profiled likelihood as test statistic
-};
+      void SetMinimizer(const char* minimizer){
+         fNullProfile.SetMinimizer(minimizer);
+         fAltProfile.SetMinimizer(minimizer);
+      }
+      void SetStrategy(Int_t strategy){
+         fNullProfile.SetStrategy(strategy);
+         fAltProfile.SetStrategy(strategy);
+      }
+      void SetTolerance(Double_t tol){
+         fNullProfile.SetTolerance(tol);
+         fAltProfile.SetTolerance(tol);
+      }
+      void SetPrintLevel(Int_t printLevel){
+         fNullProfile.SetPrintLevel(printLevel);
+         fAltProfile.SetPrintLevel(printLevel);
+      }
+
+      // set the conditional observables which will be used when creating the NLL
+      // so the pdf's will not be normalized on the conditional observables when computing the NLL
+      virtual void SetConditionalObservables(const RooArgSet& set) {
+         fNullProfile.SetConditionalObservables(set);
+         fAltProfile.SetConditionalObservables(set);
+      }
+
+      // set the global observables which will be used when creating the NLL
+      // so the constraint pdf's will be normalized correctly on the global observables when computing the NLL
+      virtual void SetGlobalObservables(const RooArgSet& set) {
+         fNullProfile.SetGlobalObservables(set);
+         fAltProfile.SetGlobalObservables(set);
+      }
+
+      virtual const RooArgSet* GetDetailedOutput(void) const {
+         // Returns detailed output. The value returned by this function is updated after each call to Evaluate().
+         // The returned RooArgSet contains the following for the alternative and null hypotheses:
+         //  - the minimum nll, fitstatus and convergence quality for each fit
+         //  - for each fit and for each non-constant parameter, the value, error and pull of the parameter are stored
+         return fDetailedOutput;
+      }
+
+
+
+
+      virtual const TString GetVarName() const { return "log(L(#mu_{1},#hat{#nu}_{1}) / L(#mu_{0},#hat{#nu}_{0}))"; }
+
+      //    const bool PValueIsRightTail(void) { return false; } // overwrites default
+
+      void SetSubtractMLE(bool subtract){fSubtractMLE = subtract;}
+
+   private:
+
+      ProfileLikelihoodTestStat fNullProfile;
+      ProfileLikelihoodTestStat fAltProfile;
+
+      RooArgSet* fAltPOI;
+      Bool_t fSubtractMLE;
+      static Bool_t fgAlwaysReuseNll ;
+
+      bool fDetailedOutputEnabled;
+      RooArgSet* fDetailedOutput;
+
+
+   protected:
+      ClassDef(RatioOfProfiledLikelihoodsTestStat,3)  // implements the ratio of profiled likelihood as test statistic
+   };
 
 }
 

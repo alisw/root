@@ -49,7 +49,7 @@ To draw a 3D text in a GL window. This class uses uses FTGL to render text.
 FTGL is a package making the interface between the Free Type fonts and GL.
 */
 
-ClassImp(TGLText)
+ClassImp(TGLText);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -197,13 +197,7 @@ void TGLText::SetGLTextFont(Font_t fontnumber)
 
    // try to load font (font must be in Root.TTFontPath resource)
    const char *ttpath = gEnv->GetValue("Root.TTFontPath",
-# ifdef TTFFONTDIR
-                                        TTFFONTDIR
-# else
-                                        "$(ROOTSYS)/fonts"
-# endif
-                                        );
-
+                                       TROOT::GetTTFFontDir());
    char *ttfont = gSystem->Which(ttpath, fontname, kReadPermission);
 
    if (fGLTextFont) delete fGLTextFont;

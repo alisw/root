@@ -15,13 +15,13 @@ Start up a ROOT session by typing `root` at the system prompt.
 
 ``` {.cpp}
 $ root
-   ------------------------------------------------------------
-  | Welcome to ROOT 6.00/00                http://root.cern.ch |
-  |                               (c) 1995-2014, The ROOT Team |
-  | Built for linuxx8664gcc                                    |
-  | From tag v6-00-00, 30 May 2014                             |
-  | Try '.help', '.demo', '.license', '.credits', '.quit'/'.q' |
-   ------------------------------------------------------------
+   -------------------------------------------------------------------------
+  | Welcome to ROOT 6.10/01                             http://root.cern.ch |
+  |                                            (c) 1995-2017, The ROOT Team |
+  | Built for macosx64                                                      |
+  | From heads/v6-10-00-patches@v6-10-00-25-g9f78c3a, Jul 03 2017, 11:39:44 |
+  | Try '.help', '.demo', '.license', '.credits', '.quit'/'.q'              |
+   -------------------------------------------------------------------------
 
 root [0]
 ```
@@ -580,7 +580,7 @@ the Cling limitations, you can use the C preprocessor symbols defined
 for Cling and `rootcling`.
 
 The preprocessor symbol `__CLING__` is defined for both ROOT and
-`rootcling`. The symbol `__ROOTCLING__` (and `__ROOTCLING__` for backward
+`rootcling`. The symbol `__ROOTCLING__` (and `__MAKECINT__` for backward
 compatibility) is only defined in `rootcling`.
 
 Use `!defined(__CLING__) || defined(__ROOTCLING__)` to bracket code that

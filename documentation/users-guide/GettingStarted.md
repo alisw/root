@@ -85,13 +85,13 @@ and the `MANPATH`. To run the program just type: `root`.
 
 ```
 $ root
-   ------------------------------------------------------------
-  | Welcome to ROOT 6.00/00                http://root.cern.ch |
-  |                               (c) 1995-2014, The ROOT Team |
-  | Built for linuxx8664gcc                                    |
-  | From tag v6-00-00, 30 May 2014                             |
-  | Try '.help', '.demo', '.license', '.credits', '.quit'/'.q' |
-   ------------------------------------------------------------
+   -------------------------------------------------------------------------
+  | Welcome to ROOT 6.10/01                             http://root.cern.ch |
+  |                                            (c) 1995-2017, The ROOT Team |
+  | Built for macosx64                                                      |
+  | From heads/v6-10-00-patches@v6-10-00-25-g9f78c3a, Jul 03 2017, 11:39:44 |
+  | Try '.help', '.demo', '.license', '.credits', '.quit'/'.q'              |
+   -------------------------------------------------------------------------
 
 root [0]
 ```
@@ -715,7 +715,7 @@ All supported file types can be saved via File menu / SaveAs... This
 dialog gives a choice to show or suppress the confirmation message for
 overwriting an existing file.
 
-If the Ovewrite check box is not selected, a message dialog appears
+If the Overwrite check box is not selected, a message dialog appears
 asking the user to overwrite the file (Yes/No). The user choice is
 saved for the next time the Save As... dialog shows up.
 

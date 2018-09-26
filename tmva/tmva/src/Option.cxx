@@ -26,12 +26,19 @@
  * (http://mva.sourceforge.net/license.txt)                                       *
  **********************************************************************************/
 
+/*! \class TMVA::OptionBase
+\ingroup TMVA
+Class for TMVA-option handling
+*/
+
 #include "TMVA/Option.h"
 
 #include "TMVA/Types.h"
 
 #include "ThreadLocalStorage.h"
+#include "TObject.h"
 #include "TString.h"
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor

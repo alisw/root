@@ -13,29 +13,24 @@
 #define ROOT_TImagePlugin
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TImagePlugin                                                        //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
+#include "TROOT.h"
 
 class TImagePlugin : public TObject {
 
 protected:
-   TString fExtension;  // file extension
+   TString fExtension;  ///< file extension
 
 public:
    TImagePlugin(const char *ext) { fExtension = ext; }
-   virtual ~TImagePlugin() { }
+   virtual ~TImagePlugin()
+   {
+      // Required since we overload TObject::Hash.
+      ROOT::CallRecursiveRemoveIfNeeded(*this);
+   }
 
    virtual unsigned char *ReadFile(const char *filename, UInt_t &w,  UInt_t &h) = 0;
    virtual Bool_t WriteFile(const char *filename, unsigned char *argb, UInt_t w,  UInt_t  h) = 0;

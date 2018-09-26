@@ -13,31 +13,15 @@
 #ifndef ROOT_Fit_PoissonLikelihoodFCN
 #define ROOT_Fit_PoissonLikelihoodFCN
 
-#ifndef ROOT_Fit_BasicFCN
 #include "Fit/BasicFCN.h"
-#endif
 
-#ifndef ROOT_Math_IParamFunction
 #include "Math/IParamFunction.h"
-#endif
 
-#ifndef ROOT_Fit_BinData
 #include "Fit/BinData.h"
-#endif
 
-#ifndef ROOT_Fit_FitUtil
-#include "Fit/FitUtil.h"
-#endif
-
+#include "Fit/EvaluatePoissonLogL.hxx"
 
 #include <memory>
-
-//#define PARALLEL
-// #ifdef PARALLEL
-// #ifndef ROOT_Fit_FitUtilParallel
-// #include "Fit/FitUtilParallel.h"
-// #endif
-// #endif
 
 namespace ROOT {
 
@@ -52,39 +36,41 @@ namespace ROOT {
 
    @ingroup  FitMethodFunc
 */
-template<class FunType>
-class PoissonLikelihoodFCN : public BasicFCN<FunType,BinData>  {
+template<class DerivFunType, class ModelFunType = ROOT::Math::IParamMultiFunction>
+class PoissonLikelihoodFCN : public BasicFCN<DerivFunType,ModelFunType,BinData>  {
 
 public:
+   typedef typename ModelFunType::BackendType T;
+   typedef  BasicFCN<DerivFunType,ModelFunType,BinData> BaseFCN;
 
-   typedef  BasicFCN<FunType,BinData> BaseFCN; 
-
-   typedef  ::ROOT::Math::BasicFitMethodFunction<FunType> BaseObjFunction;
+   typedef  ::ROOT::Math::BasicFitMethodFunction<DerivFunType> BaseObjFunction;
    typedef typename  BaseObjFunction::BaseFunction BaseFunction;
 
-   typedef  ::ROOT::Math::IParamMultiFunction IModelFunction;
-
+   typedef ::ROOT::Math::IParamMultiFunctionTempl<T> IModelFunction;
+   typedef typename BaseObjFunction::Type_t Type_t;
 
    /**
       Constructor from unbin data set and model function (pdf)
    */
-   PoissonLikelihoodFCN (const std::shared_ptr<BinData> & data, const std::shared_ptr<IModelFunction> & func, int weight = 0, bool extended = true ) :
+   PoissonLikelihoodFCN (const std::shared_ptr<BinData> & data, const std::shared_ptr<IModelFunction> & func, int weight = 0, bool extended = true, const ::ROOT::Fit::ExecutionPolicy &executionPolicy = ::ROOT::Fit::ExecutionPolicy::kSerial ) :
       BaseFCN( data, func),
       fIsExtended(extended),
       fWeight(weight),
       fNEffPoints(0),
-      fGrad ( std::vector<double> ( func->NPar() ) )
+      fGrad ( std::vector<double> ( func->NPar() ) ),
+      fExecutionPolicy(executionPolicy)
    { }
 
    /**
       Constructor from unbin data set and model function (pdf) managed by the users
    */
-   PoissonLikelihoodFCN (const BinData & data, const IModelFunction & func, int weight = 0, bool extended = true ) :
+   PoissonLikelihoodFCN (const BinData & data, const IModelFunction & func, int weight = 0, bool extended = true, const ::ROOT::Fit::ExecutionPolicy &executionPolicy = ::ROOT::Fit::ExecutionPolicy::kSerial ) :
       BaseFCN(std::shared_ptr<BinData>(const_cast<BinData*>(&data), DummyDeleter<BinData>()), std::shared_ptr<IModelFunction>(dynamic_cast<IModelFunction*>(func.Clone() ) ) ),
       fIsExtended(extended),
       fWeight(weight),
       fNEffPoints(0),
-      fGrad ( std::vector<double> ( func.NPar() ) )
+      fGrad ( std::vector<double> ( func.NPar() ) ),
+      fExecutionPolicy(executionPolicy)
    { }
 
 
@@ -101,7 +87,8 @@ public:
       fIsExtended(f.fIsExtended ),
       fWeight( f.fWeight ),
       fNEffPoints( f.fNEffPoints ),
-      fGrad( f.fGrad)
+      fGrad( f.fGrad),
+      fExecutionPolicy(f.fExecutionPolicy)
    {  }
 
    /**
@@ -111,9 +98,10 @@ public:
       SetData(rhs.DataPtr() );
       SetModelFunction(rhs.ModelFunctionPtr() );
       fNEffPoints = rhs.fNEffPoints;
-      fGrad = rhs.fGrad; 
+      fGrad = rhs.fGrad;
       fIsExtended = rhs.fIsExtended;
-      fWeight = rhs.fWeight; 
+      fWeight = rhs.fWeight;
+      fExecutionPolicy = rhs.fExecutionPolicy;
    }
 
 
@@ -126,13 +114,15 @@ public:
    /// i-th likelihood element and its gradient
    virtual double DataElement(const double * x, unsigned int i, double * g) const {
       if (i==0) this->UpdateNCalls();
-      return FitUtil::EvaluatePoissonBinPdf(BaseFCN::ModelFunction(), BaseFCN::Data(), x, i, g);
+      return FitUtil::PoissonLogL<typename BaseFCN::T>::EvalBinPdf(BaseFCN::ModelFunction(), BaseFCN::Data(), x, i, g);
    }
 
    /// evaluate gradient
-   virtual void Gradient(const double *x, double *g) const {
-      // evaluate the chi2 gradient
-      FitUtil::EvaluatePoissonLogLGradient(BaseFCN::ModelFunction(), BaseFCN::Data(), x, g );
+   virtual void Gradient(const double *x, double *g) const
+   {
+      // evaluate the Poisson gradient
+      FitUtil::PoissonLogL<typename BaseFCN::T>::EvalGradient(BaseFCN::ModelFunction(), BaseFCN::Data(), x, g,
+                                                              fNEffPoints, fExecutionPolicy);
    }
 
    /// get type of fit method function
@@ -165,7 +155,8 @@ private:
     */
    virtual double DoEval (const double * x) const {
       this->UpdateNCalls();
-      return FitUtil::EvaluatePoissonLogL(BaseFCN::ModelFunction(), BaseFCN::Data(), x, fWeight, fIsExtended, fNEffPoints);
+      return FitUtil::PoissonLogL<T>::Eval(BaseFCN::ModelFunction(), BaseFCN::Data(), x, fWeight, fIsExtended,
+                                           fNEffPoints, fExecutionPolicy);
    }
 
    // for derivatives
@@ -181,14 +172,15 @@ private:
    int fWeight;  // flag to indicate if needs to evaluate using weight or weight squared (default weight = 0)
 
    mutable unsigned int fNEffPoints;  // number of effective points used in the fit
-   
+
    mutable std::vector<double> fGrad; // for derivatives
 
+   ::ROOT::Fit::ExecutionPolicy fExecutionPolicy; // Execution policy
 };
 
       // define useful typedef's
-      typedef PoissonLikelihoodFCN<ROOT::Math::IMultiGenFunction> PoissonLLFunction;
-      typedef PoissonLikelihoodFCN<ROOT::Math::IMultiGradFunction> PoissonLLGradFunction;
+      typedef PoissonLikelihoodFCN<ROOT::Math::IMultiGenFunction, ROOT::Math::IParamMultiFunction> PoissonLLFunction;
+      typedef PoissonLikelihoodFCN<ROOT::Math::IMultiGradFunction, ROOT::Math::IParamMultiFunction> PoissonLLGradFunction;
 
 
    } // end namespace Fit

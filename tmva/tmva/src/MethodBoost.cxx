@@ -29,37 +29,27 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_______________________________________________________________________
-//
-// This class is meant to boost a single classifier. Boosting means    //
-// training the classifier a few times. Everytime the wieghts of the   //
-// events are modified according to how well the classifier performed  //
-// on the test sample.                                                 //
-////////////////////////////////////////////////////////////////////////////////
+/*! \class TMVA::MethodBoost
+\ingroup TMVA
 
-#include <algorithm>
-#include <iomanip>
-#include <vector>
-#include <cmath>
+Class for boosting a TMVA method
 
-#include "Riostream.h"
-#include "TRandom3.h"
-#include "TMath.h"
-#include "TObjString.h"
-#include "TH1F.h"
-#include "TH2F.h"
-#include "TGraph.h"
-#include "TSpline.h"
-#include "TDirectory.h"
-#include "TTree.h"
+This class is meant to boost a single classifier. Boosting means
+training the classifier a few times. Every time the weights of the
+events are modified according to how well the classifier performed
+on the test sample.
+
+*/
+
+#include "TMVA/MethodBoost.h"
 
 #include "TMVA/ClassifierFactory.h"
 #include "TMVA/Config.h"
+#include "TMVA/Configurable.h"
 #include "TMVA/DataSet.h"
 #include "TMVA/DataSetInfo.h"
 #include "TMVA/IMethod.h"
 #include "TMVA/MethodBase.h"
-#include "TMVA/MethodBoost.h"
 #include "TMVA/MethodCategory.h"
 #include "TMVA/MethodCompositeBase.h"
 #include "TMVA/MethodDT.h"
@@ -77,22 +67,39 @@
 #include "TMVA/RegressionVariance.h"
 #include "TMVA/QuickMVAProbEstimator.h"
 
+#include "Riostream.h"
+#include "TRandom3.h"
+#include "TFile.h"
+#include "TMath.h"
+#include "TObjString.h"
+#include "TH1F.h"
+#include "TH2F.h"
+#include "TGraph.h"
+#include "TSpline.h"
+#include "TDirectory.h"
+#include "TTree.h"
+
+#include <algorithm>
+#include <iomanip>
+#include <vector>
+#include <cmath>
+
+
 REGISTER_METHOD(Boost)
 
-ClassImp(TMVA::MethodBoost)
+ClassImp(TMVA::MethodBoost);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMVA::MethodBoost::MethodBoost( const TString& jobName,
-                                const TString& methodTitle,
-                                DataSetInfo& theData,
-                                const TString& theOption,
-                                TDirectory* theTargetDir ) :
-   TMVA::MethodCompositeBase( jobName, Types::kBoost, methodTitle, theData, theOption, theTargetDir )
+   TMVA::MethodBoost::MethodBoost( const TString& jobName,
+                                   const TString& methodTitle,
+                                   DataSetInfo& theData,
+                                   const TString& theOption ) :
+   TMVA::MethodCompositeBase( jobName, Types::kBoost, methodTitle, theData, theOption)
    , fBoostNum(0)
    , fDetailedMonitoring(kFALSE)
    , fAdaBoostBeta(0)
-   , fRandomSeed(0) 
+   , fRandomSeed(0)
    , fBaggedSampleFraction(0)
    , fBoostedMethodTitle(methodTitle)
    , fBoostedMethodOptions(theOption)
@@ -105,14 +112,15 @@ TMVA::MethodBoost::MethodBoost( const TString& jobName,
    , fMVAvalues(0)
 {
    fMVAvalues = new std::vector<Float_t>;
+   fDataSetManager = NULL;
+   fHistoricBoolOption = kFALSE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TMVA::MethodBoost::MethodBoost( DataSetInfo& dsi,
-                                const TString& theWeightFile,
-                                TDirectory* theTargetDir )
-   : TMVA::MethodCompositeBase( Types::kBoost, dsi, theWeightFile, theTargetDir )
+                                const TString& theWeightFile)
+   : TMVA::MethodCompositeBase( Types::kBoost, dsi, theWeightFile)
    , fBoostNum(0)
    , fDetailedMonitoring(kFALSE)
    , fAdaBoostBeta(0)
@@ -129,6 +137,8 @@ TMVA::MethodBoost::MethodBoost( DataSetInfo& dsi,
    , fMVAvalues(0)
 {
    fMVAvalues = new std::vector<Float_t>;
+   fDataSetManager = NULL;
+   fHistoricBoolOption = kFALSE;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -174,7 +184,7 @@ void TMVA::MethodBoost::DeclareOptions()
 
    DeclareOptionRef( fMonitorBoostedMethod = kTRUE, "Boost_MonitorMethod",
                      "Write monitoring histograms for each boosted classifier" );
-   
+
    DeclareOptionRef( fDetailedMonitoring = kFALSE, "Boost_DetailedMonitoring",
                      "Produce histograms for detailed boost  monitoring" );
 
@@ -187,7 +197,7 @@ void TMVA::MethodBoost::DeclareOptions()
 
    DeclareOptionRef( fAdaBoostBeta = 1.0, "Boost_AdaBoostBeta",
                      "The ADA boost parameter that sets the effect of every boost step on the events' weights" );
-   
+
    DeclareOptionRef( fTransformString = "step", "Boost_Transform",
                      "Type of transform applied to every boosted method linear, log, step" );
    AddPreDefVal(TString("step"));
@@ -203,8 +213,8 @@ void TMVA::MethodBoost::DeclareOptions()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// options that are used ONLY for the READER to ensure backward compatibility
-///   they are hence without any effect (the reader is only reading the training 
-///   options that HAD been used at the training of the .xml weightfile at hand
+///   they are hence without any effect (the reader is only reading the training
+///   options that HAD been used at the training of the .xml weight file at hand
 
 void TMVA::MethodBoost::DeclareCompatibilityOptions()
 {
@@ -226,9 +236,9 @@ void TMVA::MethodBoost::DeclareCompatibilityOptions()
    AddPreDefVal(TString("log"));
    AddPreDefVal(TString("gauss"));
 
-   // this option here 
+   // this option here
    //DeclareOptionRef( fBoostType  = "AdaBoost", "Boost_Type", "Boosting type for the classifiers" );
-   // still exists, but these two possible values 
+   // still exists, but these two possible values
    AddPreDefVal(TString("HighEdgeGauss"));
    AddPreDefVal(TString("HighEdgeCoPara"));
    // have been deleted .. hope that works :)
@@ -237,6 +247,7 @@ void TMVA::MethodBoost::DeclareCompatibilityOptions()
                      "Recalculate the classifier MVA Signallike cut at every boost iteration" );
 
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 /// just registering the string from which the boosted classifier will be created
 
@@ -247,7 +258,7 @@ Bool_t TMVA::MethodBoost::BookMethod( Types::EMVA theMethod, TString methodTitle
    fBoostedMethodOptions  = theOption;
    TString opts=theOption;
    opts.ToLower();
-//    if (opts.Contains("vartransform")) Log() << kFATAL << "It is not possible to use boost in conjunction with variable transform. Please remove either Boost_Num or VarTransform from the option string"<< methodTitle<<Endl;
+   //    if (opts.Contains("vartransform")) Log() << kFATAL << "It is not possible to use boost in conjunction with variable transform. Please remove either Boost_Num or VarTransform from the option string"<< methodTitle<<Endl;
 
    return kTRUE;
 }
@@ -255,7 +266,7 @@ Bool_t TMVA::MethodBoost::BookMethod( Types::EMVA theMethod, TString methodTitle
 ////////////////////////////////////////////////////////////////////////////////
 
 void TMVA::MethodBoost::Init()
-{ 
+{
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -263,7 +274,7 @@ void TMVA::MethodBoost::Init()
 
 void TMVA::MethodBoost::InitHistos()
 {
-   
+
    Results* results = Data()->GetResults(GetMethodName(), Types::kTraining, GetAnalysisType());
 
    results->Store(new TH1F("MethodWeight","Normalized Classifier Weight",fBoostNum,0,fBoostNum),"ClassifierWeight");
@@ -372,7 +383,7 @@ void TMVA::MethodBoost::Train()
    if (varTrafoStart >0) {
       Ssiz_t varTrafoEnd  =fBoostedMethodOptions.Index(":",varTrafoStart);
       if (varTrafoEnd<varTrafoStart)
-	 varTrafoEnd=fBoostedMethodOptions.Length();
+         varTrafoEnd=fBoostedMethodOptions.Length();
       fBoostedMethodOptions.Remove(varTrafoStart,varTrafoEnd-varTrafoStart);
    }
 
@@ -382,19 +393,17 @@ void TMVA::MethodBoost::Train()
       // the first classifier shows the option string output, the rest not
       if (fCurrentMethodIdx>0) TMVA::MsgLogger::InhibitOutput();
 
-      IMethod* method = ClassifierFactory::Instance().Create(std::string(fBoostedMethodName),
-                                                             GetJobName(),
-                                                             Form("%s_B%04i", fBoostedMethodTitle.Data(),fCurrentMethodIdx),
-                                                             DataInfo(),
-                                                             fBoostedMethodOptions);
+      IMethod *method = ClassifierFactory::Instance().Create(
+         fBoostedMethodName.Data(), GetJobName(), Form("%s_B%04i", fBoostedMethodTitle.Data(), fCurrentMethodIdx),
+         DataInfo(), fBoostedMethodOptions);
       TMVA::MsgLogger::EnableOutput();
 
-      // supressing the rest of the classifier output the right way
+      // suppressing the rest of the classifier output the right way
       fCurrentMethod  = (dynamic_cast<MethodBase*>(method));
 
       if (fCurrentMethod==0) {
          Log() << kFATAL << "uups.. guess the booking of the " << fCurrentMethodIdx << "-th classifier somehow failed" << Endl;
-         return; // hope that makes coverity happy (as if fears I migh use the pointer later on, not knowing that FATAL exits
+         return; // hope that makes coverity happy (as if fears I might use the pointer later on, not knowing that FATAL exits
       }
 
       // set fDataSetManager if MethodCategory (to enable Category to create datasetinfo objects) // DSMTEST
@@ -413,19 +422,22 @@ void TMVA::MethodBoost::Train()
       fCurrentMethod->ProcessSetup();
       fCurrentMethod->CheckSetup();
 
-      
+
       // reroute transformationhandler
       fCurrentMethod->RerouteTransformationHandler (&(this->GetTransformationHandler()));
 
 
       // creating the directory of the classifier
-      if (fMonitorBoostedMethod) {
-         methodDir=MethodBaseDir()->GetDirectory(dirName=Form("%s_B%04i",fBoostedMethodName.Data(),fCurrentMethodIdx));
-         if (methodDir==0) {
-            methodDir=BaseDir()->mkdir(dirName,dirTitle=Form("Directory Boosted %s #%04i", fBoostedMethodName.Data(),fCurrentMethodIdx));
-         }
-         fCurrentMethod->SetMethodDir(methodDir);
-         fCurrentMethod->BaseDir()->cd();
+      if(!IsSilentFile())
+      {
+        if (fMonitorBoostedMethod) {
+            methodDir=GetFile()->GetDirectory(dirName=Form("%s_B%04i",fBoostedMethodName.Data(),fCurrentMethodIdx));
+            if (methodDir==0) {
+                methodDir=BaseDir()->mkdir(dirName,dirTitle=Form("Directory Boosted %s #%04i", fBoostedMethodName.Data(),fCurrentMethodIdx));
+            }
+            fCurrentMethod->SetMethodDir(methodDir);
+            fCurrentMethod->BaseDir()->cd();
+        }
       }
 
       // training
@@ -433,22 +445,22 @@ void TMVA::MethodBoost::Train()
       timer.DrawProgressBar( fCurrentMethodIdx );
       if (fCurrentMethodIdx==0) MonitorBoost(Types::kBoostProcBegin,fCurrentMethodIdx);
       MonitorBoost(Types::kBeforeTraining,fCurrentMethodIdx);
-      TMVA::MsgLogger::InhibitOutput(); //supressing Logger outside the method
+      TMVA::MsgLogger::InhibitOutput(); //suppressing Logger outside the method
       if (fBoostType=="Bagging") Bagging();  // you want also to train the first classifier on a bagged sample
       SingleTrain();
       TMVA::MsgLogger::EnableOutput();
-      fCurrentMethod->WriteMonitoringHistosToFile();
-      
+      if(!IsSilentFile())fCurrentMethod->WriteMonitoringHistosToFile();
+
       // calculate MVA values of current method for all events in training sample
       // (used later on to get 'misclassified events' etc for the boosting
       CalcMVAValues();
 
-      if (fCurrentMethodIdx==0 && fMonitorBoostedMethod) CreateMVAHistorgrams();
-      
+      if(!IsSilentFile()) if (fCurrentMethodIdx==0 && fMonitorBoostedMethod) CreateMVAHistorgrams();
+
       // get ROC integral and overlap integral for single method on
       // training sample if fMethodWeightType == "ByROC" or the user
       // wants detailed monitoring
-	 
+
       // boosting (reweight training sample)
       MonitorBoost(Types::kBeforeBoosting,fCurrentMethodIdx);
       SingleBoost(fCurrentMethod);
@@ -457,7 +469,7 @@ void TMVA::MethodBoost::Train()
       results->GetHist("BoostWeight")->SetBinContent(fCurrentMethodIdx+1,fBoostWeight);
       results->GetHist("ErrorFraction")->SetBinContent(fCurrentMethodIdx+1,fMethodError);
 
-      if (fDetailedMonitoring) {      
+      if (fDetailedMonitoring) {
          fROC_training = GetBoostROCIntegral(kTRUE, Types::kTraining, kTRUE);
          results->GetHist("ROCIntegral_test")->SetBinContent(fCurrentMethodIdx+1, GetBoostROCIntegral(kTRUE,  Types::kTesting));
          results->GetHist("ROCIntegralBoosted_test")->SetBinContent(fCurrentMethodIdx+1, GetBoostROCIntegral(kFALSE, Types::kTesting));
@@ -473,10 +485,10 @@ void TMVA::MethodBoost::Train()
       // stop boosting if needed when error has reached 0.5
       // thought of counting a few steps, but it doesn't seem to be necessary
       Log() << kDEBUG << "AdaBoost (methodErr) err = " << fMethodError << Endl;
-      if (fMethodError > 0.49999) StopCounter++; 
+      if (fMethodError > 0.49999) StopCounter++;
       if (StopCounter > 0 && fBoostType != "Bagging") {
          timer.DrawProgressBar( fBoostNum );
-         fBoostNum = fCurrentMethodIdx+1; 
+         fBoostNum = fCurrentMethodIdx+1;
          Log() << kINFO << "Error rate has reached 0.5 ("<< fMethodError<<"), boosting process stopped at #" << fBoostNum << " classifier" << Endl;
          if (fBoostNum < 5)
             Log() << kINFO << "The classifier might be too strong to boost with Beta = " << fAdaBoostBeta << ", try reducing it." <<Endl;
@@ -485,25 +497,25 @@ void TMVA::MethodBoost::Train()
    }
 
    //as MethodBoost acts not on a private event sample (like MethodBDT does), we need to remember not
-   // to leave "boosted" events to the next classifier in the factory 
+   // to leave "boosted" events to the next classifier in the factory
 
    ResetBoostWeights();
 
    Timer* timer1= new Timer( fBoostNum, GetName() );
    // normalizing the weights of the classifiers
    for (fCurrentMethodIdx=0;fCurrentMethodIdx<fBoostNum;fCurrentMethodIdx++) {
-      // pefroming post-boosting actions
+      // performing post-boosting actions
 
       timer1->DrawProgressBar( fCurrentMethodIdx );
-      
+
       if (fCurrentMethodIdx==fBoostNum) {
-         Log() << kINFO << "Elapsed time: " << timer1->GetElapsedTime() 
+         Log() << kINFO << "Elapsed time: " << timer1->GetElapsedTime()
                << "                              " << Endl;
       }
-      
+
       TH1F* tmp = dynamic_cast<TH1F*>( results->GetHist("ClassifierWeight") );
       if (tmp) tmp->SetBinContent(fCurrentMethodIdx+1,fMethodWeight[fCurrentMethodIdx]);
-      
+
    }
 
    // Ensure that in case of only 1 boost the method weight equals
@@ -522,15 +534,15 @@ void TMVA::MethodBoost::Train()
 
 void TMVA::MethodBoost::CleanBoostOptions()
 {
-   fBoostedMethodOptions=GetOptions(); 
+   fBoostedMethodOptions=GetOptions();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TMVA::MethodBoost::CreateMVAHistorgrams()
 {
-   if (fBoostNum <=0) Log() << kFATAL << "CreateHistorgrams called before fBoostNum is initialized" << Endl;
-   // calculating histograms boundries and creating histograms..
+   if (fBoostNum <=0) Log() << kFATAL << "CreateHistograms called before fBoostNum is initialized" << Endl;
+   // calculating histograms boundaries and creating histograms..
    // nrms = number of rms around the average to use for outline (of the 0 classifier)
    Double_t meanS, meanB, rmsS, rmsB, xmin, xmax, nrms = 10;
    Int_t signalClass = 0;
@@ -544,7 +556,7 @@ void TMVA::MethodBoost::CreateMVAHistorgrams()
    xmin = TMath::Max( TMath::Min(meanS - nrms*rmsS, meanB - nrms*rmsB ), xmin );
    xmax = TMath::Min( TMath::Max(meanS + nrms*rmsS, meanB + nrms*rmsB ), xmax ) + 0.00001;
 
-   // creating all the historgrams
+   // creating all the histograms
    for (UInt_t imtd=0; imtd<fBoostNum; imtd++) {
       fTrainSigMVAHist .push_back( new TH1F( Form("MVA_Train_S_%04i",imtd), "MVA_Train_S",        fNbins, xmin, xmax ) );
       fTrainBgdMVAHist .push_back( new TH1F( Form("MVA_Train_B%04i", imtd), "MVA_Train_B",        fNbins, xmin, xmax ) );
@@ -663,11 +675,20 @@ void TMVA::MethodBoost::SingleTrain()
 {
    Data()->SetCurrentType(Types::kTraining);
    MethodBase* meth = dynamic_cast<MethodBase*>(GetLastMethod());
-   if (meth) meth->TrainMethod();
+   if (meth){
+       meth->SetSilentFile(IsSilentFile());
+       if(IsModelPersistence()){
+           TString _fFileDir= DataInfo().GetName();
+           _fFileDir+="/"+gConfig().GetIONames().fWeightFileDir;
+           meth->SetWeightFileDir(_fFileDir);
+       }
+       meth->SetModelPersistence(IsModelPersistence());
+       meth->TrainMethod();
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// find the CUT on the individual MVA that defines an event as 
+/// find the CUT on the individual MVA that defines an event as
 /// correct or misclassified (to be used in the boosting process)
 
 void TMVA::MethodBoost::FindMVACut(MethodBase *method)
@@ -686,9 +707,9 @@ void TMVA::MethodBoost::FindMVACut(MethodBase *method)
       if (val<minMVA) minMVA=val;
    }
    maxMVA = maxMVA+(maxMVA-minMVA)/nBins;
-   
+
    Double_t sum = 0.;
-   
+
    TH1D *mvaS  = new TH1D(Form("MVAS_%d",fCurrentMethodIdx) ,"",nBins,minMVA,maxMVA);
    TH1D *mvaB  = new TH1D(Form("MVAB_%d",fCurrentMethodIdx) ,"",nBins,minMVA,maxMVA);
    TH1D *mvaSC = new TH1D(Form("MVASC_%d",fCurrentMethodIdx),"",nBins,minMVA,maxMVA);
@@ -704,7 +725,7 @@ void TMVA::MethodBoost::FindMVACut(MethodBase *method)
    }
 
    for (Long64_t ievt=0; ievt<Data()->GetNEvents(); ievt++) {
-      
+
       Double_t weight = GetEvent(ievt)->GetWeight();
       Double_t mvaVal=method->GetMvaValue();
       sum +=weight;
@@ -715,21 +736,23 @@ void TMVA::MethodBoost::FindMVACut(MethodBase *method)
       }
    }
    SeparationBase *sepGain;
-   
 
-   // Boosting should use Miscalssification not Gini Index (changed, Helge 31.5.2013)
-   // ACHTUNG !! mit "Misclassification" geht es NUR wenn man die Signal zu Background bei jedem Boost schritt
-   // wieder hinbiegt. Es gibt aber komischerweise bessere Ergebnisse (genau wie bei BDT auch schon beobachtet) wenn
-   // man GiniIndex benutzt und akzeptiert dass jedes andere mal KEIN vernuenftiger Cut gefunden wird - d.h. der
-   // Cut liegt dann ausserhalb der MVA value range, alle events sind als Bkg classifiziert und dann wird entpsrehcend
-   // des Boost algorithmus 'automitisch' etwas renormiert .. sodass im naechsten Schritt dann wieder was vernuenftiges
-   // rauskommt. Komisch .. dass DAS richtig sein soll ?? 
+
+   // Boosting should use Misclassification not Gini Index (changed, Helge 31.5.2013)
+   // WARNING! It works with Misclassification only if you fix the signal to
+   // background at every step. Strangely enough, there are better results
+   // ( as seen with BDT ) if you use Gini Index, and accept that sometimes no
+   // sensible cut is found - i.e. the cut is then outside the MVA value range,
+   // all events are classified as background and then according to the Boost
+   // algorithm something is renormed 'automatically' ... so that in the next
+   // step again the result is something sensible.
+   // Strange ... that THIS is supposed to be right?
 
    //   SeparationBase *sepGain2 = new MisClassificationError();
    //sepGain = new MisClassificationError();
-   sepGain = new GiniIndex(); 
+   sepGain = new GiniIndex();
    //sepGain = new CrossEntropy();
-   
+
    Double_t sTot = mvaS->GetSum();
    Double_t bTot = mvaB->GetSum();
 
@@ -742,27 +765,27 @@ void TMVA::MethodBoost::FindMVACut(MethodBase *method)
    Double_t sSelCut=sSel;
    Double_t bSelCut=bSel;
    //      std::cout << "minMVA =" << minMVA << " maxMVA = " << maxMVA << " width = " << mvaSC->GetBinWidth(1) <<  std::endl;
-   
+
    //      for (Int_t ibin=1;ibin<=nBins;ibin++) std::cout << " cutvalues[" << ibin<<"]="<<mvaSC->GetBinLowEdge(ibin) << "  " << mvaSC->GetBinCenter(ibin) << std::endl;
    Double_t mvaCutOrientation=1; // 1 if mva > mvaCut --> Signal and -1 if mva < mvaCut (i.e. mva*-1 > mvaCut*-1) --> Signal
-   for (Int_t ibin=1;ibin<=nBins;ibin++){ 
+   for (Int_t ibin=1;ibin<=nBins;ibin++){
       mvaSC->SetBinContent(ibin,mvaS->GetBinContent(ibin)+mvaSC->GetBinContent(ibin-1));
       mvaBC->SetBinContent(ibin,mvaB->GetBinContent(ibin)+mvaBC->GetBinContent(ibin-1));
-      
+
       sSel=mvaSC->GetBinContent(ibin);
       bSel=mvaBC->GetBinContent(ibin);
 
       // if (ibin==nBins){
       //    std::cout << "Last bin s="<< sSel <<" b="<<bSel << " s="<< sTot-sSel <<" b="<<bTot-bSel << endl;
       // }
-     
-      if (separationGain < sepGain->GetSeparationGain(sSel,bSel,sTot,bTot) 
+
+      if (separationGain < sepGain->GetSeparationGain(sSel,bSel,sTot,bTot)
           //  &&           (mvaSC->GetBinCenter(ibin) >0 || (fCurrentMethodIdx+1)%2 )
           ){
          separationGain = sepGain->GetSeparationGain(sSel,bSel,sTot,bTot);
          //         mvaCut=mvaSC->GetBinCenter(ibin);
          mvaCut=mvaSC->GetBinLowEdge(ibin+1);
-	 //         if (sSel/bSel > (sTot-sSel)/(bTot-bSel)) mvaCutOrientation=-1;
+         //         if (sSel/bSel > (sTot-sSel)/(bTot-bSel)) mvaCutOrientation=-1;
          if (sSel*(bTot-bSel) > (sTot-sSel)*bSel) mvaCutOrientation=-1;
          else                                     mvaCutOrientation=1;
          sSelCut=sSel;
@@ -770,60 +793,63 @@ void TMVA::MethodBoost::FindMVACut(MethodBase *method)
          //         std::cout << "new cut at " << mvaCut << "with s="<<sTot-sSel << " b="<<bTot-bSel << std::endl;
       }
       /*
-      Double_t ori;
-      if (sSel/bSel > (sTot-sSel)/(bTot-bSel)) ori=-1;
-      else                                     ori=1;
-      std::cout << ibin << " mvacut="<<mvaCut
-                << " sTot=" << sTot
-                << " bTot=" << bTot
-                << " sSel=" << sSel
-                << " bSel=" << bSel
-                << " s/b(1)=" << sSel/bSel
-                << " s/b(2)=" << (sTot-sSel)/(bTot-bSel)
-                << " sepGain="<<sepGain->GetSeparationGain(sSel,bSel,sTot,bTot) 
-                << " sepGain2="<<sepGain2->GetSeparationGain(sSel,bSel,sTot,bTot)
-                << "      " <<ori
-                << std::endl;
+        Double_t ori;
+        if (sSel/bSel > (sTot-sSel)/(bTot-bSel)) ori=-1;
+        else                                     ori=1;
+        std::cout << ibin << " mvacut="<<mvaCut
+        << " sTot=" << sTot
+        << " bTot=" << bTot
+        << " sSel=" << sSel
+        << " bSel=" << bSel
+        << " s/b(1)=" << sSel/bSel
+        << " s/b(2)=" << (sTot-sSel)/(bTot-bSel)
+        << " sepGain="<<sepGain->GetSeparationGain(sSel,bSel,sTot,bTot)
+        << " sepGain2="<<sepGain2->GetSeparationGain(sSel,bSel,sTot,bTot)
+        << "      " <<ori
+        << std::endl;
       */
-         
+
    }
-   
+
    if (0){
       double parentIndex=sepGain->GetSeparationIndex(sTot,bTot);
       double leftIndex  =sepGain->GetSeparationIndex(sSelCut,bSelCut);
       double rightIndex  =sepGain->GetSeparationIndex(sTot-sSelCut,bTot-bSelCut);
-      std::cout 
-              << " sTot=" << sTot
-              << " bTot=" << bTot
-              << " s="<<sSelCut
-              << " b="<<bSelCut
-              << " s2="<<(sTot-sSelCut)
-              << " b2="<<(bTot-bSelCut)
-              << " s/b(1)=" << sSelCut/bSelCut
-              << " s/b(2)=" << (sTot-sSelCut)/(bTot-bSelCut)
-              << " index before cut=" << parentIndex
-              << " after: left=" << leftIndex
-              << " after: right=" << rightIndex
-              << " sepGain=" << parentIndex-( (sSelCut+bSelCut) * leftIndex + (sTot-sSelCut+bTot-bSelCut) * rightIndex )/(sTot+bTot)
-              << " sepGain="<<separationGain
-              << " sepGain="<<sepGain->GetSeparationGain(sSelCut,bSelCut,sTot,bTot)
-              << " cut=" << mvaCut 
-              << " idx="<<fCurrentMethodIdx
-              << " cutOrientation="<<mvaCutOrientation
-              << std::endl;
+      std::cout
+         << " sTot=" << sTot
+         << " bTot=" << bTot
+         << " s="<<sSelCut
+         << " b="<<bSelCut
+         << " s2="<<(sTot-sSelCut)
+         << " b2="<<(bTot-bSelCut)
+         << " s/b(1)=" << sSelCut/bSelCut
+         << " s/b(2)=" << (sTot-sSelCut)/(bTot-bSelCut)
+         << " index before cut=" << parentIndex
+         << " after: left=" << leftIndex
+         << " after: right=" << rightIndex
+         << " sepGain=" << parentIndex-( (sSelCut+bSelCut) * leftIndex + (sTot-sSelCut+bTot-bSelCut) * rightIndex )/(sTot+bTot)
+         << " sepGain="<<separationGain
+         << " sepGain="<<sepGain->GetSeparationGain(sSelCut,bSelCut,sTot,bTot)
+         << " cut=" << mvaCut
+         << " idx="<<fCurrentMethodIdx
+         << " cutOrientation="<<mvaCutOrientation
+         << std::endl;
    }
    method->SetSignalReferenceCut(mvaCut);
    method->SetSignalReferenceCutOrientation(mvaCutOrientation);
 
    results->GetHist("SeparationGain")->SetBinContent(fCurrentMethodIdx+1,separationGain);
 
-   
+
    Log() << kDEBUG << "(old step) Setting method cut to " <<method->GetSignalReferenceCut()<< Endl;
-   
-   // mvaS ->Delete();  
-   // mvaB ->Delete();
-   // mvaSC->Delete();
-   // mvaBC->Delete();
+
+   if(IsSilentFile())
+   {
+        mvaS ->Delete();
+        mvaB ->Delete();
+        mvaSC->Delete();
+        mvaBC->Delete();
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -831,8 +857,8 @@ void TMVA::MethodBoost::FindMVACut(MethodBase *method)
 Double_t TMVA::MethodBoost::SingleBoost(MethodBase* method)
 {
    Double_t returnVal=-1;
-   
-   
+
+
    if      (fBoostType=="AdaBoost")      returnVal = this->AdaBoost  (method,1);
    else if (fBoostType=="RealAdaBoost")  returnVal = this->AdaBoost  (method,0);
    else if (fBoostType=="Bagging")       returnVal = this->Bagging   ();
@@ -843,12 +869,12 @@ Double_t TMVA::MethodBoost::SingleBoost(MethodBase* method)
    return returnVal;
 }
 ////////////////////////////////////////////////////////////////////////////////
-/// the standard (discrete or real) AdaBoost algorithm 
+/// the standard (discrete or real) AdaBoost algorithm
 
 Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost)
 {
    if (!method) {
-      Log() << kWARNING << " AdaBoost called without classifier reference - needed for calulating AdaBoost " << Endl;
+      Log() << kWARNING << " AdaBoost called without classifier reference - needed for calculating AdaBoost " << Endl;
       return 0;
    }
 
@@ -856,7 +882,7 @@ Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost
    Double_t sumAll=0, sumWrong=0;
    Bool_t* WrongDetection=new Bool_t[GetNEvents()];
    QuickMVAProbEstimator *MVAProb=NULL;
-   
+
    if (discreteAdaBoost) {
       FindMVACut(method);
       Log() << kDEBUG  << " individual mva cut value = " << method->GetSignalReferenceCut() << Endl;
@@ -865,9 +891,9 @@ Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost
       // the RealAdaBoost does use a simple "yes (signal)" or "no (background)"
       // answer from your single MVA, but a "signal probability" instead (in the BDT case,
       // that would be the 'purity' in the leaf node. For some MLP parameter, the MVA output
-      // can also interpreted as a probability, but here I try a genera aproach to get this
-      // probability from the MVA distributions... 
-      
+      // can also interpreted as a probability, but here I try a general approach to get this
+      // probability from the MVA distributions...
+
       for (Long64_t evt=0; evt<GetNEvents(); evt++) {
          const Event* ev =  Data()->GetEvent(evt);
          MVAProb->AddEvent(fMVAvalues->at(evt),ev->GetWeight(),ev->GetClass());
@@ -884,23 +910,26 @@ Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost
       v = fMVAvalues->at(ievt);
       w = ev->GetWeight();
       sumAll += w;
-      if (fMonitorBoostedMethod) {
-         if (sig) {
-            fBTrainSigMVAHist[fCurrentMethodIdx]->Fill(v,w);
-            fTrainSigMVAHist[fCurrentMethodIdx]->Fill(v,ev->GetOriginalWeight());
-         }
-         else {
-            fBTrainBgdMVAHist[fCurrentMethodIdx]->Fill(v,w);
-            fTrainBgdMVAHist[fCurrentMethodIdx]->Fill(v,ev->GetOriginalWeight());
-         }
+      if(!IsSilentFile())
+      {
+        if (fMonitorBoostedMethod) {
+            if (sig) {
+                fBTrainSigMVAHist[fCurrentMethodIdx]->Fill(v,w);
+                fTrainSigMVAHist[fCurrentMethodIdx]->Fill(v,ev->GetOriginalWeight());
+            }
+            else {
+                fBTrainBgdMVAHist[fCurrentMethodIdx]->Fill(v,w);
+                fTrainBgdMVAHist[fCurrentMethodIdx]->Fill(v,ev->GetOriginalWeight());
+            }
+        }
       }
-      
+
       if (discreteAdaBoost){
-         if (sig  == method->IsSignalLike(fMVAvalues->at(ievt))){   
+         if (sig  == method->IsSignalLike(fMVAvalues->at(ievt))){
             WrongDetection[ievt]=kFALSE;
          }else{
-            WrongDetection[ievt]=kTRUE; 
-            sumWrong+=w; 
+            WrongDetection[ievt]=kTRUE;
+            sumWrong+=w;
          }
       }else{
          Double_t mvaProb = MVAProb->GetMVAProbAt((Float_t)fMVAvalues->at(ievt));
@@ -914,7 +943,7 @@ Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost
 
    fMethodError=sumWrong/sumAll;
 
-   // calculating the fMethodError and the boostWeight out of it uses the formula 
+   // calculating the fMethodError and the boostWeight out of it uses the formula
    // w = ((1-err)/err)^beta
 
    Double_t boostWeight=0;
@@ -927,21 +956,21 @@ Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost
          boostWeight = TMath::Log((1.-fMethodError)/fMethodError)*fAdaBoostBeta;
       else
          boostWeight = TMath::Log((1.+fMethodError)/(1-fMethodError))*fAdaBoostBeta;
-      
-      
+
+
       //   std::cout << "boostweight = " << boostWeight << std::endl;
-      
+
       // ADA boosting, rescaling the weight of the wrong events according to the error level
       // over the entire test sample rescaling all the weights to have the same sum, but without
       // touching the original weights (changing only the boosted weight of all the events)
       // first reweight
-      
+
       Double_t newSum=0., oldSum=0.;
-      
-      
+
+
       Double_t boostfactor = TMath::Exp(boostWeight);
-      
-      
+
+
       for (Long64_t ievt=0; ievt<GetNEvents(); ievt++) {
          const Event* ev =  Data()->GetEvent(ievt);
          oldSum += ev->GetWeight();
@@ -952,27 +981,27 @@ Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost
                else                     ev->ScaleBoostWeight(1./boostfactor);
             }
             //         if (ievt<30) std::cout<<ievt<<" var0="<<ev->GetValue(0)<<" var1="<<ev->GetValue(1)<<" weight="<<ev->GetWeight() << "  boostby:"<<boostfactor<<std::endl;
-            
+
          }else{
             // events are classified by their probability of being signal or background
             // (eventually you should write this one - i.e. re-use the MVA value that were already
-            // calcualted and stroed..   however ,for the moement ..
+            // calculated and stored..   however ,for the moment ..
             Double_t mvaProb = MVAProb->GetMVAProbAt((Float_t)fMVAvalues->at(ievt));
             mvaProb = 2*(mvaProb-0.5);
             // mvaProb = (1-mvaProb);
-            
+
             Int_t    trueType=1;
             if (DataInfo().IsSignal(ev)) trueType = 1;
             else trueType = -1;
-            
+
             boostfactor = TMath::Exp(-1*boostWeight*trueType*mvaProb);
             if (ev->GetWeight() > 0) ev->ScaleBoostWeight(boostfactor);
             else                     ev->ScaleBoostWeight(1./boostfactor);
-            
+
          }
          newSum += ev->GetWeight();
       }
-      
+
       Double_t normWeight = oldSum/newSum;
       // next normalize the weights
       Double_t normSig=0, normBkg=0;
@@ -982,15 +1011,15 @@ Double_t TMVA::MethodBoost::AdaBoost(MethodBase* method, Bool_t discreteAdaBoost
          if (ev->GetClass()) normSig+=ev->GetWeight();
          else                normBkg+=ev->GetWeight();
       }
-      
+
       Results* results = Data()->GetResults(GetMethodName(), Types::kTraining, GetAnalysisType());
       results->GetHist("SoverBtotal")->SetBinContent(fCurrentMethodIdx+1, normSig/normBkg);
-      
+
       for (Long64_t ievt=0; ievt<GetNEvents(); ievt++) {
          const Event* ev = Data()->GetEvent(ievt);
-         
-         if (ev->GetClass()) ev->ScaleBoostWeight(oldSum/normSig/2); 
-         else                ev->ScaleBoostWeight(oldSum/normBkg/2); 
+
+         if (ev->GetClass()) ev->ScaleBoostWeight(oldSum/normSig/2);
+         else                ev->ScaleBoostWeight(oldSum/normBkg/2);
       }
    }
 
@@ -1044,11 +1073,11 @@ void TMVA::MethodBoost::GetHelpMessage() const
    Log() << "(Boost_Type), which can be set to either AdaBoost or Bagging." << Endl;
    Log() << "AdaBoosting: The most important parameters in this configuration" <<Endl;
    Log() << "is the beta parameter (Boost_AdaBoostBeta)  " << Endl;
-   Log() << "When boosting a linear classifier, it is sometimes advantageous"<<Endl; 
+   Log() << "When boosting a linear classifier, it is sometimes advantageous"<<Endl;
    Log() << "to transform the MVA output non-linearly. The following options" <<Endl;
    Log() << "are available: step, log, and minmax, the default is no transform."<<Endl;
    Log() <<Endl;
-   Log() << "Some classifiers are hard to boost and do not improve much in"<<Endl; 
+   Log() << "Some classifiers are hard to boost and do not improve much in"<<Endl;
    Log() << "their performance by boosting them, some even slightly deteriorate"<< Endl;
    Log() << "due to the boosting." <<Endl;
    Log() << "The booking of the boost method is special since it requires"<<Endl;
@@ -1063,7 +1092,7 @@ void TMVA::MethodBoost::GetHelpMessage() const
 ////////////////////////////////////////////////////////////////////////////////
 
 const TMVA::Ranking* TMVA::MethodBoost::CreateRanking()
-{ 
+{
    return 0;
 }
 
@@ -1081,7 +1110,7 @@ Double_t TMVA::MethodBoost::GetMvaValue( Double_t* err, Double_t* errUpper )
       if (m==0) continue;
       Double_t val = fTmpEvent ? m->GetMvaValue(fTmpEvent) : m->GetMvaValue();
       Double_t sigcut = m->GetSignalReferenceCut();
-      
+
       // default is no transform
       if (fTransformString == "linear"){
 
@@ -1136,14 +1165,14 @@ Double_t TMVA::MethodBoost::GetBoostROCIntegral(Bool_t singleMethod, Types::ETre
    // set data sample training / testing
    Data()->SetCurrentType(eTT);
 
-   MethodBase* method = singleMethod ? dynamic_cast<MethodBase*>(fMethods.back()) : 0; // ToDo CoVerity flags this line as there is no prtection against a zero-pointer delivered by dynamic_cast
-   // to make CoVerity happy (although, OF COURSE, the last method in the commitee
+   MethodBase* method = singleMethod ? dynamic_cast<MethodBase*>(fMethods.back()) : 0; // ToDo CoVerity flags this line as there is no protection against a zero-pointer delivered by dynamic_cast
+   // to make CoVerity happy (although, OF COURSE, the last method in the committee
    // has to be also of type MethodBase as ANY method is... hence the dynamic_cast
    // will never by "zero" ...
    if (singleMethod && !method) {
       Log() << kFATAL << " What do you do? Your method:"
-            << fMethods.back()->GetName() 
-            << " seems not to be a propper TMVA method" 
+            << fMethods.back()->GetName()
+            << " seems not to be a propper TMVA method"
             << Endl;
       std::exit(1);
    }
@@ -1170,7 +1199,7 @@ Double_t TMVA::MethodBoost::GetBoostROCIntegral(Bool_t singleMethod, Types::ETre
    std::vector <Float_t>* mvaRes;
    if (singleMethod && eTT==Types::kTraining)
       mvaRes = fMVAvalues; // values already calculated
-   else {  
+   else {
       mvaRes = new std::vector <Float_t>(GetNEvents());
       for (Long64_t ievt=0; ievt<GetNEvents(); ievt++) {
          GetEvent(ievt);
@@ -1209,11 +1238,11 @@ Double_t TMVA::MethodBoost::GetBoostROCIntegral(Bool_t singleMethod, Types::ETre
       else                          mva_b->Fill( (*mvaRes)[ievt], w );
 
       if (CalcOverlapIntergral) {
-	 Float_t w_ov = ev->GetWeight();
-	 if (DataInfo().IsSignal(ev))  
-	    mva_s_overlap->Fill( (*mvaRes)[ievt], w_ov );
-	 else
-	    mva_b_overlap->Fill( (*mvaRes)[ievt], w_ov );
+         Float_t w_ov = ev->GetWeight();
+         if (DataInfo().IsSignal(ev))
+            mva_s_overlap->Fill( (*mvaRes)[ievt], w_ov );
+         else
+            mva_b_overlap->Fill( (*mvaRes)[ievt], w_ov );
       }
    }
    gTools().NormHist( mva_s );
@@ -1223,7 +1252,7 @@ Double_t TMVA::MethodBoost::GetBoostROCIntegral(Bool_t singleMethod, Types::ETre
 
    // calculate ROC integral from fS, fB
    Double_t ROC = MethodBase::GetROCIntegral(fS, fB);
-   
+
    // calculate overlap integral
    if (CalcOverlapIntergral) {
       gTools().NormHist( mva_s_overlap );
@@ -1231,10 +1260,10 @@ Double_t TMVA::MethodBoost::GetBoostROCIntegral(Bool_t singleMethod, Types::ETre
 
       fOverlap_integral = 0.0;
       for (Int_t bin=1; bin<=mva_s_overlap->GetNbinsX(); bin++){
-	 Double_t bc_s = mva_s_overlap->GetBinContent(bin);
-	 Double_t bc_b = mva_b_overlap->GetBinContent(bin);
-	 if (bc_s > 0.0 && bc_b > 0.0)
-	    fOverlap_integral += TMath::Min(bc_s, bc_b);
+         Double_t bc_s = mva_s_overlap->GetBinContent(bin);
+         Double_t bc_b = mva_b_overlap->GetBinContent(bin);
+         if (bc_s > 0.0 && bc_b > 0.0)
+            fOverlap_integral += TMath::Min(bc_s, bc_b);
       }
 
       delete mva_s_overlap;
@@ -1270,10 +1299,9 @@ void TMVA::MethodBoost::CalcMVAValues()
    }
 
    // fill cumulative mva distribution
-   
+
 
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// fill various monitoring histograms from information of the individual classifiers that
@@ -1292,7 +1320,7 @@ void TMVA::MethodBoost::MonitorBoost( Types::EBoostStage stage , UInt_t methodIn
             results->Store(new TH1I("NodesBeforePruning","nodes before pruning",this->GetBoostNum(),0,this->GetBoostNum()),"NodesBeforePruning");
             results->Store(new TH1I("NodesAfterPruning","nodes after pruning",this->GetBoostNum(),0,this->GetBoostNum()),"NodesAfterPruning");
          }
-         
+
          if (stage == Types::kBeforeTraining){
          }
          else if (stage == Types::kBeforeBoosting){
@@ -1300,30 +1328,30 @@ void TMVA::MethodBoost::MonitorBoost( Types::EBoostStage stage , UInt_t methodIn
             results->GetHist("NodesAfterPruning")->SetBinContent(methodIndex+1,currentDT->GetNNodes());
          }
          else if (stage == Types::kAfterBoosting){
-            
+
          }
          else if (stage != Types::kBoostProcEnd){
-            Log() << kINFO << "<Train> average number of nodes before/after pruning : " 
-                  <<   results->GetHist("NodesBeforePruning")->GetMean() << " / " 
+            Log() << kINFO << "<Train> average number of nodes before/after pruning : "
+                  <<   results->GetHist("NodesBeforePruning")->GetMean() << " / "
                   <<   results->GetHist("NodesAfterPruning")->GetMean()
                   << Endl;
          }
       }
-      
+
    }else if (GetCurrentMethod(methodIndex)->GetMethodType() == TMVA::Types::kFisher) {
       if (stage == Types::kAfterBoosting){
          TMVA::MsgLogger::EnableOutput();
       }
    }else{
       if (methodIndex < 3){
-         Log() << kINFO << "No detailed boost monitoring for " 
-               << GetCurrentMethod(methodIndex)->GetMethodName() 
+         Log() << kDEBUG << "No detailed boost monitoring for "
+               << GetCurrentMethod(methodIndex)->GetMethodName()
                << " yet available " << Endl;
       }
    }
 
    //boosting plots universal for all classifiers 'typically for debug purposes only as they are not general enough'
-   
+
    if (stage == Types::kBeforeBoosting){
       // if you want to display the weighted events for 2D case at each boost step:
       if (fDetailedMonitoring){
@@ -1333,7 +1361,7 @@ void TMVA::MethodBoost::MonitorBoost( Types::EBoostStage stage , UInt_t methodIn
             results->GetHist(Form("EventDistSig_%d",methodIndex))->SetMarkerColor(4);
             results->Store(new TH2F(Form("EventDistBkg_%d",methodIndex),Form("EventDistBkg_%d",methodIndex),100,0,7,100,0,7));
             results->GetHist(Form("EventDistBkg_%d",methodIndex))->SetMarkerColor(2);
-            
+
             Data()->SetCurrentType(Types::kTraining);
             for (Long64_t ievt=0; ievt<GetNEvents(); ievt++) {
                const Event* ev = GetEvent(ievt);
@@ -1342,14 +1370,14 @@ void TMVA::MethodBoost::MonitorBoost( Types::EBoostStage stage , UInt_t methodIn
                Float_t v1= ev->GetValue(1);
                //         if (ievt<3) std::cout<<ievt<<" var0="<<v0<<" var1="<<v1<<" weight="<<w<<std::endl;
                TH2* h;
-               if (DataInfo().IsSignal(ev)) h=results->GetHist2D(Form("EventDistSig_%d",methodIndex));      
+               if (DataInfo().IsSignal(ev)) h=results->GetHist2D(Form("EventDistSig_%d",methodIndex));
                else                         h=results->GetHist2D(Form("EventDistBkg_%d",methodIndex));
                if (h) h->Fill(v0,v1,w);
             }
          }
       }
    }
-   
+
    return;
 }
 

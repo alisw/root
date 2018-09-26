@@ -46,12 +46,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
-#ifndef ROOT_TMVA_IFitterTarget
 #include "TMVA/IFitterTarget.h"
-#endif
 
 class TFormula;
 
@@ -68,12 +64,10 @@ namespace TMVA {
       MethodFDA( const TString& jobName,
                  const TString& methodTitle,
                  DataSetInfo& theData,
-                 const TString& theOption = "",
-                 TDirectory* theTargetDir = 0 );
+                 const TString& theOption = "");
 
       MethodFDA( DataSetInfo& theData,
-                 const TString& theWeightFile,
-                 TDirectory* theTargetDir = NULL );
+                 const TString& theWeightFile);
 
       virtual ~MethodFDA( void );
 
@@ -156,7 +150,7 @@ namespace TMVA {
       //
       Int_t                  fOutputDimensions;   // number of output values
 
-      ClassDef(MethodFDA,0)  // Function Discriminant Analysis
+      ClassDef(MethodFDA,0);  // Function Discriminant Analysis
    };
 
 } // namespace TMVA

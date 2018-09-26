@@ -15,7 +15,6 @@
 #include "TROOT.h"
 #include "TEnv.h"
 #include "TGraph.h"
-#include "TGaxis.h"
 #include "TH1.h"
 #include "TF1.h"
 #include "TStyle.h"
@@ -43,7 +42,7 @@
 
 extern void H1LeastSquareSeqnd(Int_t n, Double_t *a, Int_t idim, Int_t &ifail, Int_t k, Double_t *b);
 
-ClassImp(TGraph)
+ClassImp(TGraph);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -53,23 +52,30 @@ A Graph is a graphics object made of two arrays X and Y with npoints each.
 The TGraph painting is performed thanks to the TGraphPainter
 class. All details about the various painting options are given in this class.
 
-*Note:* Unlike histogram or tree (or even TGraph2D), TGraph objects
- are not automatically attached to the current TFile, in order to keep the
- management and size of the TGraph has small as possible.
+#### Notes
+
+  - Unlike histogram or tree (or even TGraph2D), TGraph objects
+    are not automatically attached to the current TFile, in order to keep the
+    management and size of the TGraph as small as possible.
+  - The TGraph constructors do not have the TGraph title and name as parameters.
+    A TGraph has the default title and name "Graph". To change the default title
+    and name `SetTitle` and `SetName` should be called on the TGraph after its creation.
+    TGraph was a light weight object to start with, like TPolyline or TPolyMarker.
+    That’s why it did not have any title and name parameters in the constructors.
 
 The picture below gives an example:
+
 Begin_Macro(source)
 {
-   TCanvas *c1 = new TCanvas("c1","A Simple Graph Example",200,10,700,500);
+   TCanvas *c1 = new TCanvas("c1","A Simple Graph Example",200,10,500,300);
    Double_t x[100], y[100];
    Int_t n = 20;
    for (Int_t i=0;i<n;i++) {
      x[i] = i*0.1;
      y[i] = 10*sin(x[i]+0.2);
    }
-   gr = new TGraph(n,x,y);
+   TGraph* gr = new TGraph(n,x,y);
    gr->Draw("AC*");
-   return c1;
 }
 End_Macro
 */
@@ -77,7 +83,7 @@ End_Macro
 ////////////////////////////////////////////////////////////////////////////////
 /// Graph default constructor.
 
-TGraph::TGraph(): TNamed(), TAttLine(), TAttFill(1, 1001), TAttMarker()
+TGraph::TGraph(): TNamed(), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    fNpoints = -1;  //will be reset to 0 in CtorAllocate
    if (!CtorAllocate()) return;
@@ -88,7 +94,7 @@ TGraph::TGraph(): TNamed(), TAttLine(), TAttFill(1, 1001), TAttMarker()
 /// the arrays x and y will be set later
 
 TGraph::TGraph(Int_t n)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    fNpoints = n;
    if (!CtorAllocate()) return;
@@ -99,7 +105,7 @@ TGraph::TGraph(Int_t n)
 /// Graph normal constructor with ints.
 
 TGraph::TGraph(Int_t n, const Int_t *x, const Int_t *y)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    if (!x || !y) {
       fNpoints = 0;
@@ -117,7 +123,7 @@ TGraph::TGraph(Int_t n, const Int_t *x, const Int_t *y)
 /// Graph normal constructor with floats.
 
 TGraph::TGraph(Int_t n, const Float_t *x, const Float_t *y)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    if (!x || !y) {
       fNpoints = 0;
@@ -135,7 +141,7 @@ TGraph::TGraph(Int_t n, const Float_t *x, const Float_t *y)
 /// Graph normal constructor with doubles.
 
 TGraph::TGraph(Int_t n, const Double_t *x, const Double_t *y)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    if (!x || !y) {
       fNpoints = 0;
@@ -158,7 +164,8 @@ TGraph::TGraph(const TGraph &gr)
    fMaxSize = gr.fMaxSize;
    if (gr.fFunctions) fFunctions = (TList*)gr.fFunctions->Clone();
    else fFunctions = new TList;
-   fHistogram = 0;
+   if (gr.fHistogram) fHistogram = (TH1F*)gr.fHistogram->Clone();
+   else fHistogram = 0;
    fMinimum = gr.fMinimum;
    fMaximum = gr.fMaximum;
    if (!fMaxSize) {
@@ -239,7 +246,7 @@ TGraph& TGraph::operator=(const TGraph &gr)
 /// in vx and vy.
 
 TGraph::TGraph(const TVectorF &vx, const TVectorF &vy)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    fNpoints = TMath::Min(vx.GetNrows(), vy.GetNrows());
    if (!CtorAllocate()) return;
@@ -258,7 +265,7 @@ TGraph::TGraph(const TVectorF &vx, const TVectorF &vy)
 /// in vx and vy.
 
 TGraph::TGraph(const TVectorD &vx, const TVectorD &vy)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    fNpoints = TMath::Min(vx.GetNrows(), vy.GetNrows());
    if (!CtorAllocate()) return;
@@ -274,7 +281,7 @@ TGraph::TGraph(const TVectorD &vx, const TVectorD &vy)
 /// Graph constructor importing its parameters from the TH1 object passed as argument
 
 TGraph::TGraph(const TH1 *h)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    if (!h) {
       Error("TGraph", "Pointer to histogram is null");
@@ -316,7 +323,7 @@ TGraph::TGraph(const TH1 *h)
 ///                at the fNpx+1 points of f and the integral is normalized to 1.
 
 TGraph::TGraph(const TF1 *f, Option_t *option)
-   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", "Graph"), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    char coption = ' ';
    if (!f) {
@@ -363,10 +370,10 @@ TGraph::TGraph(const TF1 *f, Option_t *option)
 ////////////////////////////////////////////////////////////////////////////////
 /// Graph constructor reading input from filename.
 /// filename is assumed to contain at least two columns of numbers.
-/// the string format is by default "%lg %lg".
+/// the string format is by default "%%lg %%lg".
 /// this is a standard c formatting for scanf. If columns of numbers should be
 /// skipped, a "%*lg" or "%*s" for each column can be added,
-/// e.g. "%lg %*lg %lg" would read x-values from the first and y-values from
+/// e.g. "%%lg %%*lg %%lg" would read x-values from the first and y-values from
 /// the third column.
 /// For files separated by a specific delimiter different from ' ' and '\t' (e.g. ';' in csv files)
 /// you can avoid using %*s to bypass this delimiter by explicitly specify the "option" argument,
@@ -375,7 +382,7 @@ TGraph::TGraph(const TF1 *f, Option_t *option)
 /// Note in that case, the instantiation is about 2 times slower.
 
 TGraph::TGraph(const char *filename, const char *format, Option_t *option)
-   : TNamed("Graph", filename), TAttLine(), TAttFill(1, 1001), TAttMarker()
+   : TNamed("Graph", filename), TAttLine(), TAttFill(0, 1000), TAttMarker()
 {
    Double_t x, y;
    TString fname = filename;
@@ -544,10 +551,8 @@ Double_t** TGraph::AllocateArrays(Int_t Narrays, Int_t arraySize)
 
 void TGraph::Apply(TF1 *f)
 {
-   if (fHistogram) {
-      delete fHistogram;
-      fHistogram = 0;
-   }
+   if (fHistogram) SetBit(kResetHisto);
+
    for (Int_t i = 0; i < fNpoints; i++) {
       fY[i] = f->Eval(fX[i], fY[i]);
    }
@@ -770,6 +775,9 @@ void TGraph::Draw(Option_t *option)
    }
 
    AppendPad(opt);
+
+   gPad->IncrementPaletteColor(1, opt);
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -838,26 +846,35 @@ void TGraph::DrawPanel()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Interpolate points in this graph at x using a TSpline
-///  -if spline==0 and option="" a linear interpolation between the two points
-///   close to x is computed. If x is outside the graph range, a linear
-///   extrapolation is computed.
-///  -if spline==0 and option="S" a TSpline3 object is created using this graph
-///   and the interpolated value from the spline is returned.
-///   the internally created spline is deleted on return.
-///  -if spline is specified, it is used to return the interpolated value.
+/// Interpolate points in this graph at x using a TSpline.
+///
+///  - if spline==0 and option="" a linear interpolation between the two points
+///    close to x is computed. If x is outside the graph range, a linear
+///    extrapolation is computed.
+///  - if spline==0 and option="S" a TSpline3 object is created using this graph
+///    and the interpolated value from the spline is returned.
+///    the internally created spline is deleted on return.
+///  - if spline is specified, it is used to return the interpolated value.
+///
+///   If the points are sorted in X a binary search is used (significantly faster)
+///   One needs to set the bit  TGraph::SetBit(TGraph::kIsSortedX) before calling
+///   TGraph::Eval to indicate that the graph is sorted in X.
 
 Double_t TGraph::Eval(Double_t x, TSpline *spline, Option_t *option) const
 {
 
-   if (!spline) {
+   if (spline) {
+      //spline interpolation using the input spline
+      return spline->Eval(x);
+   }
 
-      if (fNpoints == 0) return 0;
-      if (fNpoints == 1) return fY[0];
+   if (fNpoints == 0) return 0;
+   if (fNpoints == 1) return fY[0];
 
-
+   if (option && *option) {
       TString opt = option;
       opt.ToLower();
+      // create a TSpline every time when using option "s" and no spline pointer is given
       if (opt.Contains("s")) {
 
          // points must be sorted before using a TSpline
@@ -871,22 +888,34 @@ Double_t TGraph::Eval(Double_t x, TSpline *spline, Option_t *option) const
          }
 
          // spline interpolation creating a new spline
-         TSpline3 *s = new TSpline3("", &xsort[0], &ysort[0], fNpoints);
-         Double_t result = s->Eval(x);
-         delete s;
+         TSpline3 s("", &xsort[0], &ysort[0], fNpoints);
+         Double_t result = s.Eval(x);
          return result;
       }
-      //linear interpolation
-      //In case x is < fX[0] or > fX[fNpoints-1] return the extrapolated point
+   }
+   //linear interpolation
+   //In case x is < fX[0] or > fX[fNpoints-1] return the extrapolated point
 
-      //find points in graph around x assuming points are not sorted
-      // (if point are sorted could use binary search)
+   //find points in graph around x assuming points are not sorted
+   // (if point are sorted use a binary search)
+   Int_t low  = -1;
+   Int_t up  = -1;
+   if (TestBit(TGraph::kIsSortedX) ) {
+      low = TMath::BinarySearch(fNpoints, fX, x);
+      if (low == -1)  {
+         // use first two points for doing an extrapolation
+         low = 0;
+      }
+      if (fX[low] == x) return fY[low];
+      if (low == fNpoints-1) low--; // for extrapolating
+      up = low+1;
+   }
+   else {
+      // case TGraph is not sorted
 
-      // find neighbours simply looping  all points
-      // and find also the 2 adjacent points: (low2 < low < x < up < up2 )
-      // needed in case x is outside the graph ascissa interval
-      Int_t low  = -1;
-      Int_t up  = -1;
+   // find neighbours simply looping  all points
+   // and find also the 2 adjacent points: (low2 < low < x < up < up2 )
+   // needed in case x is outside the graph ascissa interval
       Int_t low2 = -1;
       Int_t up2 = -1;
 
@@ -914,16 +943,13 @@ Double_t TGraph::Eval(Double_t x, TSpline *spline, Option_t *option) const
          low = up;
          up  = up2;
       }
-
-      assert(low != -1 && up != -1);
-
-      if (fX[low] == fX[up]) return fY[low];
-      Double_t yn = fY[up] + (x - fX[up]) * (fY[low] - fY[up]) / (fX[low] - fX[up]);
-      return yn;
-   } else {
-      //spline interpolation using the input spline
-      return spline->Eval(x);
    }
+   // do now the linear interpolation
+   assert(low != -1 && up != -1);
+
+   if (fX[low] == fX[up]) return fY[low];
+   Double_t yn = fY[up] + (x - fX[up]) * (fY[low] - fY[up]) / (fX[low] - fX[up]);
+   return yn;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1084,7 +1110,7 @@ TFitResultPtr TGraph::Fit(const char *fname, Option_t *option, Option_t *, Axis_
 /// or TGraphAsymmErrors::Fit ot TGraphBentErrors::Fit
 /// See the discussion below on error calculation.
 ///
-/// ## Linear fitting:
+/// ### Linear fitting:
 ///   When the fitting function is linear (contains the "++" sign) or the fitting
 ///   function is a polynomial, a linear fitter is initialised.
 ///   To create a linear function, use the following syntax: linear parts
@@ -1095,7 +1121,7 @@ TFitResultPtr TGraph::Fit(const char *fname, Option_t *option, Option_t *, Axis_
 ///   Going via the linear fitter for functions, linear in parameters, gives a
 ///   considerable advantage in speed.
 ///
-/// ## Setting initial conditions:
+/// ### Setting initial conditions:
 ///
 ///   Parameters must be initialized before invoking the Fit function.
 ///   The setting of the parameter initial values is automatic for the
@@ -1115,14 +1141,14 @@ TFitResultPtr TGraph::Fit(const char *fname, Option_t *option, Option_t *, Axis_
 ///   Parameter 4 has boundaries [-10,-4] with initial value -8.
 ///   Parameter 5 is fixed to 100.
 ///
-/// ## Fit range:
+/// ### Fit range:
 ///
 ///   The fit range can be specified in two ways:
 ///     - specify rxmax > rxmin (default is rxmin=rxmax=0)
 ///     - specify the option "R". In this case, the function will be taken
 ///       instead of the full graph range.
 ///
-/// ## Changing the fitting function:
+/// ### Changing the fitting function:
 ///
 ///   By default a chi2 fitting function is used for fitting a TGraph.
 ///   The function is implemented in FitUtil::EvaluateChi2.
@@ -1136,7 +1162,7 @@ TFitResultPtr TGraph::Fit(const char *fname, Option_t *option, Option_t *, Axis_
 ///                                 Double_t *u, Int_t flag);
 ///
 ///
-/// ## TGraphErrors fit:
+/// ### TGraphErrors fit:
 ///
 ///   In case of a TGraphErrors object, when x errors are present, the error along x,
 ///   is projected along the y-direction by calculating the function at the points x-exlow and
@@ -1207,7 +1233,7 @@ TFitResultPtr TGraph::Fit(const char *fname, Option_t *option, Option_t *, Axis_
 ///      Double_t err0 = myfunc->GetParError(0);  //error on first parameter
 ///
 ///
-/// ## Access to the fit status
+/// ### Access to the fit status
 ///  The status of the fit can be obtained converting the TFitResultPtr to an integer
 ///  independently if the fit option "S" is used or not:
 ///
@@ -1230,7 +1256,7 @@ TFitResultPtr TGraph::Fit(const char *fname, Option_t *option, Option_t *, Axis_
 ///  If other minimizers are used see their specific documentation for the status code
 ///  returned. For example in the case of Fumili, for the status returned see TFumili::Minimize.
 ///
-/// ## Associated functions:
+/// ### Associated functions:
 ///   One or more object (typically a TF1*) can be added to the list
 ///   of functions (fFunctions) associated with each graph.
 ///   When TGraph::Fit is invoked, the fitted function is added to this list.
@@ -1245,7 +1271,7 @@ TFitResultPtr TGraph::Fit(const char *fname, Option_t *option, Option_t *, Axis_
 ///       Double_t par0 = myfunc->GetParameter(0); //value of 1st parameter
 ///       Double_t err0 = myfunc->GetParError(0);  //error on first parameter
 ///
-/// ## Fit Statistics
+/// ### Fit Statistics
 ///   You can change the statistics box to display the fit parameters with
 ///   the TStyle::SetOptFit(mode) method. This mode has four digits.
 ///   mode = pcev  (default = 0111)
@@ -1455,12 +1481,16 @@ TH1F *TGraph::GetHistogram() const
    // should not be returned.
    TH1F *historg = 0;
    if (fHistogram) {
-      if (gPad && gPad->GetLogx()) {
-         if (rwxmin <= 0 || fHistogram->GetXaxis()->GetXmin() != 0) return fHistogram;
-      } else if (gPad && gPad->GetLogy()) {
-         if (rwymin <= 0 || fHistogram->GetMinimum() != 0) return fHistogram;
+      if (!TestBit(kResetHisto)) {
+         if (gPad && gPad->GetLogx()) {
+            if (rwxmin <= 0 || fHistogram->GetXaxis()->GetXmin() != 0) return fHistogram;
+         } else if (gPad && gPad->GetLogy()) {
+            if (rwymin <= 0 || fHistogram->GetMinimum() != 0) return fHistogram;
+         } else {
+            return fHistogram;
+         }
       } else {
-         return fHistogram;
+         const_cast <TGraph*>(this)->ResetBit(kResetHisto);
       }
       historg = fHistogram;
    }
@@ -1487,10 +1517,9 @@ TH1F *TGraph::GetHistogram() const
       if (gPad && gPad->GetLogx()) uxmax = 1.1 * rwxmax;
       else                         uxmax = 0;
    }
-   if (minimum < 0 && rwymin >= 0) {
-      if (gPad && gPad->GetLogy()) minimum = 0.9 * rwymin;
-      else                         minimum = 0;
-   }
+
+   if (minimum < 0 && rwymin >= 0) minimum = 0.9 * rwymin;
+
    if (minimum <= 0 && gPad && gPad->GetLogy()) minimum = 0.001 * maximum;
    if (uxmin <= 0 && gPad && gPad->GetLogx()) {
       if (uxmax > 1000) uxmin = 1;
@@ -1692,17 +1721,40 @@ Int_t TGraph::InsertPoint()
       if (dpx * dpx + dpy * dpy < 25) ipoint = 0;
       else                      ipoint = fNpoints;
    }
+
+
+   InsertPointBefore(ipoint, gPad->AbsPixeltoX(px), gPad->AbsPixeltoY(py));
+
+   gPad->Modified();
+   return ipoint;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Insert a new point with coordinates (x,y) before the point number `ipoint`.
+
+void TGraph::InsertPointBefore(Int_t ipoint, Double_t x, Double_t y)
+{
+   if (ipoint <= 0) {
+      Error("TGraph", "Inserted point index should be > 0");
+      return;
+   }
+
+   if (ipoint > fNpoints-1) {
+      Error("TGraph", "Inserted point index should be <= %d", fNpoints-1);
+      return;
+   }
+
    Double_t **ps = ExpandAndCopy(fNpoints + 1, ipoint);
    CopyAndRelease(ps, ipoint, fNpoints++, ipoint + 1);
 
    // To avoid redefinitions in descendant classes
    FillZero(ipoint, ipoint + 1);
 
-   fX[ipoint] = gPad->PadtoX(gPad->AbsPixeltoX(px));
-   fY[ipoint] = gPad->PadtoY(gPad->AbsPixeltoY(py));
-   gPad->Modified();
-   return ipoint;
+   fX[ipoint] = x;
+   fY[ipoint] = y;
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Integrate the TGraph data within a given (index) range.
@@ -2049,8 +2101,13 @@ void TGraph::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
          out << "   graph->GetListOfFunctions()->Add(ptstats);" << std::endl;
          out << "   ptstats->SetParent(graph->GetListOfFunctions());" << std::endl;
       } else {
+         TString objname;
+         objname.Form("%s%d",obj->GetName(),frameNumber);
+         if (obj->InheritsFrom("TF1")) {
+            out << "   " << objname << "->SetParent(graph);\n";
+         }
          out << "   graph->GetListOfFunctions()->Add("
-             << Form("%s%d",obj->GetName(),frameNumber) << ");" << std::endl;
+             << objname << ");" << std::endl;
       }
    }
 
@@ -2104,6 +2161,20 @@ void TGraph::SetEditable(Bool_t editable)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Set highlight (enable/disble) mode for the graph
+/// by default highlight mode is disable
+
+void TGraph::SetHighlight(Bool_t set)
+{
+   if (IsHighlight() == set) return;
+
+   TVirtualGraphPainter *painter = TVirtualGraphPainter::GetPainter();
+   if (!painter) return;
+   SetBit(kIsHighlight, set);
+   painter->SetHighlight(this);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Set the maximum of the graph.
 
 void TGraph::SetMaximum(Double_t maximum)
@@ -2127,10 +2198,8 @@ void TGraph::SetMinimum(Double_t minimum)
 void TGraph::SetPoint(Int_t i, Double_t x, Double_t y)
 {
    if (i < 0) return;
-   if (fHistogram) {
-      delete fHistogram;
-      fHistogram = 0;
-   }
+   if (fHistogram) SetBit(kResetHisto);
+
    if (i >= fMaxSize) {
       Double_t **ps = ExpandAndCopy(i + 1, fNpoints);
       CopyAndRelease(ps, 0, 0, 0);
@@ -2148,12 +2217,29 @@ void TGraph::SetPoint(Int_t i, Double_t x, Double_t y)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Set graph name.
+void TGraph::SetName(const char *name)
+{
+   fName = name;
+   if (fHistogram) fHistogram->SetName(name);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Set graph title.
 
 void TGraph::SetTitle(const char* title)
 {
    fTitle = title;
    if (fHistogram) fHistogram->SetTitle(title);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Set graph name and title
+
+void TGraph::SetNameTitle(const char *name, const char *title)
+{
+   SetName(name);
+   SetTitle(title);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2198,6 +2284,11 @@ Double_t **TGraph::ShrinkAndCopy(Int_t size, Int_t oend)
 void TGraph::Sort(Bool_t (*greaterfunc)(const TGraph*, Int_t, Int_t) /*=TGraph::CompareX()*/,
                   Bool_t ascending /*=kTRUE*/, Int_t low /* =0 */, Int_t high /* =-1111 */)
 {
+
+   // set the bit in case of an ascending =sort in X
+   if (greaterfunc == TGraph::CompareX && ascending  && low == 0 && high == -1111)
+      SetBit(TGraph::kIsSortedX);
+
    if (high == -1111) high = GetN() - 1;
    //  Termination condition
    if (high <= low) return;

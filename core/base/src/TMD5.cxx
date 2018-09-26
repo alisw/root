@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TMD5
+\ingroup Base
 
 This code implements the MD5 message-digest algorithm.
 The algorithm is due to Ron Rivest. This code was
@@ -38,7 +39,7 @@ array with the  digest.
 #include <io.h>
 #endif
 
-ClassImp(TMD5)
+ClassImp(TMD5);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create TMD5 object. Set bit count to 0 and buffer to mysterious

@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_math
+/// \notebook -nodraw
 /// Performance test of all the ROOT random generator (TRandom, TRandom1, TRandom2 and TRandom3)
 /// Tests the generator TRandom3 against some ref values
 /// and creates a timing table against TRandom, TRandom1 and TRandom2.
@@ -31,7 +32,7 @@
 ///
 /// Note that this tutorial can be executed in interpreted or compiled mode
 ///
-/// ~~~ {.cpp}
+/// ~~~{.cpp}
 ///  Root > .x testrandom.C
 ///  Root > .x testrandom.C++
 /// ~~~
@@ -44,6 +45,7 @@
 #include <TRandom1.h>
 #include <TRandom2.h>
 #include <TRandom3.h>
+#include <TRandomGen.h>
 #include <TStopwatch.h>
 #include <TF1.h>
 #include <TUnuran.h>
@@ -61,10 +63,18 @@ void testAll() {
   TRandom *r1 = new TRandom1();
   TRandom *r2 = new TRandom2();
   TRandom *r3 = new TRandom3();
+  TRandom *r4 = new TRandomMixMax();
+  TRandom *r5 = new TRandomMixMax17();
+  TRandom *r6 = new TRandomGen<ROOT::Math::MixMaxEngine<256,0>>();
+  TRandom *r7 = new TRandomMixMax256();
+  TRandom *r8 = new TRandomGen<ROOT::Math::MixMaxEngine<256,4>>();
+  TRandom *r9 = new TRandomMT64();
+  TRandom *r10 = new TRandomRanlux48();
+
 
   TStopwatch sw;
   printf("Distribution            nanoseconds/call\n");
-  printf("                    TRandom  TRandom1 TRandom2 TRandom3\n");
+  printf("                    TRandom  TRandom1 TRandom2 TRandom3 MixMax240 MixMax17 Mixmax256_0 MixMax256_2 MixMax256_4 MT_64 Ranlux48\n");
 
   sw.Start();
   for (i=0;i<N;i++) {
@@ -85,8 +95,55 @@ void testAll() {
   for (i=0;i<N;i++) {
      x = r3->Rndm(i);
   }
-  printf(" %8.3f\n",sw.CpuTime()*cpn);
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  // new random generators
 
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r4->Rndm(i);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r5->Rndm(i);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r6->Rndm(i);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r7->Rndm(i);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r8->Rndm(i);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r9->Rndm(i);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  
+  sw.Start();
+  for (i=0;i<N1;i++) {
+     x = r10->Rndm(i);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn1);
+
+  printf("\n\n");
+
+  // RNDMARRAY
+  
   const int NR = 1000;
   double rn[NR];
   sw.Start();
@@ -108,7 +165,44 @@ void testAll() {
   for (i=0;i<N;i+=NR) {
      r3->RndmArray(NR,rn);
   }
-  printf(" %8.3f\n",sw.CpuTime()*cpn);
+  printf(" %8.3f",sw.CpuTime()*cpn);
+   sw.Start();
+  for (i=0;i<N;i+=NR) {
+     r4->RndmArray(NR,rn);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=NR) {
+     r5->RndmArray(NR,rn);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=NR) {
+     r6->RndmArray(NR,rn);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=NR) {
+     r7->RndmArray(NR,rn);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=NR) {
+     r8->RndmArray(NR,rn);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=NR) {
+     r9->RndmArray(NR,rn);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N1;i+=NR) {
+     r10->RndmArray(NR,rn);
+  }
+  printf(" %8.3f\n",sw.CpuTime()*cpn1);
+
+  // Gaus
 
   sw.Start();
   for (i=0;i<N;i++) {
@@ -129,8 +223,41 @@ void testAll() {
   for (i=0;i<N;i++) {
      x = r3->Gaus(0,1);
   }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r4->Gaus(0,1);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r5->Gaus(0,1);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r6->Gaus(0,1);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r7->Gaus(0,1);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r8->Gaus(0,1);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i++) {
+     x = r9->Gaus(0,1);
+  }
   printf(" %8.3f\n",sw.CpuTime()*cpn);
 
+
+  // RANNOR
+  
   sw.Start();
   for (i=0;i<N;i+=2) {
      r0->Rannor(x,y);
@@ -150,8 +277,40 @@ void testAll() {
   for (i=0;i<N;i+=2) {
      r3->Rannor(x,y);
   }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=2) {
+     r4->Rannor(x,y);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=2) {
+     r5->Rannor(x,y);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=2) {
+     r6->Rannor(x,y);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=2) {
+     r7->Rannor(x,y);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=2) {
+     r8->Rannor(x,y);
+  }
+  printf(" %8.3f",sw.CpuTime()*cpn);
+  sw.Start();
+  for (i=0;i<N;i+=2) {
+     r9->Rannor(x,y);
+  }
   printf(" %8.3f\n",sw.CpuTime()*cpn);
-
+  
+  // Landau
+  
   sw.Start();
   for (i=0;i<N;i++) {
      x = r0->Landau(0,1);
@@ -661,11 +820,11 @@ int testRandom3() {
      if (rc2 != 0) printf("state restoration failed\n");
 
      return rc1 + rc2;
-   }
+}
 
 
-void testrandom(double /* scale */ =0.1)
+void testrandom()
 {
-  testRandom3();
-  testAll();
+   testRandom3();
+   testAll();
 }

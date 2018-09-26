@@ -91,8 +91,9 @@ http://en.wikipedia.org/wiki/Quaternion
 
 #include "TMath.h"
 #include "TQuaternion.h"
+#include "TString.h"
 
-ClassImp(TQuaternion)
+ClassImp(TQuaternion);
 
 /****************** CONSTRUCTORS ****************************************************/
 ////////////////////////////////////////////////////////////////////////////////

@@ -36,9 +36,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TSpline
 #include "TSpline.h"
-#endif
 
 namespace TMVA {
 
@@ -61,7 +59,7 @@ namespace TMVA {
 
       TGraph *fGraph;  // graph that is splined
 
-      ClassDef(TSpline1,0) //Linear interpolation class
+      ClassDef(TSpline1,0); //Linear interpolation class
    };
 
 } // namespace TMVA

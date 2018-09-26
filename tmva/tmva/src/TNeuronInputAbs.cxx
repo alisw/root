@@ -1,5 +1,5 @@
 // @(#)root/tmva $Id$
-// Author: Matt Jachowski 
+// Author: Matt Jachowski
 
 /**********************************************************************************
  * Project: TMVA - a Root-integrated toolkit for multivariate data analysis       *
@@ -22,8 +22,14 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::TNeuronInputAbs
+\ingroup TMVA
+TNeuron input calculator -- calculates the sum of the absolute
+values of the weighted inputs
+*/
+
 #include "TMVA/TNeuronInputAbs.h"
 
 #include "Rtypes.h"
 
-ClassImp(TMVA::TNeuronInputAbs)
+ClassImp(TMVA::TNeuronInputAbs);

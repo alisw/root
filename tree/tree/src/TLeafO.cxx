@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TLeafO
+\ingroup tree
+
 A TLeaf for a bool data type.
 */
 
@@ -19,7 +21,7 @@ A TLeaf for a bool data type.
 #include "TClonesArray.h"
 #include "Riostream.h"
 
-ClassImp(TLeafO)
+ClassImp(TLeafO);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for LeafO.
@@ -85,6 +87,22 @@ void TLeafO::FillBasket(TBuffer &b)
 const char *TLeafO::GetTypeName() const
 {
    return "Bool_t";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Copy/set fMinimum and fMaximum to include/be wide than those of the parameter
+
+Bool_t TLeafO::IncludeRange(TLeaf *input)
+{
+    if (input) {
+        if (input->GetMaximum() > this->GetMaximum())
+            this->SetMaximum( input->GetMaximum() );
+        if (input->GetMinimum() < this->GetMinimum())
+            this->SetMinimum( input->GetMinimum() );
+        return kTRUE;
+    } else {
+        return kFALSE;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

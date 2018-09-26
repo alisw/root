@@ -35,20 +35,14 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
-#include "TObject.h"
-#endif
-#ifndef ROOT_TList
+#include "TNamed.h"
 #include "TList.h"
-#endif
 
-#ifndef ROOT_TMVA_Option
 #include "TMVA/Option.h"
-#endif
 
 namespace TMVA {
 
-   class Configurable : public TObject {
+   class Configurable : public TNamed {
 
    public:
 
@@ -64,26 +58,25 @@ namespace TMVA {
       // print list of defined options
       void PrintOptions() const;
 
-      virtual const char* GetName()      const { return GetConfigName(); }
-      const char* GetConfigName()        const { return fConfigName; }
+      const char* GetConfigName()        const { return GetName(); }
       const char* GetConfigDescription() const { return fConfigDescription; }
-      void SetConfigName       ( const char* n ) { fConfigName        = TString(n); }
+      void SetConfigName       ( const char* n ) { SetName(n); }
       void SetConfigDescription( const char* d ) { fConfigDescription = TString(d); }
 
       // Declare option and bind it to a variable
       template<class T> 
-      OptionBase* DeclareOptionRef( T& ref, const TString& name, const TString& desc = "" );
+         OptionBase* DeclareOptionRef( T& ref, const TString& name, const TString& desc = "" );
 
       template<class T> 
-      OptionBase* DeclareOptionRef( T*& ref, Int_t size, const TString& name, const TString& desc = "" );
+         OptionBase* DeclareOptionRef( T*& ref, Int_t size, const TString& name, const TString& desc = "" );
 
       // Add a predefined value to the last declared option
       template<class T>
-      void AddPreDefVal(const T&);
+         void AddPreDefVal(const T&);
 
       // Add a predefined value to the option named optname
       template<class T>
-      void AddPreDefVal(const TString&optname ,const T&);
+         void AddPreDefVal(const TString&optname ,const T&);
 
       
       void CheckForUnusedOptions() const;
@@ -113,38 +106,36 @@ namespace TMVA {
       // splits the option string at ':' and fills the list 'loo' with the primitive strings
       void SplitOptions(const TString& theOpt, TList& loo) const;
 
-      TString     fOptions;                          //! options string
-      Bool_t      fLooseOptionCheckingEnabled;       //! checker for option string
+      TString     fOptions;                          // options string
+      Bool_t      fLooseOptionCheckingEnabled;       // checker for option string
 
       // classes and method related to easy and flexible option parsing
       OptionBase* fLastDeclaredOption;  //! last declared option
-      TList       fListOfOptions;       //! option list
+      TList       fListOfOptions;       // option list
 
-      TString     fConfigName;          // the name of this configurable
       TString     fConfigDescription;   // description of this configurable
       TString     fReferenceFile;       // reference file for options writing
 
-   protected:
-
-      // the mutable declaration is needed to use the logger in const methods
-      MsgLogger& Log() const { return *fLogger; }                       
-
    public:
+     
+      // the mutable declaration is needed to use the logger in const methods
+      MsgLogger& Log() const { return *fLogger; }  
 
       // set message type
       void SetMsgType( EMsgType t ) { fLogger->SetMinType(t); }
 
-
+   protected:
+      mutable MsgLogger* fLogger;                     //! message logger
+      
    private:
 
-      mutable MsgLogger* fLogger;                     //! message logger
 
       template <class T>
-      void AssignOpt( const TString& name, T& valAssign ) const;
+         void AssignOpt( const TString& name, T& valAssign ) const;
       
    public:
 
-      ClassDef(Configurable,0)  // Virtual base class for all TMVA method
+      ClassDef(Configurable,1);  // Virtual base class for all TMVA method
 
    };
 } // namespace TMVA
@@ -187,24 +178,24 @@ void TMVA::Configurable::AddPreDefVal(const TString &optname, const T& val)
 {
    // add predefined option value to the option named optname
 
-  TListIter optIt( &fListOfOptions );   
-  while (OptionBase * op = (OptionBase *) optIt()) {
-    if (optname == TString(op->TheName())){
-      Option<T>* oc = dynamic_cast<Option<T>*>(op);
-      if(oc!=0){
-        oc->AddPreDefVal(val);
-        return;
-      }
-      else{
-        Log() << kFATAL << "Option \"" << optname 
-              << "\" was found, but somehow I could not convert the pointer propperly.. please check the syntax of your option declaration" << Endl;
-        return;
-      }
+   TListIter optIt( &fListOfOptions );   
+   while (OptionBase * op = (OptionBase *) optIt()) {
+      if (optname == TString(op->TheName())){
+         Option<T>* oc = dynamic_cast<Option<T>*>(op);
+         if(oc!=0){
+            oc->AddPreDefVal(val);
+            return;
+         }
+         else{
+            Log() << kFATAL << "Option \"" << optname 
+                  << "\" was found, but somehow I could not convert the pointer propperly.. please check the syntax of your option declaration" << Endl;
+            return;
+         }
       
-    }
-  }
-  Log() << kFATAL << "Option \"" << optname 
-        << "\" is not declared, hence cannot add predefined value, please check the syntax of your option declaration" << Endl;
+      }
+   }
+   Log() << kFATAL << "Option \"" << optname 
+         << "\" is not declared, hence cannot add predefined value, please check the syntax of your option declaration" << Endl;
   
 }
 

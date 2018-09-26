@@ -43,18 +43,10 @@
 
 #include <iosfwd>
 
-#ifndef ROOT_TH1
 #include "TH1.h"
-#endif
-#ifndef ROOT_ThreadLocalStorage
 #include "ThreadLocalStorage.h"
-#endif
-#ifndef ROOT_TMVA_KDEKernel
 #include "TMVA/KDEKernel.h"
-#endif
-#ifndef ROOT_TMVA_Configurable
 #include "TMVA/Configurable.h"
-#endif
 
 class TSpline;
 class TGraph;
@@ -152,7 +144,7 @@ namespace TMVA {
       Bool_t   UseHistogram() const { return fUseHistogram; }
 
       void FindBinInverse( const TH1* histogram, Int_t& lowerBin, Int_t& higherBin, Double_t& lowerBinValue, Double_t& higherBinValue, 
-			   Double_t y, Bool_t isMonotonouslyIncreasingFunction=kFALSE ) const;
+                           Double_t y, Bool_t isMonotonouslyIncreasingFunction=kFALSE ) const;
 
 
       void     BuildSplinePDF();
@@ -217,7 +209,7 @@ namespace TMVA {
       static Double_t          IGetVal( Double_t*, Double_t* );
 
       ClassDef(PDF,1)  // PDF wrapper for histograms
-   };
+         };
 
 } // namespace TMVA
 

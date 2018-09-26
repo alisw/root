@@ -228,7 +228,7 @@ ClassImp(TLine)
 Note that you should provide a default constructor for your classes,
 i.e. a constructor with zero parameters or with one or more parameters
 all with default values in case you want to use object I/O. If do not
-provide such a default contructor, you MUST implement an I/O
+provide such a default constructor, you MUST implement an I/O
 constructor. If not you will get a compile time error. See the "The
 Default Constructor" paragraph in this chapter. The `ClassDef` and
 `ClassImp` macros are defined in the file `Rtypes.h`. This file is
@@ -381,7 +381,7 @@ order:
 ``` {.cpp}
 MyClass(UserClass1*);
 MyClass(UserClass2*);
-MyClass(TRootIoCtor*);
+MyClass(TRootIOCtor*);
 MyClass();   // Or a constructor with all its arguments defaulted.
 ```
 
@@ -803,8 +803,8 @@ access, but not for virtual function resolution.
 If you use the '`namespace`' flag, it is recommended to add also:
 
 ``` {.cpp}
-#pragma link nestedclass;
-#pragma link nestedtypedef;
+#pragma link C++ nestedclass;
+#pragma link C++ nestedtypedef;
 ```
 
 The behavior of '`class`', '`struct`' and '`namespace`' flag are

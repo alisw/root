@@ -47,9 +47,16 @@ See TParticlePDG for the description of a static particle properties.
 See TParticle    for the description of a dynamic particle particle.
 */
 
-ClassImp(TDatabasePDG)
+ClassImp(TDatabasePDG);
 
-TDatabasePDG*  TDatabasePDG::fgInstance = 0;
+////////////////////////////////////////////////////////////////////////////////
+/// Static function holding the instance.
+
+TDatabasePDG** GetInstancePtr()
+{
+   static TDatabasePDG* fgInstance = nullptr;
+   return &fgInstance;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create PDG database. Initialization of the DB has to be done via explicit
@@ -60,10 +67,11 @@ TDatabasePDG::TDatabasePDG(): TNamed("PDGDB","The PDG particle data base")
    fParticleList  = 0;
    fPdgMap        = 0;
    fListOfClasses = 0;
-   if (fgInstance) {
+   auto fgInstance = GetInstancePtr();
+   if (*fgInstance != nullptr) {
       Warning("TDatabasePDG", "object already instantiated");
    } else {
-      fgInstance = this;
+      *fgInstance = this;
       gROOT->GetListOfSpecials()->Add(this);
    }
 }
@@ -83,16 +91,23 @@ TDatabasePDG::~TDatabasePDG()
       fListOfClasses->Delete();
       delete fListOfClasses;
    }
-   gROOT->GetListOfSpecials()->Remove(this);
-   fgInstance = 0;
+   if (gROOT && !gROOT->TestBit(TObject::kInvalidObject))
+      gROOT->GetListOfSpecials()->Remove(this);
+   auto fgInstance = GetInstancePtr();
+   *fgInstance = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 ///static function
 
-TDatabasePDG*  TDatabasePDG::Instance()
+TDatabasePDG* TDatabasePDG::Instance()
 {
-   return (fgInstance) ? (TDatabasePDG*) fgInstance : new TDatabasePDG();
+   auto fgInstance = GetInstancePtr();
+   if (*fgInstance == nullptr) {
+      // Constructor creates a new instance, inits fgInstance.
+      new TDatabasePDG();
+   }
+   return *fgInstance;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -238,18 +253,16 @@ void TDatabasePDG::Print(Option_t *option) const
 /// PDG convention already)
 /// Source: BaBar User Guide, Neil I. Geddes,
 ///
-///Begin_Html
+/// see <A href="http://www.slac.stanford.edu/BFROOT/www/Computing/Environment/NewUser/htmlbug/node51.html"> Conversion table</A>
+///
+/// with some fixes by PB, marked with (PB) below. Checked against
+/// PDG listings from 2000.
+///
+/// Paul Balm, Nov 19, 2001
 
 Int_t TDatabasePDG::ConvertGeant3ToPdg(Int_t Geant3number) const
 {
-  /*
-   see <A href="http://www.slac.stanford.edu/BFROOT/www/Computing/Environment/NewUser/htmlbug/node51.html"> Conversion table</A>
-  */
-  //End_Html
-  // with some fixes by PB, marked with (PB) below. Checked against
-  // PDG listings from 2000.
-  //
-  // Paul Balm, Nov 19, 2001
+
 
    switch(Geant3number) {
 
@@ -551,11 +564,8 @@ void TDatabasePDG::ReadPDGTable(const char *FileName)
    const char *fn;
 
    if (!FileName[0]) {
-#ifdef ROOTETCDIR
-      default_name.Form("%s/pdg_table.txt", ROOTETCDIR);
-#else
-      default_name.Form("%s/etc/pdg_table.txt", gSystem->Getenv("ROOTSYS"));
-#endif
+      default_name = "pdg_table.txt";
+      gSystem->PrependPathName(TROOT::GetEtcDir(), default_name);
       fn = gEnv->GetValue("Root.DatabasePDG", default_name.Data());
    } else {
       fn = FileName;

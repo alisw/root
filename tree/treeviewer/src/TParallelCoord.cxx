@@ -38,7 +38,7 @@
 #include "TGaxis.h"
 #include "TFile.h"
 
-ClassImp(TParallelCoord)
+ClassImp(TParallelCoord);
 
 /** \class TParallelCoord
 Parallel Coordinates class.
@@ -102,7 +102,7 @@ TParallelCoord can also be used to display a candle chart. In that mode, every
 variable is drawn in the same scale. The candle chart can be combined with the
 parallel coordinates mode, drawing the candle sticks over the axes.
 
-Begin_Macro(source)
+~~~ {.cpp}
 {
    TCanvas *c1 = new TCanvas("c1");
    TFile *f = TFile::Open("cernstaff.root");
@@ -115,11 +115,10 @@ Begin_Macro(source)
    para->GetCurrentSelection()->SetLineColor(kViolet);
    TParallelCoordVar* age = (TParallelCoordVar*)para->GetVarList()->FindObject("Age");
    age->AddRange(new TParallelCoordRange(age,21,30));
-   return c1;
 }
-End_Macro
+~~~
 
- Some references:
+### Some references:
 
   - Alfred Inselberg's Homepage <http://www.math.tau.ac.il/~aiisreal>, with
     Visual Tutorial, History, Selected Publications and Applications.
@@ -239,8 +238,6 @@ void TParallelCoord::AddVariable(const char* varexp)
    }
 
    AddVariable(fTree->GetV1(),varexp);
-   TParallelCoordVar* var = (TParallelCoordVar*)fVarList->Last();
-   var->Draw();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -274,7 +271,7 @@ void  TParallelCoord::ApplySelectionToTree()
    while ((var = (TParallelCoordVar*)next())) varexp.Append(Form(":%s",var->GetTitle()));
    varexp.Remove(TString::kLeading,':');
    TSelectorDraw* selector = (TSelectorDraw*)((TTreePlayer*)fTree->GetPlayer())->GetSelector();
-   fTree->Draw(varexp.Data(),"","goff para");
+   fTree->Draw(varexp.Data(),"","goff");
    next.Reset();
    Int_t i = 0;
    while ((var = (TParallelCoordVar*)next())) {
@@ -418,7 +415,6 @@ void TParallelCoord::Draw(Option_t* option)
          var->SetHistogramHeight(0.5);
          var->SetHistogramLineWidth(0);
       }
-      var->Draw();
    }
 
    if (optcandle) {
@@ -553,7 +549,7 @@ TTree* TParallelCoord::GetTree()
          TParallelCoordVar* var;
          while ((var = (TParallelCoordVar*)next())) varexp.Append(Form(":%s",var->GetTitle()));
          varexp.Remove(TString::kLeading,':');
-         fTree->Draw(varexp.Data(),"","goff para");
+         fTree->Draw(varexp.Data(),"","goff");
          TSelectorDraw* selector = (TSelectorDraw*)((TTreePlayer*)fTree->GetPlayer())->GetSelector();
          next.Reset();
          Int_t i = 0;
@@ -639,6 +635,12 @@ void TParallelCoord::Paint(Option_t* /*option*/)
       }
    }
    gPad->RangeAxis(0,0,1,1);
+
+   TIter nextVar(fVarList);
+   TParallelCoordVar* var=0;
+   while((var = (TParallelCoordVar*)nextVar())) {
+      var->Paint();
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -706,12 +708,12 @@ void TParallelCoord::PaintEntries(TParallelCoordSelect* sel)
          if (TestBit(kVertDisplay)) {
             a    = (y[1]-y[0])/(x[1]-x[0]);
             b    = y[0]-a*x[0];
-            x[0] = x[0]+lx*r.Rndm(n);
+            x[0] = x[0]+lx*r.Rndm();
             y[0] = a*x[0]+b;
          } else {
             a    = (x[1]-x[0])/(y[1]-y[0]);
             b    = x[0]-a*y[0];
-            y[0] = y[0]+ly*r.Rndm(n);
+            y[0] = y[0]+ly*r.Rndm();
             x[0] = a*y[0]+b;
          }
       }
@@ -738,19 +740,21 @@ void TParallelCoord::RemoveVariable(TParallelCoordVar *var)
 ////////////////////////////////////////////////////////////////////////////////
 /// Delete the variable "vartitle" from the graph.
 
-TParallelCoordVar* TParallelCoord::RemoveVariable(const char* vartitle)
+Bool_t TParallelCoord::RemoveVariable(const char* vartitle)
 {
    TIter next(fVarList);
    TParallelCoordVar* var=0;
    while((var = (TParallelCoordVar*)next())) {
       if (!strcmp(var->GetTitle(),vartitle)) break;
    }
-   if(!var) Error("RemoveVariable","\"%s\" not a variable",vartitle);
-   fVarList->Remove(var);
-   fNvar = fVarList->GetSize();
-   SetAxesPosition();
-   var->DeleteVariable();
-   return var;
+   if(!var) {
+      Error("RemoveVariable","\"%s\" not a variable",vartitle);
+      return kFALSE;
+   } else {
+      RemoveVariable(var);
+      delete var;
+      return kTRUE;
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -769,7 +773,7 @@ void TParallelCoord::ResetTree()
    TParallelCoordVar* var;
    while ((var = (TParallelCoordVar*)next())) varexp.Append(Form(":%s",var->GetTitle()));
    varexp.Remove(TString::kLeading,':');
-   fTree->Draw(varexp.Data(),"","goff para");
+   fTree->Draw(varexp.Data(),"","goff");
    next.Reset();
    TSelectorDraw* selector = (TSelectorDraw*)((TTreePlayer*)fTree->GetPlayer())->GetSelector();
    Int_t i = 0;
@@ -845,7 +849,7 @@ void TParallelCoord::SavePrimitive(std::ostream & out, Option_t* options)
    TString varexp = "";
    while ((var = (TParallelCoordVar*)nextbis())) varexp.Append(Form(":%s",var->GetTitle()));
    varexp.Remove(TString::kLeading,':');
-   out<<"   tree->Draw(\""<<varexp.Data()<<"\",\"\",\"goff para\");"<<std::endl;
+   out<<"   tree->Draw(\""<<varexp.Data()<<"\",\"\",\"goff\");"<<std::endl;
    out<<"   TSelectorDraw* selector = (TSelectorDraw*)((TTreePlayer*)tree->GetPlayer())->GetSelector();"<<std::endl;
    nextbis.Reset();
    Int_t i=0;

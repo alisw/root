@@ -14,7 +14,6 @@
 
 #include "Riostream.h"
 
-#include "TThread.h"
 #include "TVirtualPad.h"
 #include "TVirtualViewer3D.h"
 #include "TBuffer3D.h"
@@ -45,7 +44,7 @@ implementations for Boolean nodes are:
   - TGeoIntersection - representing the Boolean intersection of two positioned shapes
 */
 
-ClassImp(TGeoBoolNode)
+ClassImp(TGeoBoolNode);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
@@ -68,7 +67,7 @@ TGeoBoolNode::ThreadData_t& TGeoBoolNode::GetThreadData() const
 {
    Int_t tid = TGeoManager::ThreadId();
 /*
-   TThread::Lock();
+   std::lock_guard<std::mutex> guard(fMutex);
    if (tid >= fThreadSize) {
       Error("GetThreadData", "Thread id=%d bigger than maximum declared thread number %d. \nUse TGeoManager::SetMaxThreads properly !!!",
              tid, fThreadSize);
@@ -83,7 +82,6 @@ TGeoBoolNode::ThreadData_t& TGeoBoolNode::GetThreadData() const
    if (fThreadData[tid] == 0)
       fThreadData[tid] = new ThreadData_t;
    }
-   TThread::UnLock();
 */
    return *fThreadData[tid];
 }
@@ -92,7 +90,7 @@ TGeoBoolNode::ThreadData_t& TGeoBoolNode::GetThreadData() const
 
 void TGeoBoolNode::ClearThreadData() const
 {
-   TThread::Lock();
+   std::lock_guard<std::mutex> guard(fMutex);
    std::vector<ThreadData_t*>::iterator i = fThreadData.begin();
    while (i != fThreadData.end())
    {
@@ -101,7 +99,6 @@ void TGeoBoolNode::ClearThreadData() const
    }
    fThreadData.clear();
    fThreadSize = 0;
-   TThread::UnLock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,7 +106,7 @@ void TGeoBoolNode::ClearThreadData() const
 
 void TGeoBoolNode::CreateThreadData(Int_t nthreads)
 {
-   TThread::Lock();
+   std::lock_guard<std::mutex> guard(fMutex);
    fThreadData.resize(nthreads);
    fThreadSize = nthreads;
    for (Int_t tid=0; tid<nthreads; tid++) {
@@ -120,7 +117,6 @@ void TGeoBoolNode::CreateThreadData(Int_t nthreads)
    // Propagate to components
    if (fLeft)  fLeft->CreateThreadData(nthreads);
    if (fRight) fRight->CreateThreadData(nthreads);
-   TThread::UnLock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -401,7 +397,7 @@ void TGeoBoolNode::Sizeof3D() const
    fRight->Sizeof3D();
 }
 
-ClassImp(TGeoUnion)
+ClassImp(TGeoUnion);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Make a clone of this. Pointers are preserved.
@@ -804,7 +800,7 @@ void TGeoUnion::Sizeof3D() const
 }
 
 
-ClassImp(TGeoSubtraction)
+ClassImp(TGeoSubtraction);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Make a clone of this. Pointers are preserved.
@@ -1136,7 +1132,7 @@ void TGeoSubtraction::Sizeof3D() const
    TGeoBoolNode::Sizeof3D();
 }
 
-ClassImp(TGeoIntersection)
+ClassImp(TGeoIntersection);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Make a clone of this. Pointers are preserved.

@@ -8,12 +8,7 @@ include_directories(${CMAKE_SOURCE_DIR}/proof/proofd/inc)
 add_definitions(${XROOTD_CFLAGS})
 #---------------------------------------------------------------------------
 
-ROOT_GENERATE_DICTIONARY(G__Netx *.h MODULE Netx LINKDEF LinkDef.h)
-
-ROOT_LINKER_LIBRARY(Netx *.cxx G__Netx.cxx LIBRARIES ${XROOTD_LIBRARIES} DEPENDENCIES Net RIO Thread)
-
-if(builtin_xrootd)
-  ROOT_ADD_BUILTIN_DEPENDENCIES(Netx XROOTD)
-endif()
-
-ROOT_INSTALL_HEADERS()
+ROOT_STANDARD_LIBRARY_PACKAGE(Netx
+                              LIBRARIES ${XROOTD_LIBRARIES}
+                              DEPENDENCIES Net RIO Thread
+                              BUILTINS XROOTD)

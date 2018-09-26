@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TGuiFactory
+\ingroup Base
 
 This ABC is a factory for GUI components. Depending on which
 factory is active one gets either ROOT native (X11 based with Win95
@@ -31,7 +32,7 @@ batch mode directly using an instance of this base class.
 TGuiFactory *gGuiFactory = 0;
 TGuiFactory *gBatchGuiFactory = 0;
 
-ClassImp(TGuiFactory)
+ClassImp(TGuiFactory);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// TGuiFactory ctor only called by derived classes.

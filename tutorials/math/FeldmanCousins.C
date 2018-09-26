@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_math
+/// \notebook -nodraw
 /// Example macro of using the TFeldmanCousins class in root.
 ///
 /// get a FeldmanCousins calculation object with the default limits
@@ -13,7 +14,8 @@
 
 void FeldmanCousins()
 {
-   if (!gROOT->GetClass("TFeldmanCousins")) gSystem->Load("libPhysics");
+   if (!gROOT->GetClass("TFeldmanCousins"))
+      R__LOAD_LIBRARY(libPhysics);
 
    TFeldmanCousins f;
 

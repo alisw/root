@@ -62,6 +62,7 @@ a 'using namespace std;' has been applied to and with:
 #include "TProtoClass.h"
 #include "TROOT.h"
 #include "TRealData.h"
+#include "TCheckHashRecursiveRemoveConsistency.h" // Private header
 #include "TStreamer.h"
 #include "TStreamerElement.h"
 #include "TVirtualStreamerInfo.h"
@@ -90,6 +91,18 @@ a 'using namespace std;' has been applied to and with:
 #include <vector>
 #include <memory>
 
+#include "TSpinLockGuard.h"
+
+#ifdef WIN32
+#include <io.h>
+#include "Windows4Root.h"
+#include <Psapi.h>
+#define RTLD_DEFAULT ((void *)::GetModuleHandle(NULL))
+#define dlsym(library, function_name) ::GetProcAddress((HMODULE)library, function_name)
+#else
+#include <dlfcn.h>
+#endif
+
 #include "TListOfDataMembers.h"
 #include "TListOfFunctions.h"
 #include "TListOfFunctionTemplates.h"
@@ -109,14 +122,14 @@ using namespace std;
 
 TVirtualMutex* gInterpreterMutex = 0;
 
-void *gMmallocDesc = 0; //is used and set in TMapFile
 namespace {
    class TMmallocDescTemp {
    private:
       void *fSave;
    public:
-      TMmallocDescTemp(void *value = 0) : fSave(gMmallocDesc) { gMmallocDesc = value; }
-      ~TMmallocDescTemp() { gMmallocDesc = fSave; }
+      TMmallocDescTemp(void *value = 0) :
+         fSave(ROOT::Internal::gMmallocDesc) { ROOT::Internal::gMmallocDesc = value; }
+      ~TMmallocDescTemp() { ROOT::Internal::gMmallocDesc = fSave; }
    };
 }
 
@@ -159,7 +172,7 @@ void TClass::TDeclNameRegistry::AddQualifiedName(const char *name)
    std::string s(beginCharPtr, endCharPtr);
    if (fVerbLevel>1)
       printf("TDeclNameRegistry::AddQualifiedName Adding key %s for class/namespace %s\n", s.c_str(), name);
-   TClass::TSpinLockGuard slg(fSpinLock);
+   ROOT::Internal::TSpinLockGuard slg(fSpinLock);
    fClassNamesSet.insert(s);
 }
 
@@ -169,7 +182,7 @@ Bool_t TClass::TDeclNameRegistry::HasDeclName(const char *name) const
 {
    Bool_t found = false;
    {
-      TClass::TSpinLockGuard slg(fSpinLock);
+      ROOT::Internal::TSpinLockGuard slg(fSpinLock);
       found = fClassNamesSet.find(name) != fClassNamesSet.end();
    }
    return found;
@@ -186,22 +199,6 @@ TClass::TDeclNameRegistry::~TDeclNameRegistry()
          printf(" - %s\n", key.c_str());
       }
    }
-}
-
-// Implementation of the spinlock guard in the registry
-
-////////////////////////////////////////////////////////////////////////////////
-
-TClass::TSpinLockGuard::TSpinLockGuard(std::atomic_flag& aflag):fAFlag(aflag)
-{
-   while (fAFlag.test_and_set(std::memory_order_acquire));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TClass::TSpinLockGuard::~TSpinLockGuard()
-{
-   fAFlag.clear(std::memory_order_release);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -320,11 +317,7 @@ namespace ROOT {
      // This wrapper class allow to avoid putting #include <map> in the
      // TROOT.h header file.
    public:
-#ifdef R__GLOBALSTL
-      typedef map<string,TClass*>                 IdMap_t;
-#else
       typedef std::map<std::string,TClass*>       IdMap_t;
-#endif
       typedef IdMap_t::key_type                   key_type;
       typedef IdMap_t::const_iterator             const_iterator;
       typedef IdMap_t::size_type                  size_type;
@@ -427,7 +420,7 @@ IdMap_t *TClass::GetIdMap() {
 
 #ifdef R__COMPLETE_MEM_TERMINATION
    static IdMap_t gIdMapObject;
-   return &gIdMap;
+   return &gIdMapObject;
 #else
    static IdMap_t *gIdMap = new IdMap_t;
    return gIdMap;
@@ -438,7 +431,7 @@ DeclIdMap_t *TClass::GetDeclIdMap() {
 
 #ifdef R__COMPLETE_MEM_TERMINATION
    static DeclIdMap_t gDeclIdMapObject;
-   return &gIdMap;
+   return &gDeclIdMapObject;
 #else
    static DeclIdMap_t *gDeclIdMap = new DeclIdMap_t;
    return gDeclIdMap;
@@ -452,7 +445,7 @@ void TClass::AddClass(TClass *cl)
 {
    if (!cl) return;
 
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    gROOT->GetListOfClasses()->Add(cl);
    if (cl->GetTypeInfo()) {
       GetIdMap()->Add(cl->GetTypeInfo()->name(),cl);
@@ -478,7 +471,7 @@ void TClass::RemoveClass(TClass *oldcl)
 {
    if (!oldcl) return;
 
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    gROOT->GetListOfClasses()->Remove(oldcl);
    if (oldcl->GetTypeInfo()) {
       GetIdMap()->Remove(oldcl->GetTypeInfo()->name());
@@ -652,7 +645,7 @@ void TDumpMembers::Inspect(TClass *cl, const char *pname, const char *mname, con
             }
          }
          if (isPrintable) {
-            strncpy(line + kvalue, *ppointer, i);
+            strncpy(line + kvalue, *ppointer, std::min( i, kline - kvalue));
             line[kvalue+i] = 0;
          } else {
             line[kvalue] = 0;
@@ -778,22 +771,25 @@ void TBuildRealData::Inspect(TClass* cl, const char* pname, const char* mname, c
          rname[dot] = '.';
       }
    }
-   rname += mname;
+
    Long_t offset = Long_t(((Long_t) add) - ((Long_t) fRealDataObject));
+
+   if (TClassEdit::IsStdArray(dm->GetTypeName())){ // We tackle the std array case
+      TString rdName;
+      TRealData::GetName(rdName,dm);
+      rname += rdName;
+      TRealData* rd = new TRealData(rname.Data(), offset, dm);
+      fRealDataClass->GetListOfRealData()->Add(rd);
+      return;
+   }
+
+   rname += mname;
 
    if (dm->IsaPointer()) {
       // Data member is a pointer.
-      if (!dm->IsBasic()) {
-         // Pointer to class object.
-         TRealData* rd = new TRealData(rname, offset, dm);
-         if (isTransientMember) { rd->SetBit(TRealData::kTransient); };
-         fRealDataClass->GetListOfRealData()->Add(rd);
-      } else {
-         // Pointer to basic data type.
-         TRealData* rd = new TRealData(rname, offset, dm);
-         if (isTransientMember) { rd->SetBit(TRealData::kTransient); };
-         fRealDataClass->GetListOfRealData()->Add(rd);
-      }
+      TRealData* rd = new TRealData(rname, offset, dm);
+      if (isTransientMember) { rd->SetBit(TRealData::kTransient); };
+      fRealDataClass->GetListOfRealData()->Add(rd);
    } else {
       // Data Member is a basic data type.
       TRealData* rd = new TRealData(rname, offset, dm);
@@ -961,7 +957,7 @@ void TAutoInspector::Inspect(TClass *cl, const char *tit, const char *name,
          bwname = name;
          int l = strcspn(bwname.Data(),"[ ");
          if (l<bwname.Length() && bwname[l]=='[') {
-            char cbuf[12]; snprintf(cbuf,12,"[%02d]",i);
+            char cbuf[13]; snprintf(cbuf,13,"[%02d]",i);
             ts.Replace(0,999,bwname,l);
             ts += cbuf;
             bwname = (const char*)ts;
@@ -1012,7 +1008,7 @@ void TAutoInspector::Inspect(TClass *cl, const char *tit, const char *name,
 //______________________________________________________________________________
 //______________________________________________________________________________
 
-ClassImp(TClass)
+ClassImp(TClass);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1030,7 +1026,7 @@ TClass::TClass() :
    fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
    fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
-   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
+   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
    fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
    fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
@@ -1038,7 +1034,7 @@ TClass::TClass() :
 {
    // Default ctor.
 
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    {
       TMmallocDescTemp setreset;
       fStreamerInfo = new TObjArray(1, -2);
@@ -1068,12 +1064,12 @@ TClass::TClass(const char *name, Bool_t silent) :
    fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
    fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
-   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
+   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
    fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
    fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
    if (!gROOT)
       ::Fatal("TClass::TClass", "ROOT system not initialized");
@@ -1115,12 +1111,12 @@ TClass::TClass(const char *name, Version_t cversion, Bool_t silent) :
    fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
    fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
-   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
+   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
    fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
    fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    Init(name, cversion, 0, 0, 0, 0, -1, -1, 0, silent);
 }
 
@@ -1142,12 +1138,12 @@ TClass::TClass(const char *name, Version_t cversion, EState theState, Bool_t sil
    fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
    fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
-   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
+   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(theState),
    fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
    fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
    // Treat the case in which a TClass instance is created for a namespace
    if (theState == kNamespaceForMeta){
@@ -1186,12 +1182,12 @@ TClass::TClass(ClassInfo_t *classInfo, Version_t cversion,
    fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
    fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
-   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
+   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
    fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
    fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
    if (!gROOT)
       ::Fatal("TClass::TClass", "ROOT system not initialized");
@@ -1208,7 +1204,7 @@ TClass::TClass(ClassInfo_t *classInfo, Version_t cversion,
    } else {
       fName = gInterpreter->ClassInfo_FullName(classInfo);
 
-      R__LOCKGUARD2(gInterpreterMutex);
+      R__LOCKGUARD(gInterpreterMutex);
       Init(fName, cversion, 0, 0, dfil, ifil, dl, il, classInfo, silent);
    }
    ResetBit(kLoading);
@@ -1236,12 +1232,12 @@ TClass::TClass(const char *name, Version_t cversion,
    fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
    fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
-   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
+   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kNoInfo),
    fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
    fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    Init(name,cversion, 0, 0, dfil, ifil, dl, il, 0, silent);
 }
 
@@ -1267,12 +1263,12 @@ TClass::TClass(const char *name, Version_t cversion,
    fMerge(0), fResetAfterMerge(0), fNew(0), fNewArray(0), fDelete(0), fDeleteArray(0),
    fDestructor(0), fDirAutoAdd(0), fStreamerFunc(0), fConvStreamerFunc(0), fSizeof(-1),
    fCanSplit(-1), fProperty(0), fClassProperty(0), fHasRootPcmInfo(kFALSE), fCanLoadClassInfo(kFALSE),
-   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
+   fIsOffsetStreamerSet(kFALSE), fVersionUsed(kFALSE), fRuntimeProperties(0), fOffsetStreamer(0), fStreamerType(TClass::kDefault),
    fState(kHasTClassInit),
    fCurrentInfo(0), fLastReadInfo(0), fRefProxy(0),
    fSchemaRules(0), fStreamerImpl(&TClass::StreamerDefault)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    // use info
    Init(name, cversion, &info, isa, dfil, ifil, dl, il, 0, silent);
 }
@@ -1314,7 +1310,11 @@ void TClass::Init(const char *name, Version_t cversion,
 {
    if (!gROOT)
       ::Fatal("TClass::TClass", "ROOT system not initialized");
-
+   if (!name || !name[0]) {
+      ::Error("TClass::Init", "The name parameter is invalid (null or empty)");
+      MakeZombie();
+      return;
+   }
    // Always strip the default STL template arguments (from any template argument or the class name)
    fName           = TClassEdit::ShortType(name, TClassEdit::kDropStlDefault).c_str();
    fClassVersion   = cversion;
@@ -1381,15 +1381,16 @@ void TClass::Init(const char *name, Version_t cversion,
 
    Bool_t isStl = TClassEdit::IsSTLCont(fName);
 
-   if (!gInterpreter) {
+   if (!gInterpreter)
       ::Fatal("TClass::Init", "gInterpreter not initialized");
-   }
 
    if (givenInfo) {
-      if (!gInterpreter->ClassInfo_IsValid(givenInfo) ||
-          !(gInterpreter->ClassInfo_Property(givenInfo) & (kIsClass | kIsStruct | kIsNamespace)) ||
-          (!gInterpreter->ClassInfo_IsLoaded(givenInfo) && (gInterpreter->ClassInfo_Property(givenInfo) & (kIsNamespace))) )
-      {
+      bool invalid = !gInterpreter->ClassInfo_IsValid(givenInfo);
+      bool notloaded = !gInterpreter->ClassInfo_IsLoaded(givenInfo);
+      auto property = gInterpreter->ClassInfo_Property(givenInfo);
+
+      if (invalid || (notloaded && (property & kIsNamespace)) ||
+          !(property & (kIsClass | kIsStruct | kIsNamespace))) {
          if (!TClassEdit::IsSTLCont(fName.Data())) {
             MakeZombie();
             fState = kNoInfo;
@@ -1397,8 +1398,11 @@ void TClass::Init(const char *name, Version_t cversion,
             return;
          }
       }
+
       fClassInfo = gInterpreter->ClassInfo_Factory(givenInfo);
+      fCanLoadClassInfo = false; // avoids calls to LoadClassInfo() if info is already loaded
    }
+
    // We need to check if the class it is not fwd declared for the cases where we
    // created a TClass directly in the kForwardDeclared state. Indeed in those cases
    // fClassInfo will always be nullptr.
@@ -1412,7 +1416,7 @@ void TClass::Init(const char *name, Version_t cversion,
          // This is because we do not expect the CINT dictionary
          // to be present for all STL classes (and we can handle
          // the lack of CINT dictionary in that cases).
-         // However, we cling the dictionary no longer carries
+         // However, the cling the dictionary no longer carries
          // an instantiation with it, unless we request the loading
          // here *or* the user explicitly instantiate the template
          // we would not have a ClassInfo for the template
@@ -1443,7 +1447,15 @@ void TClass::Init(const char *name, Version_t cversion,
    if (!silent && (!fClassInfo && !fCanLoadClassInfo) && !isStl && fName.First('@')==kNPOS &&
        !TClassEdit::IsInterpreterDetail(fName.Data()) ) {
       if (fState == kHasTClassInit) {
-         ::Error("TClass::Init", "no interpreter information for class %s is available even though it has a TClass initialization routine.", fName.Data());
+         if (fImplFileLine == -1 && fClassVersion == 0) {
+            // We have a 'transient' class with a ClassDefInline and apparently no interpreter
+            // information. Since it is transient, it is more than likely that the lack
+            // will be harmles.
+         } else {
+            ::Error("TClass::Init", "no interpreter information for class %s is available even though it has a TClass "
+                                    "initialization routine.",
+                    fName.Data());
+         }
       } else {
          // In this case we initialised this TClass instance starting from the fwd declared state
          // and we know we have no dictionary: no need to warn
@@ -1586,9 +1598,9 @@ TClass::~TClass()
 
    delete fPersistentRef.load();
 
-   if (fBase)
-      fBase->Delete();
-   delete fBase;   fBase=0;
+   if (fBase.load())
+      (*fBase).Delete();
+   delete fBase.load(); fBase = 0;
 
    if (fData)
       fData->Delete();
@@ -1720,17 +1732,7 @@ Int_t TClass::ReadRules()
 {
    static const char *suffix = "class.rules";
    TString sname = suffix;
-#ifdef ROOTETCDIR
-   gSystem->PrependPathName(ROOTETCDIR, sname);
-#else
-   TString etc = gRootDir;
-#ifdef WIN32
-   etc += "\\etc";
-#else
-   etc += "/etc";
-#endif
-   gSystem->PrependPathName(etc, sname);
-#endif
+   gSystem->PrependPathName(TROOT::GetEtcDir(), sname);
 
    Int_t res = -1;
 
@@ -1738,6 +1740,8 @@ Int_t TClass::ReadRules()
    if (f != 0) {
       res = ReadRulesContent(f);
       fclose(f);
+   } else {
+      ::Error("TClass::ReadRules()", "Cannot find rules file %s", sname.Data());
    }
    return res;
 }
@@ -2200,23 +2204,21 @@ Bool_t TClass::CanSplitBaseAllow()
    // we can find out.
    if (!HasDataMemberInfo()) return kTRUE;
 
-   TObjLink *lnk = GetListOfBases() ? fBase->FirstLink() : 0;
+   TObjLink *lnk = GetListOfBases() ? fBase.load()->FirstLink() : 0;
 
    // Look at inheritance tree
    while (lnk) {
       TClass     *c;
       TBaseClass *base = (TBaseClass*) lnk->GetObject();
       c = base->GetClassPointer();
-      if (c) {
-         if (!c) {
-            // If there is a missing base class, we can't split the immediate
-            // derived class.
-            fCanSplit = 0;
-            return kFALSE;
-         } else if (!c->CanSplitBaseAllow()) {
-            fCanSplit = 2;
-            return kFALSE;
-         }
+      if(!c) {
+         // If there is a missing base class, we can't split the immediate
+         // derived class.
+         fCanSplit = 0;
+         return kFALSE;
+      } else if (!c->CanSplitBaseAllow()) {
+         fCanSplit = 2;
+         return kFALSE;
       }
       lnk = lnk->Next();
    }
@@ -2329,7 +2331,7 @@ TObject *TClass::Clone(const char *new_name) const
    }
 
    // Need to lock access to TROOT::GetListOfClasses so the cloning happens atomically
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
    // Temporarily remove the original from the list of classes.
    TClass::RemoveClass(const_cast<TClass*>(this));
 
@@ -2595,7 +2597,7 @@ TClass *TClass::GetBaseClass(const TClass *cl)
 
    if (!HasDataMemberInfo()) return 0;
 
-   TObjLink *lnk = GetListOfBases() ? fBase->FirstLink() : 0;
+   TObjLink *lnk = GetListOfBases() ? fBase.load()->FirstLink() : 0;
 
    // otherwise look at inheritance tree
    while (lnk) {
@@ -2624,7 +2626,7 @@ Int_t TClass::GetBaseClassOffsetRecurse(const TClass *cl)
    // check if class name itself is equal to classname
    if (cl == this) return 0;
 
-   if (!fBase) {
+   if (!fBase.load()) {
       if (fCanLoadClassInfo) LoadClassInfo();
       // If the information was not provided by the root pcm files and
       // if we can not find the ClassInfo, we have to fall back to the
@@ -2639,14 +2641,27 @@ Int_t TClass::GetBaseClassOffsetRecurse(const TClass *cl)
          Int_t size = elems.GetLast()+1;
          for(Int_t i=0; i<size; i++) {
             element = (TStreamerElement*)elems[i];
-            if (element->IsA() == TStreamerBase::Class()) {
-               TStreamerBase *base = (TStreamerBase*)element;
-               TClass *baseclass = base->GetClassPointer();
-               if (!baseclass) return -1;
-               Int_t subOffset = baseclass->GetBaseClassOffsetRecurse(cl);
-               if (subOffset == -2) return -2;
-               if (subOffset != -1) return offset+subOffset;
-               offset += baseclass->Size();
+            if (element->IsBase()) {
+               if (element->IsA() == TStreamerBase::Class()) {
+                  TStreamerBase *base = (TStreamerBase*)element;
+                  TClass *baseclass = base->GetClassPointer();
+                  if (!baseclass) return -1;
+                  Int_t subOffset = baseclass->GetBaseClassOffsetRecurse(cl);
+                  if (subOffset == -2) return -2;
+                  if (subOffset != -1) return offset+subOffset;
+                  offset += baseclass->Size();
+               } else if (element->IsA() == TStreamerSTL::Class()) {
+                  TStreamerSTL *base = (TStreamerSTL*)element;
+                  TClass *baseclass = base->GetClassPointer();
+                  if (!baseclass) return -1;
+                  Int_t subOffset = baseclass->GetBaseClassOffsetRecurse(cl);
+                  if (subOffset == -2) return -2;
+                  if (subOffset != -1) return offset+subOffset;
+                  offset += baseclass->Size();
+
+               } else {
+                  Error("GetBaseClassOffsetRecurse","Unexpected element type for base class: %s\n",element->IsA()->GetName());
+               }
             }
          }
          return -1;
@@ -2657,8 +2672,10 @@ Int_t TClass::GetBaseClassOffsetRecurse(const TClass *cl)
    Int_t      off;
    TBaseClass *inh;
    TObjLink *lnk = 0;
-   if (fBase==0) lnk = GetListOfBases()->FirstLink();
-   else lnk = fBase->FirstLink();
+   if (fBase.load() == 0)
+      lnk = GetListOfBases()->FirstLink();
+   else
+      lnk = fBase.load()->FirstLink();
 
    // otherwise look at inheritance tree
    while (lnk) {
@@ -2711,6 +2728,7 @@ Int_t TClass::GetBaseClassOffset(const TClass *toBase, void *address, bool isDer
    ClassInfo_t* derived = GetClassInfo();
    ClassInfo_t* base = toBase->GetClassInfo();
    if(derived && base) {
+      // TClingClassInfo::GetBaseOffset takes the lock.
       return gCling->ClassInfo_GetBaseOffset(derived, base, address, isDerivedObject);
    }
    else {
@@ -2874,14 +2892,23 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent)
    if (strncmp(name,"class ",6)==0) name += 6;
    if (strncmp(name,"struct ",7)==0) name += 7;
 
-   R__LOCKGUARD(gInterpreterMutex);
-
    if (!gROOT->GetListOfClasses())  return 0;
 
+   // FindObject will take the read lock before actually getting the
+   // TClass pointer so we will need not get a partially initialized
+   // object.
    TClass *cl = (TClass*)gROOT->GetListOfClasses()->FindObject(name);
 
    // Early return to release the lock without having to execute the
    // long-ish normalization.
+   if (cl && (cl->IsLoaded() || cl->TestBit(kUnloading))) return cl;
+
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
+
+   // Now that we got the write lock, another thread may have constructed the
+   // TClass while we were waiting, so we need to do the checks again.
+
+   cl = (TClass*)gROOT->GetListOfClasses()->FindObject(name);
    if (cl) {
       if (cl->IsLoaded() || cl->TestBit(kUnloading)) return cl;
 
@@ -2890,7 +2917,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent)
       //    if (cl->GetState() == kInterpreter) return cl
       //
       // In this case, if a ROOT dictionary was available when the TClass
-      // was first request it would have been used and if a ROOT dictionary is
+      // was first requested it would have been used and if a ROOT dictionary is
       // loaded later on TClassTable::Add will take care of updating the TClass.
       // So as far as ROOT dictionary are concerned, if the current TClass is
       // in interpreted state, we are sure there is nothing to load.
@@ -2898,7 +2925,7 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent)
       // However (see TROOT::LoadClass), the TClass can also be loaded/provided
       // by a user provided TClassGenerator.  We have no way of knowing whether
       // those do (or even can) behave the same way as the ROOT dictionary and
-      // have the 'dictionary is now available for use' step informa the existing
+      // have the 'dictionary is now available for use' step informs the existing
       // TClass that their dictionary is now available.
 
       //we may pass here in case of a dummy class created by TVirtualStreamerInfo
@@ -3012,36 +3039,64 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent)
    if (gDebug>0){
       printf("TClass::GetClass: Header Parsing - The representation of %s was not found in the type system. A lookup in the interpreter is about to be tried: this can cause parsing. This can be avoided selecting %s in the linkdef/selection file.\n",normalizedName.c_str(), normalizedName.c_str());
    }
-   if (normalizedName.length() &&
-       gInterpreter->CheckClassInfo(normalizedName.c_str(), kTRUE /* autoload */, kTRUE /*Only class, structs and ns*/)) {
-      // Get the normalized name based on the decl (currently the only way
-      // to get the part to add or drop the default arguments as requested by the user)
-      std::string alternative;
-      gInterpreter->GetInterpreterTypeName(normalizedName.c_str(),alternative,kTRUE);
-      const char *altname = alternative.c_str();
-      if ( strncmp(altname,"std::",5)==0 ) {
-         // For namespace (for example std::__1), GetInterpreterTypeName does
-         // not strip std::, so we must do it explicitly here.
-         altname += 5;
-      }
-      if (altname != normalizedName && strcmp(altname,name) != 0) {
-         // altname now contains the full name of the class including a possible
-         // namespace if there has been a using namespace statement.
+   if (normalizedName.length()) {
+      auto cci = gInterpreter->CheckClassInfo(normalizedName.c_str(), kTRUE /* autoload */,
+                                              kTRUE /*Only class, structs and ns*/);
 
-         // At least in the case C<string [2]> (normalized) vs C<string[2]> (altname)
-         // the TClassEdit normalization and the TMetaUtils normalization leads to
-         // two different space layout.  To avoid an infinite recursion, we also
-         // add the test on (altname != name)
+      // We could have an interpreted class with an inline ClassDef, in this case we do not
+      // want to create an 'interpreted' TClass but we want the one triggered via the call to
+      // the Dictionary member.  If we go ahead and generate the 'interpreted' version it will
+      // replace if/when there is a call to IsA on an object of this type.
 
-         return GetClass(altname,load);
+      if (cci == TInterpreter::kWithClassDefInline) {
+         auto ci = gInterpreter->ClassInfo_Factory(normalizedName.c_str());
+         auto funcDecl = gInterpreter->GetFunctionWithPrototype(ci, "Dictionary", "", false, ROOT::kExactMatch);
+         auto method = gInterpreter->MethodInfo_Factory(funcDecl);
+         typedef void (*tcling_callfunc_Wrapper_t)(void *, int, void **, void *);
+         auto funcPtr = (tcling_callfunc_Wrapper_t)gInterpreter->MethodInfo_InterfaceMethod(method);
+
+         TClass *res = nullptr;
+         if (funcPtr)
+            funcPtr(0, 0, nullptr, &res);
+         // else
+         //   We could fallback to the interpreted case ...
+         //   For now just 'fail' (return nullptr)
+
+         gInterpreter->MethodInfo_Delete(method);
+         gInterpreter->ClassInfo_Delete(ci);
+
+         return res;
+      } else if (cci) {
+         // Get the normalized name based on the decl (currently the only way
+         // to get the part to add or drop the default arguments as requested by the user)
+         std::string alternative;
+         gInterpreter->GetInterpreterTypeName(normalizedName.c_str(), alternative, kTRUE);
+         const char *altname = alternative.c_str();
+         if (strncmp(altname, "std::", 5) == 0) {
+            // For namespace (for example std::__1), GetInterpreterTypeName does
+            // not strip std::, so we must do it explicitly here.
+            altname += 5;
+         }
+         if (altname != normalizedName && strcmp(altname, name) != 0) {
+            // altname now contains the full name of the class including a possible
+            // namespace if there has been a using namespace statement.
+
+            // At least in the case C<string [2]> (normalized) vs C<string[2]> (altname)
+            // the TClassEdit normalization and the TMetaUtils normalization leads to
+            // two different space layout.  To avoid an infinite recursion, we also
+            // add the test on (altname != name)
+
+            return GetClass(altname, load);
+         }
+
+         TClass *ncl = gInterpreter->GenerateTClass(normalizedName.c_str(), /* emulation = */ kFALSE, silent);
+         if (!ncl->IsZombie()) {
+            return ncl;
+         }
+         delete ncl;
       }
-      TClass *ncl = gInterpreter->GenerateTClass(normalizedName.c_str(), /* emulation = */ kFALSE, silent);
-      if (!ncl->IsZombie()) {
-         return ncl;
-      }
-      delete ncl;
    }
-   return 0;
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3049,12 +3104,22 @@ TClass *TClass::GetClass(const char *name, Bool_t load, Bool_t silent)
 
 TClass *TClass::GetClass(const std::type_info& typeinfo, Bool_t load, Bool_t /* silent */)
 {
-   //protect access to TROOT::GetListOfClasses
-   R__LOCKGUARD2(gInterpreterMutex);
+   if (!gROOT->GetListOfClasses())
+      return 0;
 
-   if (!gROOT->GetListOfClasses())    return 0;
+   //protect access to TROOT::GetIdMap
+   R__READ_LOCKGUARD(ROOT::gCoreMutex);
 
    TClass* cl = GetIdMap()->Find(typeinfo.name());
+
+   if (cl && cl->IsLoaded()) return cl;
+
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
+
+   // Now that we got the write lock, another thread may have constructed the
+   // TClass while we were waiting, so we need to do the checks again.
+
+   cl = GetIdMap()->Find(typeinfo.name());
 
    if (cl) {
       if (cl->IsLoaded()) return cl;
@@ -3128,6 +3193,12 @@ TClass *TClass::GetClass(ClassInfo_t *info, Bool_t load, Bool_t silent)
 {
    if (!info || !gCling->ClassInfo_IsValid(info)) return 0;
    if (!gROOT->GetListOfClasses())    return 0;
+
+   // Technically we need the write lock only for the call to ClassInfo_FullName
+   // and GenerateTClass but FindObject will take the read lock (and LoadClass will
+   // take the write lock).  Since taking/releasing the lock is expensive, let just
+   // take the write guard and keep it.
+   R__WRITE_LOCKGUARD(ROOT::gCoreMutex);
 
    // Get the normalized name.
    TString name( gCling->ClassInfo_FullName(info) );
@@ -3435,7 +3506,7 @@ const char *TClass::GetSharedLibs()
 
 TList *TClass::GetListOfBases()
 {
-   if (!fBase) {
+   if (!fBase.load()) {
       if (fCanLoadClassInfo) {
          if (fState == kHasTClassInit) {
 
@@ -3463,7 +3534,7 @@ TList *TClass::GetListOfBases()
          Fatal("GetListOfBases", "gInterpreter not initialized");
 
       R__LOCKGUARD(gInterpreterMutex);
-      if(!fBase) {
+      if (!fBase.load()) {
          gInterpreter->CreateListOfBaseClasses(this);
       }
    }
@@ -3471,41 +3542,60 @@ TList *TClass::GetListOfBases()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return list containing the TEnums of a class.
+/// Return a list containing the TEnums of a class.
+///
+/// The list returned is safe to use from multiple thread without explicitly
+/// taking the ROOT global lock.
+///
+/// In the case the TClass represents a namespace, the returned list will
+/// implicit take the ROOT global lock upon any access (see TListOfEnumsWithLock)
+///
+/// In the case the TClass represents a class or struct and requestListLoading
+/// is true, the list is immutable (and thus safe to access from multiple thread
+/// without taking the global lock at all).
+///
+/// In the case the TClass represents a class or struct and requestListLoading
+/// is false, the list is mutable and thus we return a TListOfEnumsWithLock
+/// which will implicit take the ROOT global lock upon any access.
 
-TList *TClass::GetListOfEnums(Bool_t load /* = kTRUE */)
+TList *TClass::GetListOfEnums(Bool_t requestListLoading /* = kTRUE */)
 {
    auto temp = fEnums.load();
    if (temp) {
-      if (load) {
+      if (requestListLoading) {
          if (fProperty == -1) Property();
          if (! ((kIsClass | kIsStruct | kIsUnion) & fProperty) ) {
-            R__LOCKGUARD2(gROOTMutex);
+            R__LOCKGUARD(gROOTMutex);
+            temp->Load();
+         } else if ( temp->IsA() == TListOfEnumsWithLock::Class() ) {
+            // We have a class for which the list was not loaded fully at
+            // first use.
+            R__LOCKGUARD(gROOTMutex);
             temp->Load();
          }
       }
       return temp;
    }
 
-   if (!load) {
+   if (!requestListLoading) {
       if (fProperty == -1) Property();
-      if (! ((kIsClass | kIsStruct | kIsUnion) & fProperty) ) {
-         R__LOCKGUARD(gInterpreterMutex);
-         if (fEnums.load()) {
-            return fEnums.load();
-         }
-         //namespaces can have enums added to them
-         fEnums = new TListOfEnumsWithLock(this);
-         return fEnums;
+      R__LOCKGUARD(gInterpreterMutex);
+      if (fEnums.load()) {
+         return fEnums.load();
       }
-      // no one is supposed to modify the returned results
-      static TListOfEnums s_list;
-      return &s_list;
+
+      static bool fromRootCling = dlsym(RTLD_DEFAULT, "usedToIdentifyRootClingByDlSym");
+
+      if (fromRootCling) // rootcling is single thread (this save some space in the rootpcm).
+         fEnums = new TListOfEnums(this);
+      else
+         fEnums = new TListOfEnumsWithLock(this);
+      return fEnums;
    }
 
    R__LOCKGUARD(gInterpreterMutex);
    if (fEnums.load()) {
-      if (load) (*fEnums).Load();
+      (*fEnums).Load();
       return fEnums.load();
    }
    if (fProperty == -1) Property();
@@ -3667,7 +3757,7 @@ void TClass::GetMenuItems(TList *list)
 /// This is equivalent to ask if a class is coming from a bootstrapping
 /// procedure initiated during the loading of a library.
 
-Bool_t TClass::HasDictionary()
+Bool_t TClass::HasDictionary() const
 {
    return IsLoaded();
 }
@@ -3695,7 +3785,7 @@ void TClass::GetMissingDictionariesForBaseClasses(TCollection& result, TCollecti
    TIter nextBase(lb);
    TBaseClass* base = 0;
    while ((base = (TBaseClass*)nextBase())) {
-      TClass* baseCl = base->Class();
+      TClass* baseCl = base->GetClassPointer();
       if (baseCl) {
             baseCl->GetMissingDictionariesWithRecursionCheck(result, visited, recurse);
       }
@@ -3722,13 +3812,14 @@ void TClass::GetMissingDictionariesForMembers(TCollection& result, TCollection& 
       // If it is a built-in data type.
       TClass* dmTClass = 0;
       if (dm->GetDataType()) {
-         dmTClass = dm->GetDataType()->Class();
+         // We have a basic datatype.
+         dmTClass = nullptr;
          // Otherwise get the string representing the type.
       } else if (dm->GetTypeName()) {
-            dmTClass = TClass::GetClass(dm->GetTypeName());
+         dmTClass = TClass::GetClass(dm->GetTypeName());
       }
       if (dmTClass) {
-            dmTClass->GetMissingDictionariesWithRecursionCheck(result, visited, recurse);
+         dmTClass->GetMissingDictionariesWithRecursionCheck(result, visited, recurse);
       }
    }
 }
@@ -3902,7 +3993,7 @@ void TClass::ResetClassInfo(Long_t /* tagnum */)
 
 void TClass::ResetClassInfo()
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
    InsertTClassInRegistryRAII insertRAII(fState,fName,fNoInfoOrEmuOrFwdDeclNameRegistry);
 
@@ -3949,9 +4040,9 @@ void TClass::ResetCaches()
 
    delete fAllPubData; fAllPubData = 0;
 
-   if (fBase)
-      fBase->Delete();
-   delete fBase; fBase = 0;
+   if (fBase.load())
+      (*fBase).Delete();
+   delete fBase.load(); fBase = 0;
 
    if (fRealData)
       fRealData->Delete();
@@ -4159,19 +4250,15 @@ TMethod *TClass::GetMethod(const char *method, const char *params,
 /// Find a method with decl id in this class or its bases.
 
 TMethod* TClass::FindClassOrBaseMethodWithId(DeclId_t declId) {
-   TFunction *f = GetMethodList()->Get(declId);
-   if (f) return (TMethod*)f;
+   if (TFunction* method = GetMethodList()->Get(declId))
+      return static_cast<TMethod *>(method);
 
-   TBaseClass *base;
-   TIter       next(GetListOfBases());
-   while ((base = (TBaseClass *) next())) {
-      TClass *clBase = base->GetClassPointer();
-      if (clBase) {
-         f = clBase->FindClassOrBaseMethodWithId(declId);
-         if (f) return (TMethod*)f;
-      }
-   }
-   return 0;
+   for (auto item : *GetListOfBases())
+      if (auto base = static_cast<TBaseClass *>(item)->GetClassPointer())
+         if (TFunction* method = base->FindClassOrBaseMethodWithId(declId))
+            return static_cast<TMethod *>(method);
+
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4323,29 +4410,46 @@ Int_t TClass::GetNmethods()
 
 TVirtualStreamerInfo* TClass::GetStreamerInfo(Int_t version /* = 0 */) const
 {
-   TVirtualStreamerInfo *guess = fLastReadInfo;
-   if (guess && guess->GetClassVersion() == version) {
-      // If the StreamerInfo is assigned to the fLastReadInfo, we are
-      // guaranteed it was built and compiled.
-      return guess;
-   }
+   TVirtualStreamerInfo *sinfo = fLastReadInfo;
+
+   // Version 0 is special, it means the currently loaded version.
+   // We need to set it at the beginning to be able to guess it correctly.
+
+   if (version == 0)
+      version = fClassVersion;
+
+   // If the StreamerInfo is assigned to the fLastReadInfo, we are
+   // guaranteed it was built and compiled.
+   if (sinfo && sinfo->GetClassVersion() == version)
+      return sinfo;
+
+   // Note that the access to fClassVersion above is technically not thread-safe with a low probably of problems.
+   // fClassVersion is not an atomic and is modified TClass::SetClassVersion (called from RootClassVersion via
+   // ROOT::ResetClassVersion) and is 'somewhat' protected by the atomic fVersionUsed.
+   // However, direct access to fClassVersion should be replaced by calls to GetClassVersion to set fVersionUsed.
+   // Even with such a change the code here and in these functions need to be reviewed as a cursory look seem
+   // to indicates they are not yet properly protection against mutli-thread access.
+   //
+   // However, the use of these functions is rare and mostly done at library loading time which should
+   // in almost all cases preceeds the possibility of GetStreamerInfo being called from multiple thread
+   // on that same TClass object.
+   //
+   // Summary: need careful review but risk of problem is extremely low.
 
    R__LOCKGUARD(gInterpreterMutex);
 
-   // Handle special version, 0 means currently loaded version.
-   // Warning:  This may be -1 for an emulated class.
-   // If version == -2, the user is requested the emulated streamerInfo
-   // for an abstract base class even though we have a dictionary for it.
-   if (version == 0) {
-      version = fClassVersion;
-   }
-   Int_t ninfos = fStreamerInfo->GetSize();
-   if ((version < -1) || (version >= ninfos)) {
+   // Warning: version may be -1 for an emulated class, or -2 if the
+   //          user requested the emulated streamerInfo for an abstract
+   //          base class, even though we have a dictionary for it.
+
+   if ((version < -1) || (version >= fStreamerInfo->GetSize())) {
       Error("GetStreamerInfo", "class: %s, attempting to access a wrong version: %d", GetName(), version);
       // FIXME: Shouldn't we go to -1 here, or better just abort?
-      version = 0;
+      version = fClassVersion;
    }
-   TVirtualStreamerInfo* sinfo = (TVirtualStreamerInfo*) fStreamerInfo->At(version);
+
+   sinfo = (TVirtualStreamerInfo *)fStreamerInfo->At(version);
+
    if (!sinfo && (version != fClassVersion)) {
       // When the requested version does not exist we return
       // the TVirtualStreamerInfo for the currently loaded class version.
@@ -4355,6 +4459,7 @@ TVirtualStreamerInfo* TClass::GetStreamerInfo(Int_t version /* = 0 */) const
       // This is also the code path take for unversioned classes.
       sinfo = (TVirtualStreamerInfo*) fStreamerInfo->At(fClassVersion);
    }
+
    if (!sinfo) {
       // We just were not able to find a streamer info, we have to make a new one.
       TMmallocDescTemp setreset;
@@ -4366,7 +4471,6 @@ TVirtualStreamerInfo* TClass::GetStreamerInfo(Int_t version /* = 0 */) const
       if (HasDataMemberInfo() || fCollectionProxy) {
          // If we do not have a StreamerInfo for this version and we do not
          // have dictionary information nor a proxy, there is nothing to build!
-         //
          sinfo->Build();
       }
    } else {
@@ -4377,12 +4481,15 @@ TVirtualStreamerInfo* TClass::GetStreamerInfo(Int_t version /* = 0 */) const
          sinfo->BuildOld();
       }
    }
+
    // Cache the current info if we now have it.
-   if (version == fClassVersion) {
+   if (version == fClassVersion)
       fCurrentInfo = sinfo;
-   }
+
    // If the compilation succeeded, remember this StreamerInfo.
-   if (sinfo->IsCompiled()) fLastReadInfo = sinfo;
+   if (sinfo->IsCompiled())
+      fLastReadInfo = sinfo;
+
    return sinfo;
 }
 
@@ -4406,46 +4513,49 @@ TVirtualStreamerInfo* TClass::GetStreamerInfo(Int_t version /* = 0 */) const
 
 TVirtualStreamerInfo* TClass::GetStreamerInfoAbstractEmulated(Int_t version /* = 0 */) const
 {
-   R__LOCKGUARD(gInterpreterMutex);
+   TVirtualStreamerInfo *sinfo = nullptr;
 
-   TString newname( GetName() );
+   TString newname(GetName());
    newname += "@@emulated";
+
+   R__LOCKGUARD(gInterpreterMutex);
 
    TClass *emulated = TClass::GetClass(newname);
 
-   TVirtualStreamerInfo* sinfo = 0;
-
-   if (emulated) {
+   if (emulated)
       sinfo = emulated->GetStreamerInfo(version);
-   }
+
    if (!sinfo) {
       // The emulated version of the streamerInfo is explicitly requested and has
       // not been built yet.
 
       sinfo = (TVirtualStreamerInfo*) fStreamerInfo->At(version);
+
       if (!sinfo && (version != fClassVersion)) {
          // When the requested version does not exist we return
          // the TVirtualStreamerInfo for the currently loaded class version.
          // FIXME: This arguably makes no sense, we should warn and return nothing instead.
          sinfo = (TVirtualStreamerInfo*) fStreamerInfo->At(fClassVersion);
       }
+
       if (!sinfo) {
          // Let's take the first available StreamerInfo as a start
          Int_t ninfos = fStreamerInfo->GetEntriesFast() - 1;
-         for (Int_t i = -1; sinfo == 0 && i < ninfos; ++i) {
-            sinfo =  (TVirtualStreamerInfo*) fStreamerInfo->UncheckedAt(i);
-         }
+         for (Int_t i = -1; sinfo == 0 && i < ninfos; ++i)
+            sinfo = (TVirtualStreamerInfo *)fStreamerInfo->UncheckedAt(i);
       }
+
       if (sinfo) {
-         sinfo = dynamic_cast<TVirtualStreamerInfo*>( sinfo->Clone() );
+         sinfo = dynamic_cast<TVirtualStreamerInfo *>(sinfo->Clone());
          if (sinfo) {
             sinfo->SetClass(0);
-            sinfo->SetName( newname );
+            sinfo->SetName(newname);
             sinfo->BuildCheck();
             sinfo->BuildOld();
             sinfo->GetClass()->AddRule(TString::Format("sourceClass=%s targetClass=%s",GetName(),newname.Data()));
-         } else
+         } else {
             Error("GetStreamerInfoAbstractEmulated", "could not create TVirtualStreamerInfo");
+         }
       }
    }
    return sinfo;
@@ -4466,36 +4576,38 @@ TVirtualStreamerInfo* TClass::GetStreamerInfoAbstractEmulated(Int_t version /* =
 
 TVirtualStreamerInfo* TClass::FindStreamerInfoAbstractEmulated(UInt_t checksum) const
 {
-   R__LOCKGUARD(gInterpreterMutex);
+   TVirtualStreamerInfo *sinfo = nullptr;
 
-   TString newname( GetName() );
+   TString newname(GetName());
    newname += "@@emulated";
+
+   R__LOCKGUARD(gInterpreterMutex);
 
    TClass *emulated = TClass::GetClass(newname);
 
-   TVirtualStreamerInfo* sinfo = 0;
-
-   if (emulated) {
+   if (emulated)
       sinfo = emulated->FindStreamerInfo(checksum);
-   }
+
    if (!sinfo) {
       // The emulated version of the streamerInfo is explicitly requested and has
       // not been built yet.
 
       sinfo = (TVirtualStreamerInfo*) FindStreamerInfo(checksum);
+
       if (!sinfo && (checksum != fCheckSum)) {
          // When the requested version does not exist we return
          // the TVirtualStreamerInfo for the currently loaded class version.
          // FIXME: This arguably makes no sense, we should warn and return nothing instead.
          sinfo = (TVirtualStreamerInfo*) fStreamerInfo->At(fClassVersion);
       }
+
       if (!sinfo) {
          // Let's take the first available StreamerInfo as a start
          Int_t ninfos = fStreamerInfo->GetEntriesFast() - 1;
-         for (Int_t i = -1; sinfo == 0 && i < ninfos; ++i) {
-            sinfo =  (TVirtualStreamerInfo*) fStreamerInfo->UncheckedAt(i);
-         }
+         for (Int_t i = -1; sinfo == 0 && i < ninfos; ++i)
+            sinfo = (TVirtualStreamerInfo *)fStreamerInfo->UncheckedAt(i);
       }
+
       if (sinfo) {
          sinfo = dynamic_cast<TVirtualStreamerInfo*>( sinfo->Clone() );
          if (sinfo) {
@@ -4504,8 +4616,9 @@ TVirtualStreamerInfo* TClass::FindStreamerInfoAbstractEmulated(UInt_t checksum) 
             sinfo->BuildCheck();
             sinfo->BuildOld();
             sinfo->GetClass()->AddRule(TString::Format("sourceClass=%s targetClass=%s",GetName(),newname.Data()));
-         } else
+         } else {
             Error("GetStreamerInfoAbstractEmulated", "could not create TVirtualStreamerInfo");
+         }
       }
    }
    return sinfo;
@@ -4535,7 +4648,7 @@ void TClass::IgnoreTObjectStreamer(Bool_t doIgnore)
    // We need to tak the lock since we are test and then setting fBits
    // and TStreamerInfo::fBits (and the StreamerInfo state in general)
    // which can also be modified by another thread.
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
    if ( doIgnore &&  TestBit(kIgnoreTObjectStreamer)) return;
    if (!doIgnore && !TestBit(kIgnoreTObjectStreamer)) return;
@@ -5258,10 +5371,10 @@ void TClass::DeleteArray(void *ary, Bool_t dtorOnly)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Set the splitability of this class:
-///   -1: Use the default calculation
-///    0: Disallow splitting
-///    1: Always allow splitting.
-///    2: Disallow splitting of the class and splitting of any it's derived classes.
+///  - -1: Use the default calculation
+///  -  0: Disallow splitting
+///  -  1: Always allow splitting.
+///  -  2: Disallow splitting of the class and splitting of any it's derived classes.
 
 void TClass::SetCanSplit(Int_t splitmode)
 {
@@ -5291,9 +5404,9 @@ void TClass::SetClassVersion(Version_t version)
 
 TVirtualStreamerInfo* TClass::DetermineCurrentStreamerInfo()
 {
-   R__LOCKGUARD2(gInterpreterMutex);
    if(!fCurrentInfo.load()) {
-     fCurrentInfo=(TVirtualStreamerInfo*)(fStreamerInfo->At(fClassVersion));
+      R__READ_LOCKGUARD(ROOT::gCoreMutex);
+      fCurrentInfo = (TVirtualStreamerInfo *)(fStreamerInfo->At(fClassVersion));
    }
    return fCurrentInfo;
 }
@@ -5424,27 +5537,42 @@ TClass *TClass::LoadClassCustom(const char *requestedname, Bool_t silent)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Try to load the classInfo (it may require parsing the header file
-/// and/or loading data from the clang pcm).
+/// Try to load the ClassInfo if available. This function may require parsing
+/// the header file and/or loading data from the clang pcm. If further calls to
+/// this function cannot affect the value of fClassInfo, fCanLoadClassInfo is set
+/// to false.
 
 void TClass::LoadClassInfo() const
 {
    R__LOCKGUARD(gInterpreterMutex);
 
-   // If another thread executed LoadClassInfo at about the same time
-   // as this thread return early since the work was done.
-   if (!fCanLoadClassInfo) return;
+   // Return if another thread already loaded the info
+   // while we were waiting for the lock
+   if (!fCanLoadClassInfo)
+      return;
 
-   gInterpreter->AutoParse(GetName());
-   if (!fClassInfo) gInterpreter->SetClassInfo(const_cast<TClass*>(this));   // sets fClassInfo pointer
-   if (!gInterpreter->IsAutoParsingSuspended()) {
-      if (!fClassInfo) {
-         ::Error("TClass::LoadClassInfo",
-                 "no interpreter information for class %s is available even though it has a TClass initialization routine.",
+   bool autoParse = !gInterpreter->IsAutoParsingSuspended();
+
+   if (autoParse)
+      gInterpreter->AutoParse(GetName());
+
+   if (!fClassInfo)
+      gInterpreter->SetClassInfo(const_cast<TClass *>(this));
+
+   if (autoParse && !fClassInfo) {
+      if (fImplFileLine == -1 && fClassVersion == 0) {
+         // We have a 'transient' class with a ClassDefInline and apparently no interpreter
+         // information. Since it is transient, it is more than likely that the lack
+         // will be harmles.
+      } else {
+         ::Error("TClass::LoadClassInfo", "no interpreter information for class %s is available"
+                                          " even though it has a TClass initialization routine.",
                  fName.Data());
       }
-      fCanLoadClassInfo = kFALSE;
+      return;
    }
+
+   fCanLoadClassInfo = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5558,7 +5686,9 @@ void TClass::PostLoadCheck()
    {
       SetClassVersion(-1);
    }
-   else if (IsLoaded() && HasDataMemberInfo() && fStreamerInfo && (!IsForeign()||fClassVersion>1) )
+   // Note: We are careful to check the class version first because checking
+   //       for foreign can trigger an AutoParse.
+   else if (IsLoaded() && HasDataMemberInfo() && fStreamerInfo && ((fClassVersion > 1) || !IsForeign()))
    {
       R__LOCKGUARD(gInterpreterMutex);
 
@@ -5693,9 +5823,14 @@ Long_t TClass::Property() const
          kl->fStreamerType  = kExternal;
          kl->fStreamerImpl  = &TClass::StreamerExternal;
       }
+
+      if (const_cast<TClass *>(this)->GetClassMethodWithPrototype("Hash", "", kTRUE)) {
+         kl->SetBit(kHasLocalHashMember);
+      }
+
       if (GetClassInfo()) {
          // In the case where the TClass for one of ROOT's core class
-         // (eg TClonesArray for map<int,TClonesArray*>) is requesting
+         // (eg TClonesArray for map<int,TClonesArray*>) is requested
          // during the execution of rootcling, we could end up in a situation
          // where we should have the information (since TClonesArray has
          // a dictionary as part of libCore) but do not because the user
@@ -5722,6 +5857,28 @@ Long_t TClass::Property() const
    }
 
    return fProperty;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Internal routine to set calculate the class properties that can only be
+/// known at run-time, for example whether the Hash member function and the
+/// destructor are consistent.
+
+void TClass::SetRuntimeProperties()
+{
+   // For now, no need to lock this routines as fRuntimeProperties is
+   // the only atomic set here and this is done at the end
+   // and there is no downside if the execution is done twice.
+
+   // Note SetRuntimeProperties is set to const as it is technically
+   // thread-safe.
+
+   UChar_t properties = static_cast<UChar_t>(ERuntimeProperties::kSet);
+
+   if (ROOT::Internal::TCheckHashRecursiveRemoveConsistency::Check(*this))
+      properties |= static_cast<UChar_t>(ERuntimeProperties::kConsistentHash);
+
+   const_cast<TClass *>(this)->fRuntimeProperties = properties;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6387,7 +6544,7 @@ void TClass::StreamerDefault(const TClass* pThis, void *object, TBuffer &b, cons
    // *and* before check fProperty, another thread might have call Property
    // and this fProperty when we read it, is not -1 and fStreamerImpl is
    // supposed to be set properly (no longer pointing to the default).
-   if (pThis->fStreamerImpl == &TClass::StreamerDefault) {
+   if (pThis->fStreamerImpl.load() == &TClass::StreamerDefault) {
       pThis->Fatal("StreamerDefault", "fStreamerImpl not properly initialized (%d)", pThis->fStreamerType);
    } else {
       (*pThis->fStreamerImpl)(pThis,object,b,onfile_class);
@@ -6819,7 +6976,60 @@ void TClass::RemoveStreamerInfo(Int_t slot)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Return true if we have access to a default constructor.
+/// Return true is the Hash/RecursiveRemove setup is consistent, i.e. when all
+/// classes in the class hierarchy that overload TObject::Hash do call
+/// ROOT::CallRecursiveRemoveIfNeeded in their destructor.
+/// i.e. it is safe to call the Hash virtual function during the RecursiveRemove operation.
+/// This routines is used for a small subset of the class for which we need
+/// the answer before gROOT is properly initialized.
+
+Bool_t ROOT::Internal::HasConsistentHashMember(const char *cname)
+{
+   // Hand selection of correct classes, those classes should be
+   // cross-checked in testHashRecursiveRemove.cxx
+   static const char *handVerified[] = {
+      "TEnvRec",    "TDataType",      "TObjArray",    "TList",   "THashList",
+      "TClass",     "TCling",         "TInterpreter", "TMethod", "ROOT::Internal::TCheckHashRecursiveRemoveConsistency",
+      "TCheckHashRecursiveRemoveConsistency", "TGWindow",
+      "TDirectory", "TDirectoryFile", "TObject",      "TH1",
+      "TQClass" };
+
+   if (cname && cname[0]) {
+      for (auto cursor : handVerified) {
+         if (strcmp(cname, cursor) == 0)
+            return true;
+      }
+   }
+   return false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Return true is the Hash/RecursiveRemove setup is consistent, i.e. when all
+/// classes in the class hierarchy that overload TObject::Hash do call
+/// ROOT::CallRecursiveRemoveIfNeeded in their destructor.
+/// i.e. it is safe to call the Hash virtual function during the RecursiveRemove operation.
+
+Bool_t ROOT::Internal::HasConsistentHashMember(TClass &clRef)
+{
+   return clRef.HasConsistentHashMember();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Return true if we have access to a constructor useable for I/O.  This is
+/// typically the default constructor but can also be a constructor specifically
+/// marked for I/O (for example a constructor taking a TRootIOCtor* as an
+/// argument).  In other words, if this routine returns true, TClass::New is
+/// guarantee to succeed.
+/// To know if the class described by this TClass has a default constructor
+/// (public or not), use
+/// \code{.cpp}
+///     cl->GetProperty() & kClassHasDefaultCtor
+/// \code
+/// To know if the class described by this TClass has a public default
+/// constructor use:
+/// \code{.cpp}
+///    gInterpreter->ClassInfo_HasDefaultConstructor(aClass->GetClassInfo());
+/// \code
 
 Bool_t TClass::HasDefaultConstructor() const
 {
@@ -6838,6 +7048,22 @@ Bool_t TClass::HasDefaultConstructor() const
       return kTRUE;
    }
    return kFALSE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Returns true if this class has an definition and/or overload of the
+/// member function Hash.
+///
+/// For example to test if the class overload TObject::Hash use
+/// ~~~ {.cpp}
+///     if (cl->IsTObject() && cl->HasLocalHashMember())
+/// ~~~
+
+Bool_t TClass::HasLocalHashMember() const
+{
+   if (fProperty == (-1))
+      Property();
+   return TestBit(kHasLocalHashMember);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

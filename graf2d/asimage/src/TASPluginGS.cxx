@@ -30,7 +30,6 @@ Allows to read PS/EPS/PDF files via GhostScript
 #   define popen_flags "r"
 #endif
 
-extern "C" {
 #ifndef WIN32
 #   include <afterbase.h>
 #else
@@ -39,10 +38,9 @@ extern "C" {
 #   define X_DISPLAY_MISSING 1
 #endif
 #   include <import.h>
-}
 
 
-ClassImp(TASPluginGS)
+ClassImp(TASPluginGS);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// ctor

@@ -10,13 +10,8 @@
  *************************************************************************/
 
 
-/*************************************************************************
-
-____________________________________________________________________
-
-TGDMLParse Class
-
---------------------------------------------------------------------
+/** \class TGDMLParse
+\ingroup Geometry_gdml
 
  This class contains the implementation of the GDML  parser associated to
  all the supported GDML elements. User should never need to explicitly
@@ -35,40 +30,40 @@ TGDMLParse Class
 
  The presently supported list of TGeo classes is the following:
 
- Materials:
- TGeoElement
- TGeoMaterial
- TGeoMixture
+#### Materials:
+  - TGeoElement
+  - TGeoMaterial
+  - TGeoMixture
 
- Solids:
- TGeoBBox
- TGeoArb8
- TGeoTubeSeg
- TGeoConeSeg
- TGeoCtub
- TGeoPcon
- TGeoTrap
- TGeoGtra
- TGeoTrd2
- TGeoSphere
- TGeoPara
- TGeoTorus
- TGeoHype
- TGeoPgon
- TGeoXtru
- TGeoEltu
- TGeoParaboloid
- TGeoCompositeShape (subtraction, union, intersection)
+#### Solids:
+  - TGeoBBox
+  - TGeoArb8
+  - TGeoTubeSeg
+  - TGeoConeSeg
+  - TGeoCtub
+  - TGeoPcon
+  - TGeoTrap
+  - TGeoGtra
+  - TGeoTrd2
+  - TGeoSphere
+  - TGeoPara
+  - TGeoTorus
+  - TGeoHype
+  - TGeoPgon
+  - TGeoXtru
+  - TGeoEltu
+  - TGeoParaboloid
+  - TGeoCompositeShape (subtraction, union, intersection)
 
- Approximated Solids:
- Ellipsoid (approximated to a TGeoBBox)
- Elliptical cone (approximated to a TGeoCone)
+#### Approximated Solids:
+  - Ellipsoid (approximated to a TGeoBBox)
+  - Elliptical cone (approximated to a TGeoCone)
 
- Geometry:
- TGeoVolume
- TGeoVolumeAssembly
- divisions
- reflection
+#### Geometry:
+  - TGeoVolume
+  - TGeoVolumeAssembly
+  - divisions
+  - reflection
 
 When most solids or volumes are added to the geometry they
 
@@ -80,7 +75,7 @@ When most solids or volumes are added to the geometry they
  For any question or remarks concerning this code, please send an email to
  ben.lloyd@cern.ch
 
-****************************************************************************/
+*/
 
 #include "TGeoManager.h"
 #include "TGeoMatrix.h"
@@ -113,16 +108,18 @@ When most solids or volumes are added to the geometry they
 #include "TGeoElement.h"
 #include "TGeoShape.h"
 #include "TGeoCompositeShape.h"
+#include "TGeoRegion.h"
 #include "TGDMLParse.h"
 #include <stdlib.h>
 #include <string>
+#include <locale>
 
-ClassImp(TGDMLParse)
+ClassImp(TGDMLParse);
 
 ////////////////////////////////////////////////////////////////////////////////
-///creates the new instance of the XMLEngine called 'gdml', using the filename >>
-///then parses the file and creates the DOM tree. Then passes the DOM to the
-///next function to translate it.
+/// Creates the new instance of the XMLEngine called 'gdml', using the filename >>
+/// then parses the file and creates the DOM tree. Then passes the DOM to the
+/// next function to translate it.
 
 TGeoVolume* TGDMLParse::GDMLReadFile(const char* filename)
 {
@@ -157,9 +154,9 @@ TGeoVolume* TGDMLParse::GDMLReadFile(const char* filename)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///this function recursively moves thru the DOM tree of the GDML file. It checks for
-///key words along the way and if a key word is found it calls the corresponding
-///function to interpret the node.
+/// This function recursively moves thru the DOM tree of the GDML file. It checks for
+/// key words along the way and if a key word is found it calls the corresponding
+/// function to interpret the node.
 
 const char* TGDMLParse::ParseGDML(TXMLEngine* gdml, XMLNodePointer_t node)
 {
@@ -220,8 +217,8 @@ const char* TGDMLParse::ParseGDML(TXMLEngine* gdml, XMLNodePointer_t node)
       node = ConProcess(gdml, node, attr);
    } else if ((strcmp(name, varistr)) == 0) {
       node = ConProcess(gdml, node, attr);
-   } 
-   //*************eleprocess********************************                                                                                                                                      
+   }
+   //*************eleprocess********************************
 
    else if (((strcmp(name, "atom")) == 0) && ((strcmp(parent, elemstr)) == 0)) {
      hasIsotopes = kFALSE;
@@ -242,13 +239,13 @@ const char* TGDMLParse::ParseGDML(TXMLEngine* gdml, XMLNodePointer_t node)
        node = EleProcess(gdml, node, parentn, hasIsotopes, hasIsotopesExtended);}
    }
 
-   //********isoprocess******************************  
+   //********isoprocess******************************
 
    else if (((strcmp(name, "atom")) == 0) && ((strcmp(parent, istpstr)) == 0)) {
       node = IsoProcess(gdml, node, parentn);
-   } 
+   }
 
-   //********matprocess***********************************                                                                                                                                        
+   //********matprocess***********************************
    else if ((strcmp(name, matestr)) == 0 && gdml->HasAttr(node, "Z")) {
      childtmp = gdml->GetChild(node);
 //     if ((strcmp(gdml->GetNodeName(childtmp), "fraction") == 0) || (strcmp(gdml->GetNodeName(childtmp), "D") == 0)){
@@ -266,8 +263,8 @@ const char* TGDMLParse::ParseGDML(TXMLEngine* gdml, XMLNodePointer_t node)
      int z = 0;
      node = MatProcess(gdml, node, attr, z);
    }
-    
-   //********************************************* 
+
+   //*********************************************
    else if ((strcmp(name, volustr)) == 0) {
       node = VolProcess(gdml, node);
    } else if ((strcmp(name, bboxstr)) == 0) {
@@ -348,17 +345,18 @@ const char* TGDMLParse::ParseGDML(TXMLEngine* gdml, XMLNodePointer_t node)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Takes a string containing a mathematical expression and returns the value of
+/// the expression
 
 double TGDMLParse::Evaluate(const char* evalline)
 {
-   //takes a string containing a mathematical expression and returns the value of the expression
 
    return TFormula("TFormula", evalline).Eval(0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///When using the 'divide' process in the geometry this function
-///sets the variable 'axis' depending on what is specified.
+/// When using the 'divide' process in the geometry this function
+/// sets the variable 'axis' depending on what is specified.
 
 Int_t TGDMLParse::SetAxis(const char* axisString)
 {
@@ -380,10 +378,10 @@ Int_t TGDMLParse::SetAxis(const char* axisString)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///this function looks thru a string for the chars '0x' next to
-///each other, when it finds this, it calls another function to strip
-///the hex address.   It does this recursively until the end of the
-///string is reached, returning a string without any hex addresses.
+/// This function looks thru a string for the chars '0x' next to
+/// each other, when it finds this, it calls another function to strip
+/// the hex address.   It does this recursively until the end of the
+/// string is reached, returning a string without any hex addresses.
 
 const char* TGDMLParse::NameShort(const char* name)
 {
@@ -395,10 +393,10 @@ const char* TGDMLParse::NameShort(const char* name)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the define section of the GDML file, constants can be declared.
-///when the constant keyword is found, this function is called, and the
-///name and value of the constant is stored in the "fformvec" vector as
-///a TFormula class, representing a constant function
+/// In the define section of the GDML file, constants can be declared.
+/// when the constant keyword is found, this function is called, and the
+/// name and value of the constant is stored in the "fformvec" vector as
+/// a TFormula class, representing a constant function
 
 XMLNodePointer_t TGDMLParse::ConProcess(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -423,15 +421,15 @@ XMLNodePointer_t TGDMLParse::ConProcess(TXMLEngine* gdml, XMLNodePointer_t node,
    // name = TString::Format("%s_%s", name.Data(), fCurrentFile);
    //}
 
-   fformvec.push_back(new TFormula(name, value));
+   fconsts[name.Data()] = Value(value);
 
    return node;
 }
 ////////////////////////////////////////////////////////////////////////////////
-///Throughout the GDML file, a unit can de specified.   Whether it be
-///angular or linear, values can be used as well as abbreviations such as
+/// Throughout the GDML file, a unit can de specified.   Whether it be
+/// angular or linear, values can be used as well as abbreviations such as
 /// 'mm' or 'deg'. This function is passed the specified unit and if it is
-///found, replaces it with the appropriate value.
+/// found, replaces it with the appropriate value.
 
 TString TGDMLParse::GetScale(const char* unit)
 {
@@ -474,10 +472,10 @@ TString TGDMLParse::GetScale(const char* unit)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///Throughout the GDML file, a unit can de specified.   Whether it be
-///angular or linear, values can be used as well as abbreviations such as
+/// Throughout the GDML file, a unit can de specified.   Whether it be
+/// angular or linear, values can be used as well as abbreviations such as
 /// 'mm' or 'deg'. This function is passed the specified unit and if it is
-///found, replaces it with the appropriate value.
+/// found, replaces it with the appropriate value.
 
 Double_t TGDMLParse::GetScaleVal(const char* sunit)
 {
@@ -519,19 +517,82 @@ Double_t TGDMLParse::GetScaleVal(const char* sunit)
 ////////////////////////////////////////////////////////////////////////////////
 /// Convert number in string format to double value.
 
-Double_t TGDMLParse::Value(const char* svalue) const
+Double_t TGDMLParse::Value(const char *svalue) const
 {
-   static TString s;
-   s = svalue;
-   return s.Atof();
-}   
+   char *end;
+   double val = strtod(svalue, &end);
+
+   // ignore white spaces.
+   while( *end != 0 && isspace(*end) ) ++end;
+
+   // Successfully parsed all the characters up to the ending NULL, so svalue
+   // was a simple number.
+   if (*end == 0) return val;
+
+   // Otherwise we'll use TFormula to evaluate the string, having first found
+   // all the GDML variable names in it and marked them with [] so that
+   // TFormula will recognize them as parameters.
+
+   std::string expanded;
+   expanded.reserve(strlen(svalue) * 2);
+
+   // Be careful about locale so we always mean the same thing by
+   // "alphanumeric"
+   const std::locale &loc = std::locale::classic(); // "C" locale
+
+   // Walk through the string inserting '[' and ']' where necessary
+   const char *p = svalue;
+   while (*p) {
+      // Find a site for a '['. Just before the first alphabetic character
+      for (; *p != 0; ++p) {
+         if (std::isalpha(*p, loc) || *p == '_') {
+            const char *pe = p + 1;
+            // Now look for the position of the following ']'. Straight before the
+            // first non-alphanumeric character
+            for (; *pe != 0; ++pe) {
+               if (!isalnum(*pe, loc) && *pe != '_') {
+                  if (*pe == '(') {
+                     // The string represents a function, so no brackets needed: copy chars and advance
+                     for (; p < pe; ++p) expanded += *p;
+                     break;
+                  } else {
+                     expanded += '[';
+                     for (; p < pe; ++p) expanded += *p;
+                     expanded += ']';
+                     break;
+                  }
+               }
+            }
+            if (*pe == 0) {
+               expanded += '[';
+               for (; p < pe; ++p) expanded += *p;
+               expanded += ']';
+            }
+         }
+         expanded += *p;
+      }
+   } // end loop over svalue
+
+   TFormula f("TFormula", expanded.c_str());
+
+   // Tell the TFormula about every parameter we know about
+   for (auto it: fconsts) f.SetParameter(it.first.c_str(), it.second);
+
+   val = f.Eval(0);
+
+   if (std::isnan(val) || std::isinf(val)) {
+      Fatal("Value", "Got bad value %lf from string '%s'", val, svalue);
+   }
+
+   return val;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the define section of the GDML file, positions can be declared.
-///when the position keyword is found, this function is called, and the
-///name and values of the position are converted into type TGeoPosition
-///and stored in fposmap map using the name as its key. This function
-///can also be called when declaring solids.
+/// In the define section of the GDML file, positions can be declared.
+/// when the position keyword is found, this function is called, and the
+/// name and values of the position are converted into type TGeoPosition
+/// and stored in fposmap map using the name as its key. This function
+/// can also be called when declaring solids.
 
 XMLNodePointer_t TGDMLParse::PosProcess(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -580,11 +641,11 @@ XMLNodePointer_t TGDMLParse::PosProcess(TXMLEngine* gdml, XMLNodePointer_t node,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the define section of the GDML file, rotations can be declared.
-///when the rotation keyword is found, this function is called, and the
-///name and values of the rotation are converted into type TGeoRotation
-///and stored in frotmap map using the name as its key. This function
-///can also be called when declaring solids.
+/// In the define section of the GDML file, rotations can be declared.
+/// when the rotation keyword is found, this function is called, and the
+/// name and values of the rotation are converted into type TGeoRotation
+/// and stored in frotmap map using the name as its key. This function
+/// can also be called when declaring solids.
 
 XMLNodePointer_t TGDMLParse::RotProcess(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -638,11 +699,11 @@ XMLNodePointer_t TGDMLParse::RotProcess(TXMLEngine* gdml, XMLNodePointer_t node,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the define section of the GDML file, rotations can be declared.
-///when the scale keyword is found, this function is called, and the
-///name and values of the scale are converted into type TGeoScale
-///and stored in fsclmap map using the name as its key. This function
-///can also be called when declaring solids.
+/// In the define section of the GDML file, rotations can be declared.
+/// when the scale keyword is found, this function is called, and the
+/// name and values of the scale are converted into type TGeoScale
+/// and stored in fsclmap map using the name as its key. This function
+/// can also be called when declaring solids.
 
 XMLNodePointer_t TGDMLParse::SclProcess(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -682,11 +743,11 @@ XMLNodePointer_t TGDMLParse::SclProcess(TXMLEngine* gdml, XMLNodePointer_t node,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the material section of the GDML file, an isotope may be declared.
-///when the isotope keyword is found, this function is called, and the
-///required parameters are taken and stored, these are then bound and
-///converted to type TGeoIsotope and stored in fisomap map using the name
-///as its key.
+/// In the material section of the GDML file, an isotope may be declared.
+/// when the isotope keyword is found, this function is called, and the
+/// required parameters are taken and stored, these are then bound and
+/// converted to type TGeoIsotope and stored in fisomap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::IsoProcess(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t parentn)
 {
@@ -739,218 +800,253 @@ XMLNodePointer_t TGDMLParse::IsoProcess(TXMLEngine* gdml, XMLNodePointer_t node,
    Int_t n2 = (Int_t)Value(n);
    Double_t atom2 = Value(atom);
 
-   TGeoIsotope* iso = new TGeoIsotope(NameShort(name), z2 , n2, atom2);
+   TGeoManager*  mgr = gGeoManager;
+   TString       iso_name = NameShort(name);
+   TGeoElementTable* tab  = mgr->GetElementTable();
+   TGeoIsotope*      iso  = tab->FindIsotope(iso_name);
+   if ( !iso )  {
+      iso = new TGeoIsotope(iso_name, z2 , n2, atom2);
+   }
+   else if ( gDebug >= 2 ) {
+      Info("TGDMLParse","Re-use existing isotope: %s",iso->GetName());
+   }
    fisomap[name.Data()] = iso;
 
    return node;
 
 }
 
-//___________________________________________________________
-//XMLNodePointer_t TGDMLParse::EleProcess(TXMLEngine* gdml, XMLNodePointer_t node,   XMLNodePointer_t parentn, Bool_t hasIsotopes)
+////////////////////////////////////////////////////////////////////////////////
+/// When the element keyword is found, this function is called, and the
+/// name and values of the element are converted into type TGeoElement and
+/// stored in felemap map using the name as its key.
+
 XMLNodePointer_t TGDMLParse::EleProcess(TXMLEngine* gdml, XMLNodePointer_t node,   XMLNodePointer_t parentn, Bool_t hasIsotopes, Bool_t hasIsotopesExtended)
 
 {
-                                          
-  //when the element keyword is found, this function is called, and the                                                                                                                      
-  //name and values of the element are converted into type TGeoElement and                                                                                                                   
-  //stored in felemap map using the name as its key.                                                                                                                                         
-
   TString z = "0";
   TString name = "";
   TString formula = "";
   TString atom = "0";
   TString tempattr;
   Int_t   ncompo = 0;
+  TGeoManager*      mgr  = gGeoManager;
+  TGeoElementTable* tab  = mgr->GetElementTable();
   typedef FracMap::iterator fractions;
   FracMap fracmap;
 
   XMLNodePointer_t child = 0;
 
-  //obtain attributes for the element                                                                                                                                                        
+  //obtain attributes for the element
 
   XMLAttrPointer_t attr = gdml->GetFirstAttr(node);
 
   if (hasIsotopes) {
-                                                                                                                                         
-    // Get the name of the element                                                                                                                                                           
+
+    // Get the name of the element
     while (attr != 0) {
       tempattr = gdml->GetAttrName(attr);
       if (tempattr == "name") {
-	name = gdml->GetAttrValue(attr);
-                                                                                                                           
-	if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-	  name = TString::Format("%s_%s", name.Data(), fCurrentFile);
-	}
-	break;
+         name = gdml->GetAttrValue(attr);
+
+         if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+            name = TString::Format("%s_%s", name.Data(), fCurrentFile);
+         }
+         break;
       }
       attr = gdml->GetNextAttr(attr);
     }
-    // Get component isotopes. Loop all children.                                                                                                                                            
+    // Get component isotopes. Loop all children.
     child = gdml->GetChild(node);
     while (child != 0) {
 
-      // Check for fraction node name                                                                                                                                                        
-      if ((strcmp(gdml->GetNodeName(child), "fraction")) == 0) {
-	Double_t n = 0;
-	TString ref = "";
-	ncompo = ncompo + 1;
-	attr = gdml->GetFirstAttr(child);
-	while (attr != 0) {
-	  tempattr = gdml->GetAttrName(attr);
-	  tempattr.ToLower();
-	  if (tempattr == "n") {
-	    n = Value(gdml->GetAttrValue(attr));
-	  } else if (tempattr == "ref") {
-	    ref = gdml->GetAttrValue(attr);
-	    if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-	      ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
-	    }
-	  }
-	  attr = gdml->GetNextAttr(attr);
-	} // loop on child attributes                                                                                                                                                        
-	fracmap[ref.Data()] = n;
+      // Check for fraction node name
+       if ((strcmp(gdml->GetNodeName(child), "fraction")) == 0) {
+          Double_t n = 0;
+          TString ref = "";
+          ncompo = ncompo + 1;
+          attr = gdml->GetFirstAttr(child);
+          while (attr != 0) {
+             tempattr = gdml->GetAttrName(attr);
+             tempattr.ToLower();
+             if (tempattr == "n") {
+                n = Value(gdml->GetAttrValue(attr));
+             } else if (tempattr == "ref") {
+                ref = gdml->GetAttrValue(attr);
+                if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+                   ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
+                }
+             }
+             attr = gdml->GetNextAttr(attr);
+          } // loop on child attributes
+          fracmap[ref.Data()] = n;
+       }
+       child = gdml->GetNext(child);
+    } // loop on children
+      // Create TGeoElement - note: Object(name, title) corresponds to Element(formula, name)
+    TGeoElement* ele  = tab->FindElement(NameShort(name));
+    // We cannot use elements with Z = 0, so we expect a user definition
+    if (ele && ele->Z() == 0)
+       ele = nullptr;
+    if ( !ele )   {
+        ele = new TGeoElement(NameShort(name), NameShort(name), ncompo);
+        for (fractions f = fracmap.begin(); f != fracmap.end(); ++f) {
+           if (fisomap.find(f->first) != fisomap.end()) {
+              ele->AddIsotope((TGeoIsotope*)fisomap[f->first], f->second);
+           }
+        }
+     }
+     else if ( gDebug >= 2 ) {
+        Info("TGDMLParse","Re-use existing element: %s",ele->GetName());
+     }
+     felemap[name.Data()] = ele;
+     return child;
+  } // hasisotopes end loop
+
+   //*************************
+
+
+   if (hasIsotopesExtended) {
+
+      while (attr != 0) {
+         tempattr = gdml->GetAttrName(attr);
+
+         if (tempattr == "name") {
+            name = gdml->GetAttrValue(attr);
+
+            if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+               name = TString::Format("%s_%s", name.Data(), fCurrentFile);
+            }
+            break;
+         }
+         attr = gdml->GetNextAttr(attr);
       }
-      child = gdml->GetNext(child);
-    } // loop on children  
-    // Create TGeoElement - note: Object(name, title) corresponds to Element(formula, name)                                                                                                  
-    TGeoElement *ele = new TGeoElement(NameShort(name), NameShort(name), ncompo);
-    for (fractions f = fracmap.begin(); f != fracmap.end(); f++) {
-      if (fisomap.find(f->first) != fisomap.end()) {
-	ele->AddIsotope((TGeoIsotope*)fisomap[f->first], f->second);
+      // Get component isotopes. Loop all children.
+      child = gdml->GetChild(node);
+      while (child != 0) {
+
+         // Check for fraction node name
+         if ((strcmp(gdml->GetNodeName(child), "fraction")) == 0) {
+            Double_t n = 0;
+            TString ref = "";
+            ncompo = ncompo + 1;
+            attr = gdml->GetFirstAttr(child);
+            while (attr != 0) {
+               tempattr = gdml->GetAttrName(attr);
+               tempattr.ToLower();
+               if (tempattr == "n") {
+                  n = Value(gdml->GetAttrValue(attr));
+               } else if (tempattr == "ref") {
+                  ref = gdml->GetAttrValue(attr);
+                  if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+                     ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
+                  }
+               }
+               attr = gdml->GetNextAttr(attr);
+            } // loop on child attributes
+            fracmap[ref.Data()] = n;
+         }
+         child = gdml->GetNext(child);
+      } // loop on children
+        // Create TGeoElement - note: Object(name, title) corresponds to Element(formula, name)
+      TGeoElement* ele  = tab->FindElement(NameShort(name));
+      // We cannot use elements with Z = 0, so we expect a user definition
+      if (ele && ele->Z() == 0)
+         ele = nullptr;
+      if ( !ele )   {
+         ele = new TGeoElement(NameShort(name), NameShort(name), ncompo);
+         for (fractions f = fracmap.begin(); f != fracmap.end(); ++f) {
+            if (fisomap.find(f->first) != fisomap.end()) {
+               ele->AddIsotope((TGeoIsotope*)fisomap[f->first], f->second);
+            }
+         }
       }
-    }
-    felemap[name.Data()] = ele;
-    return child;
-  } // hasisotopes end loop                                                                                                                                                                  
+      else if ( gDebug >= 2 ) {
+         Info("TGDMLParse","Re-use existing element: %s",ele->GetName());
+      }
+      felemap[name.Data()] = ele;
+      return child;
+   } // hasisotopesExtended end loop
 
-  //*************************   
+   //***************************
 
+   attr = gdml->GetFirstAttr(parentn);
+   while (attr != 0) {
 
-  if (hasIsotopesExtended) {
-                                                                                                                             
-    while (attr != 0) {
       tempattr = gdml->GetAttrName(attr);
+      tempattr.ToLower();
 
       if (tempattr == "name") {
-	name = gdml->GetAttrValue(attr);
-                                                                                                                   
-	if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-	  name = TString::Format("%s_%s", name.Data(), fCurrentFile);
-	}
-	break;
+         name = gdml->GetAttrValue(attr);
+
+      } else if (tempattr == "z") {
+         z = gdml->GetAttrValue(attr);
+      } else if (tempattr == "formula") {
+         formula = gdml->GetAttrValue(attr);
       }
+
       attr = gdml->GetNextAttr(attr);
-    }
-    // Get component isotopes. Loop all children.                                                                                                                                            
-    child = gdml->GetChild(node);
-    while (child != 0) {
+   }
 
-      // Check for fraction node name                                                                                                                                                        
-      if ((strcmp(gdml->GetNodeName(child), "fraction")) == 0) {                                                                                                                         
-	Double_t n = 0;
-	TString ref = "";
-	ncompo = ncompo + 1;
-	attr = gdml->GetFirstAttr(child);
-	while (attr != 0) {
-	  tempattr = gdml->GetAttrName(attr);
-	  tempattr.ToLower();
-	  if (tempattr == "n") {
-	    n = Value(gdml->GetAttrValue(attr));
-	  } else if (tempattr == "ref") {
-	    ref = gdml->GetAttrValue(attr);
-	    if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-	      ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
-	    }
-	  }
-	  attr = gdml->GetNextAttr(attr);
-	} // loop on child attributes                                                                                                                                                        
-	fracmap[ref.Data()] = n;
+   //get the atom value for the element
+
+   attr = gdml->GetFirstAttr(node);
+
+   while (attr != 0) {
+
+      tempattr = gdml->GetAttrName(attr);
+      tempattr.ToLower();
+
+      if (tempattr == "value") {
+         atom = gdml->GetAttrValue(attr);
       }
-      child = gdml->GetNext(child);
-    } // loop on children            
-    // Create TGeoElement - note: Object(name, title) corresponds to Element(formula, name)                                                                                                  
-    TGeoElement *ele = new TGeoElement(NameShort(name), NameShort(name), ncompo);
-    for (fractions f = fracmap.begin(); f != fracmap.end(); f++) {
-      if (fisomap.find(f->first) != fisomap.end()) {
-	ele->AddIsotope((TGeoIsotope*)fisomap[f->first], f->second);
-      }
-    }
-    felemap[name.Data()] = ele;
-    return child;
-  } // hasisotopesExtended end loop                                                                                                                                                          
 
+      attr = gdml->GetNextAttr(attr);
+   }
 
+   if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+      name = TString::Format("%s_%s", name.Data(), fCurrentFile);
+   }
 
-  //***************************                                                                                                                                                              
+   Int_t z2 = (Int_t)Value(z);
+   Double_t atom2 = Value(atom);
+   TGeoElement* ele  = tab->FindElement(formula);
+   // We cannot use elements with Z = 0, so we expect a user definition
+   if (ele && ele->Z() == 0)
+      ele = nullptr;
 
-  attr = gdml->GetFirstAttr(parentn);
-  while (attr != 0) {
-
-    tempattr = gdml->GetAttrName(attr);
-    tempattr.ToLower();
-
-    if (tempattr == "name") {
-      name = gdml->GetAttrValue(attr);
-                                                                                                                               
-    } else if (tempattr == "z") {
-      z = gdml->GetAttrValue(attr);
-    } else if (tempattr == "formula") {
-      formula = gdml->GetAttrValue(attr);
-    }
-
-    attr = gdml->GetNextAttr(attr);
-  }
-
-  //get the atom value for the element                                                                                                                                                       
-
-  attr = gdml->GetFirstAttr(node);
-
-  while (attr != 0) {
-
-    tempattr = gdml->GetAttrName(attr);
-    tempattr.ToLower();
-
-    if (tempattr == "value") {
-      atom = gdml->GetAttrValue(attr);
-    }
-
-    attr = gdml->GetNextAttr(attr);
-  }
-
-  if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-    name = TString::Format("%s_%s", name.Data(), fCurrentFile);
-  }
-
-  Int_t z2 = (Int_t)Value(z);
-  Double_t atom2 = Value(atom);
-
-  TGeoElement* ele = new TGeoElement(formula, NameShort(name), z2 , atom2);
-
-  felemap[name.Data()] = ele;
-
-  return node;
+   if ( !ele )   {
+     ele = new TGeoElement(formula, NameShort(name), z2 , atom2);
+   }
+   else if ( gDebug >= 2 )  {
+      Info("TGDMLParse","Re-use existing element: %s",ele->GetName());
+   }
+   felemap[name.Data()] = ele;
+   return node;
 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the materials section of the GDML file, materials can be declared.                                                                                                                    
-///when the material keyword is found, this function is called, and the                                                                                                                     
-///name and values of the material are converted into type TGeoMaterial                                                                                                                     
-///and stored in fmatmap map using the name as its key. Mixtures can also                                                                                                                   
-/// be declared, and they are converted to TGeoMixture and stored in                                                                                                                        
-///fmixmap.   These mixtures and materials are then all converted into one                                                                                                                  
-///common type - TGeoMedium.   The map fmedmap is then built up of all the                                                                                                                  
-///mixtures and materials.                                                                                                                                                                  
+/// In the materials section of the GDML file, materials can be declared.
+/// when the material keyword is found, this function is called, and the
+/// name and values of the material are converted into type TGeoMaterial
+/// and stored in fmatmap map using the name as its key. Mixtures can also
+/// be declared, and they are converted to TGeoMixture and stored in
+/// fmixmap.   These mixtures and materials are then all converted into one
+/// common type - TGeoMedium.   The map fmedmap is then built up of all the
+/// mixtures and materials.
 
 XMLNodePointer_t TGDMLParse::MatProcess(TXMLEngine* gdml, XMLNodePointer_t node,   XMLAttrPointer_t attr,  int z)
 {
-  //!Map to hold fractions while being processed                                                                                                                                                
+  //!Map to hold fractions while being processed
   typedef FracMap::iterator fractions;
 //  typedef FracMap::iterator i;
   FracMap fracmap;
 
-  static int medid = 0;
+  TGeoManager* mgr = gGeoManager;
+  TGeoElementTable* tab_ele = mgr->GetElementTable();
+  // We have to assume the media are monotonic increasing starting with 1
+  static int medid = mgr->GetListOfMedia()->GetSize()+1;
   XMLNodePointer_t child = gdml->GetChild(node);
   TString tempattr = "";
   Int_t ncompo = 0, mixflag = 2;
@@ -994,176 +1090,207 @@ XMLNodePointer_t TGDMLParse::MatProcess(TXMLEngine* gdml, XMLNodePointer_t node,
       }
       child = gdml->GetNext(child);
     }
-    //still in the is Z else...but not in the while..                                                                                                                                         
+    //still in the is Z else...but not in the while..
 
-    name = gdml->GetAttr(node, "name");                                                                                                                          
+    name = gdml->GetAttr(node, "name");
 
     if ((strcmp(fCurrentFile, fStartFile)) != 0) {
       name = TString::Format("%s_%s", name.Data(), fCurrentFile);
     }
 
-    //CHECK FOR CONSTANTS                                                                                                                                                                     
+    //CHECK FOR CONSTANTS
     tempconst = gdml->GetAttr(node, "Z");
 
     Double_t valZ = Value(tempconst);
 
     TString tmpname = name;
-    //deal with special case - Z of vacuum is always 0                                                                                                                                        
+    //deal with special case - Z of vacuum is always 0
     tmpname.ToLower();
     if (tmpname == "vacuum") {
       valZ = 0;
     }
-    mat = new TGeoMaterial(NameShort(name), a, valZ, d);
+    TString mat_name = NameShort(name);
+    mat = mgr->GetMaterial(mat_name);
+    if ( !mat )  {
+      mat = new TGeoMaterial(mat_name, a, valZ, d);
+    }
+    else  {
+      Info("TGDMLParse","Re-use existing material: %s",mat->GetName());
+    }
     mixflag = 0;
-    //Note: Object(name, title) corresponds to Element(formula, name)   
-    TGeoElement* mat_ele = new TGeoElement(NameShort(name), NameShort(name), atoi(tempconst), a);
-    felemap[name.Data()] = mat_ele;
+    //Note: Object(name, title) corresponds to Element(formula, name)
+    TGeoElement* mat_ele = tab_ele->FindElement(mat_name);
+    // We cannot use elements with Z = 0, so we expect a user definition
+    if (mat_ele && mat_ele->Z() == 0)
+       mat_ele = nullptr;
 
+    if ( !mat_ele )  {
+      mat_ele = new TGeoElement(mat_name, mat_name, atoi(tempconst), a);
+    }
+    else if ( gDebug >= 2 )  {
+       Info("TGDMLParse","Re-use existing material-element: %s",mat_ele->GetName());
+    }
+    felemap[name.Data()] = mat_ele;
   }
 
   else if (z == 0) {
-    while (child != 0) {
-      attr = gdml->GetFirstAttr(child);
+     while (child != 0) {
+        attr = gdml->GetFirstAttr(child);
 
-      if ((strcmp(gdml->GetNodeName(child), "fraction")) == 0) {
-        Double_t n = 0;
-        TString ref = "";
-        ncompo = ncompo + 1;
+        if ((strcmp(gdml->GetNodeName(child), "fraction")) == 0) {
+           Double_t n = 0;
+           TString ref = "";
+           ncompo = ncompo + 1;
 
-        while (attr != 0) {
-          tempattr = gdml->GetAttrName(attr);
-          tempattr.ToLower();
+           while (attr != 0) {
+              tempattr = gdml->GetAttrName(attr);
+              tempattr.ToLower();
 
-          if (tempattr == "n") {
-            n = Value(gdml->GetAttrValue(attr));
-          } else if (tempattr == "ref") {
-            ref = gdml->GetAttrValue(attr);
-            if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-              ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
-            }
+              if (tempattr == "n") {
+                 n = Value(gdml->GetAttrValue(attr));
+              } else if (tempattr == "ref") {
+                 ref = gdml->GetAttrValue(attr);
+                 if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+                    ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
+                 }
 
-          }
+              }
 
-          attr = gdml->GetNextAttr(attr);
-        }
-        fracmap[ref.Data()] = n;
+              attr = gdml->GetNextAttr(attr);
+           }
+           fracmap[ref.Data()] = n;
 
-      }
-
-      else if ((strcmp(gdml->GetNodeName(child), "composite")) == 0) {
-        composite = kTRUE;
-        Double_t n = 0;
-        TString ref = "";
-        ncompo = ncompo + 1;
-
-        while (attr != 0) {
-          tempattr = gdml->GetAttrName(attr);
-          tempattr.ToLower();
-
-          if (tempattr == "n") {
-            n = Value(gdml->GetAttrValue(attr));
-          } else if (tempattr == "ref") {
-            ref = gdml->GetAttrValue(attr);
-            if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-              ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
-            }
-          }
-
-          attr = gdml->GetNextAttr(attr);
         }
 
-        fracmap[ref.Data()] = n;
+        else if ((strcmp(gdml->GetNodeName(child), "composite")) == 0) {
+           composite = kTRUE;
+           Double_t n = 0;
+           TString ref = "";
+           ncompo = ncompo + 1;
 
-      }
-      else if ((strcmp(gdml->GetNodeName(child), "D")) == 0) {
-        while (attr != 0) {
-          tempattr = gdml->GetAttrName(attr);
-          tempattr.ToLower();
+           while (attr != 0) {
+              tempattr = gdml->GetAttrName(attr);
+              tempattr.ToLower();
 
-          if (tempattr == "value") {
-            density = Value(gdml->GetAttrValue(attr));
-          }
+              if (tempattr == "n") {
+                 n = Value(gdml->GetAttrValue(attr));
+              } else if (tempattr == "ref") {
+                 ref = gdml->GetAttrValue(attr);
+                 if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+                    ref = TString::Format("%s_%s", ref.Data(), fCurrentFile);
+                 }
+              }
 
-          attr = gdml->GetNextAttr(attr);
+              attr = gdml->GetNextAttr(attr);
+           }
+
+           fracmap[ref.Data()] = n;
+
         }
-      }
+        else if ((strcmp(gdml->GetNodeName(child), "D")) == 0) {
+           while (attr != 0) {
+              tempattr = gdml->GetAttrName(attr);
+              tempattr.ToLower();
 
-      child = gdml->GetNext(child);
-    }
-    //still in the not Z else...but not in the while..                                                                                                                                        
+              if (tempattr == "value") {
+                 density = Value(gdml->GetAttrValue(attr));
+              }
 
-    name = gdml->GetAttr(node, "name");
-    if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-      name = TString::Format("%s_%s", name.Data(), fCurrentFile);
-    }
-    //mix = new TGeoMixture(NameShort(name), 0 /*ncompo*/, density);                                                                                                                          
-    mix = new TGeoMixture(NameShort(name), ncompo, density);
-    mixflag = 1;
-    Int_t natoms;
-    Double_t weight;
-
-    for (fractions f = fracmap.begin(); f != fracmap.end(); f++) {
-      matname = f->first;
-      matname = NameShort(matname);                                                                                                           
-
-      TGeoMaterial *mattmp = (TGeoMaterial*)gGeoManager->GetListOfMaterials()->FindObject(matname);
-
-      if (mattmp || (felemap.find(f->first) != felemap.end())) {
-        if (composite) {
-          natoms = (Int_t)f->second;
-	  
-          mix->AddElement(felemap[f->first], natoms);
-	  
+              attr = gdml->GetNextAttr(attr);
+           }
         }
 
-        else {
-          weight = f->second;
-          if (mattmp){
+        child = gdml->GetNext(child);
+     }
+     //still in the not Z else...but not in the while..
 
-            mix->AddElement(mattmp, weight);
-          }
-          else{
-           
-	    mix->AddElement(felemap[f->first], weight);
-          }
-	}
-      }
-    }
+     name = gdml->GetAttr(node, "name");
+     if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+        name = TString::Format("%s_%s", name.Data(), fCurrentFile);
+     }
+     //mix = new TGeoMixture(NameShort(name), 0 /*ncompo*/, density);
+     mixflag = 1;
+     TString mat_name = NameShort(name);
+     mat = mgr->GetMaterial(mat_name);
+     if ( !mat )  {
+       mix = new TGeoMixture(mat_name, ncompo, density);
+     }
+     else if ( mat->IsMixture() ) {
+       mix = (TGeoMixture*)mat;
+       if ( gDebug >= 2 )
+          Info("TGDMLParse","Re-use existing material-mixture: %s",mix->GetName());
+     }
+     else  {
+       Error("TGDMLParse","WARNING! Inconsistent material definitions between GDML and TGeoManager");
+     }
+     Int_t natoms;
+     Double_t weight;
 
-  }//end of not Z else                                                                                                                                                                        
+     for (fractions f = fracmap.begin(); f != fracmap.end(); ++f) {
+        matname = f->first;
+        matname = NameShort(matname);
 
-  medid = medid + 1;
+        TGeoMaterial *mattmp = (TGeoMaterial*)gGeoManager->GetListOfMaterials()->FindObject(matname);
 
-  TGeoMedium* med = 0;
+        if (mattmp || (felemap.find(f->first) != felemap.end())) {
+           if (composite) {
+              natoms = (Int_t)f->second;
 
-  if (mixflag == 1) {
-    fmixmap[name.Data()] = mix;
-    med = new TGeoMedium(NameShort(name), medid, mix);
-  } else if (mixflag == 0) {
-    fmatmap[name.Data()] = mat;
-    med = new TGeoMedium(NameShort(name), medid, mat);
-  }
+              mix->AddElement(felemap[f->first], natoms);
 
-  fmedmap[name.Data()] = med;
+           }
 
-  return child;
+           else {
+              weight = f->second;
+              if (mattmp){
+
+                 mix->AddElement(mattmp, weight);
+              }
+              else {
+
+                 mix->AddElement(felemap[f->first], weight);
+              }
+           }
+        }
+     }
+
+  }//end of not Z else
+
+   medid = medid + 1;
+
+   TGeoMedium* med = mgr->GetMedium(NameShort(name));
+   if ( !med )   {
+     if (mixflag == 1) {
+       fmixmap[name.Data()] = mix;
+       med = new TGeoMedium(NameShort(name), medid, mix);
+     } else if (mixflag == 0) {
+       fmatmap[name.Data()] = mat;
+       med = new TGeoMedium(NameShort(name), medid, mat);
+     }
+   }
+   else if ( gDebug >= 2 ) {
+      Info("TGDMLParse","Re-use existing medium: %s",med->GetName());
+   }
+   fmedmap[name.Data()] = med;
+
+   return child;
 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the structure section of the GDML file, volumes can be declared.
-///when the volume keyword is found, this function is called, and the
-///name and values of the volume are converted into type TGeoVolume and
-///stored in fvolmap map using the name as its key. Volumes reference to
-///a solid declared higher up in the solids section of the GDML file.
-///Some volumes reference to other physical volumes to contain inside
-///that volume, declaring positions and rotations within that volume.
-///When each 'physvol' is declared, a matrix for its rotation and
-///translation is built and the 'physvol node' is added to the original
-///volume using TGeoVolume->AddNode.
-///volume division is also declared within the volume node, and once the
-///values for the division have been collected, using TGeoVolume->divide,
-///the division can be applied.
+/// In the structure section of the GDML file, volumes can be declared.
+/// when the volume keyword is found, this function is called, and the
+/// name and values of the volume are converted into type TGeoVolume and
+/// stored in fvolmap map using the name as its key. Volumes reference to
+/// a solid declared higher up in the solids section of the GDML file.
+/// Some volumes reference to other physical volumes to contain inside
+/// that volume, declaring positions and rotations within that volume.
+/// when each 'physvol' is declared, a matrix for its rotation and
+/// translation is built and the 'physvol node' is added to the original
+/// volume using TGeoVolume->AddNode.
+/// volume division is also declared within the volume node, and once the
+/// values for the division have been collected, using TGeoVolume->divide,
+/// the division can be applied.
 
 XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 {
@@ -1252,28 +1379,28 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
          Int_t copynum = (scopynum.IsNull()) ? 0 : (Int_t)Value(scopynum);
 
          subchild = gdml->GetChild(child);
-	 
-         while (subchild != 0) {	  
+
+         while (subchild != 0) {
             tempattr = gdml->GetNodeName(subchild);
-	         tempattr.ToLower();
-	   
+            tempattr.ToLower();
+
             if (tempattr == "volumeref") {
                reftemp = gdml->GetAttr(subchild, "ref");
                if ((strcmp(fCurrentFile, fStartFile)) != 0) {
                   reftemp = TString::Format("%s_%s", reftemp.Data(), fCurrentFile);
-               }	     
-               lv = fvolmap[reftemp.Data()];	     
+               }
+               lv = fvolmap[reftemp.Data()];
                volref = reftemp;
-	         }
-            else if (tempattr == "file") {	    
+            }
+            else if (tempattr == "file") {
                const char* filevol;
                const char* prevfile = fCurrentFile;
-	     
+
                fCurrentFile = gdml->GetAttr(subchild, "name");
                filevol = gdml->GetAttr(subchild, "volname");
-   
-	            TXMLEngine* gdml2 = new TXMLEngine;
-               gdml2->SetSkipComments(kTRUE);    
+
+               TXMLEngine* gdml2 = new TXMLEngine;
+               gdml2->SetSkipComments(kTRUE);
                XMLDocPointer_t filedoc1 = gdml2->ParseFile(fCurrentFile);
                if (filedoc1 == 0) {
                   Fatal("VolProcess", "Bad filename given %s", fCurrentFile);
@@ -1282,29 +1409,29 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
                XMLNodePointer_t mainnode2 = gdml2->DocGetRootElement(filedoc1);
                //increase depth counter + add DOM pointer
                fFILENO = fFILENO + 1;
-               fFileEngine[fFILENO] = gdml2;     
+               fFileEngine[fFILENO] = gdml2;
 
                if (ffilemap.find(fCurrentFile) != ffilemap.end()) {
-                  volref = ffilemap[fCurrentFile];	       
+                  volref = ffilemap[fCurrentFile];
                } else {
-	               volref = ParseGDML(gdml2, mainnode2);	       
+                  volref = ParseGDML(gdml2, mainnode2);
                   ffilemap[fCurrentFile] = volref;
                }
-	     
-               if (filevol) {	     
+
+               if (filevol) {
                   volref = filevol;
                   if ((strcmp(fCurrentFile, fStartFile)) != 0) {
                      volref = TString::Format("%s_%s", volref.Data(), fCurrentFile);
                   }
                }
-	    
+
                fFILENO = fFILENO - 1;
                gdml = fFileEngine[fFILENO];
                fCurrentFile = prevfile;
-	    
+
                lv = fvolmap[volref.Data()];
                //File tree complete - Release memory before exit
-	     	     
+
                gdml->FreeDoc(filedoc1);
                delete gdml2;
             }
@@ -1316,14 +1443,14 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
                   reftemp = TString::Format("%s_%s", reftemp.Data(), fCurrentFile);
                }
                pos = fposmap[reftemp.Data()];
-            } else if (tempattr == "positionref") {	     
-               reftemp = gdml->GetAttr(subchild, "ref");    
+            } else if (tempattr == "positionref") {
+               reftemp = gdml->GetAttr(subchild, "ref");
                if ((strcmp(fCurrentFile, fStartFile)) != 0) {
                   reftemp = TString::Format("%s_%s", reftemp.Data(), fCurrentFile);
                }
                if (fposmap.find(reftemp.Data()) != fposmap.end()) pos = fposmap[reftemp.Data()];
                else std::cout << "ERROR! Physvol's position " << reftemp << " not found!" << std::endl;
-            } else if (tempattr == "rotation") {	     
+            } else if (tempattr == "rotation") {
                attr = gdml->GetFirstAttr(subchild);
                RotProcess(gdml, subchild, attr);
                reftemp = gdml->GetAttr(subchild, "name");
@@ -1346,7 +1473,7 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
                   reftemp = TString::Format("%s_%s", reftemp.Data(), fCurrentFile);
                }
                scl = fsclmap[reftemp.Data()];
-            } else if (tempattr == "scaleref") {	    
+            } else if (tempattr == "scaleref") {
                reftemp = gdml->GetAttr(subchild, "ref");
                if ((strcmp(fCurrentFile, fStartFile)) != 0) {
                   reftemp = TString::Format("%s_%s", reftemp.Data(), fCurrentFile);
@@ -1354,7 +1481,7 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
                if (fsclmap.find(reftemp.Data()) != fsclmap.end()) scl = fsclmap[reftemp.Data()];
                else std::cout << "ERROR! Physvol's scale " << reftemp << " not found!" << std::endl;
             }
-	   
+
             subchild = gdml->GetNext(subchild);
          }
 
@@ -1402,7 +1529,7 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
          if (!pnodename.IsNull())
             ((TNamed*)vol->GetNodes()->Last())->SetName(pnodename);
       } else if ((strcmp(gdml->GetNodeName(child), "divisionvol")) == 0) {
-	
+
          TString divVolref = "";
          Int_t axis = 0;
          TString number = "";
@@ -1411,9 +1538,9 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
          TString lunit = "mm";
 
          attr = gdml->GetFirstAttr(child);
-	
+
          while (attr != 0) {
-	  
+
             tempattr = gdml->GetAttrName(attr);
             tempattr.ToLower();
 
@@ -1485,7 +1612,7 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 
 
       else if ((strcmp(gdml->GetNodeName(child), "replicavol")) == 0) {
-	
+
          TString divVolref = "";
          Int_t axis = 0;
          TString number = "";
@@ -1495,12 +1622,12 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
          TString ounit = "mm";
          Double_t wvalue = 0;
          Double_t ovalue = 0;
-       
+
 
          attr = gdml->GetFirstAttr(child);
-	
+
          while (attr != 0) {
-	  
+
             tempattr = gdml->GetAttrName(attr);
             tempattr.ToLower();
 
@@ -1523,10 +1650,10 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
                }
                divVolref = reftemp;
             }
-	    
+
             if (tempattr == "replicate_along_axis") {
                subsubchild = gdml->GetChild(subchild);
-	      
+
                while (subsubchild != 0) {
                   if ((strcmp(gdml->GetNodeName(subsubchild), "width")) == 0) {
                      attr = gdml->GetFirstAttr(subsubchild);
@@ -1538,8 +1665,8 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
                         }
                         else if (tempattr == "unit"){
                            wunit = gdml->GetAttrValue(attr);
-                        } 
-		    
+                        }
+
                         attr = gdml->GetNextAttr(attr);
                      }
                   }
@@ -1553,10 +1680,10 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
                         }
                         else if (tempattr == "unit"){
                            ounit = gdml->GetAttrValue(attr);
-                        } 
+                        }
                         attr = gdml->GetNextAttr(attr);
                      }
-                  }		
+                  }
                   else if ((strcmp(gdml->GetNodeName(subsubchild), "direction")) == 0) {
                      attr = gdml->GetFirstAttr(subsubchild);
                      while (attr != 0) {
@@ -1580,17 +1707,17 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 
                         attr = gdml->GetNextAttr(attr);
                      }
-                  }		
+                  }
 
                   subsubchild = gdml->GetNext(subsubchild);
                }
 
             }
-	    
+
             subchild = gdml->GetNext(subchild);
          }
-      
-      
+
+
          Double_t retwunit = GetScaleVal(wunit);
          Double_t retounit = GetScaleVal(ounit);
 
@@ -1628,7 +1755,7 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
       else if (strcmp(gdml->GetNodeName(child), "auxiliary") == 0) {
          TString auxType, auxUnit, auxValue;
          if(!auxmap) {
-            printf("Auxiliary values for volume %s\n",vol->GetName());
+            // printf("Auxiliary values for volume %s\n",vol->GetName());
             auxmap = new TMap();
             vol->SetUserExtension(new TGeoRCExtension(auxmap));
          }
@@ -1641,7 +1768,7 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
          }
          if (!auxUnit.IsNull()) auxValue = TString::Format("%s*%s", auxValue.Data(), auxUnit.Data());
          auxmap->Add(new TObjString(auxType),new TObjString(auxValue));
-         printf("  %s: %s\n", auxType.Data(), auxValue.Data());
+         // printf("  %s: %s\n", auxType.Data(), auxValue.Data());
       }
 
       child = gdml->GetNext(child);
@@ -1652,15 +1779,15 @@ XMLNodePointer_t TGDMLParse::VolProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solid section of the GDML file, boolean solids can be
-///declared. when the subtraction, intersection or union   keyword
-///is found, this function is called, and the values (rotation and
-///translation) of the solid are converted into type TGeoCompositeShape
-///and stored in fsolmap map using the name as its key.
+/// In the solid section of the GDML file, boolean solids can be
+/// declared. when the subtraction, intersection or union   keyword
+/// is found, this function is called, and the values (rotation and
+/// translation) of the solid are converted into type TGeoCompositeShape
+/// and stored in fsolmap map using the name as its key.
 ///
-///1 = SUBTRACTION
-///2 = INTERSECTION
-///3 = UNION
+///  - 1 = SUBTRACTION
+///  - 2 = INTERSECTION
+///  - 3 = UNION
 
 XMLNodePointer_t TGDMLParse::BooSolid(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr, int num)
 {
@@ -1806,26 +1933,58 @@ XMLNodePointer_t TGDMLParse::BooSolid(TXMLEngine* gdml, XMLNodePointer_t node, X
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///User data to be processed
+/// User data to be processed.
+
 XMLNodePointer_t TGDMLParse::UsrProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 {
-   Warning("ParseGDML", "<userinfo> not supported yet. Skipping.");
    XMLNodePointer_t child = gdml->GetChild(node);
-   while (child != 0) {
+   TString nodename, auxtype, auxtypec, auxvalue, auxvaluec, auxunit, auxunitc;
+   double value = 0.;
+   TGeoRegion *region;
+   while (child) {
+      region = nullptr;
+      nodename = gdml->GetNodeName(child);
+      if (nodename == "auxiliary") {
+         auxtype = gdml->GetAttr(child, "auxtype");
+         auxvalue = gdml->GetAttr(child, "auxvalue");
+         if (auxtype == "Region") {
+            auxvalue = NameShort(auxvalue);
+            region = new TGeoRegion(auxvalue);
+         }
+      }
+      XMLNodePointer_t subchild = gdml->GetChild(child);
+      while (subchild) {
+        auxtypec = gdml->GetAttr(subchild, "auxtype");
+        auxvaluec = gdml->GetAttr(subchild, "auxvalue");
+        auxunitc = gdml->GetAttr(subchild, "auxunit");
+        if (auxtypec == "volume") {
+           auxvaluec = NameShort(auxvaluec);
+           if (region) region->AddVolume(auxvaluec);
+        }
+        if (auxtypec.Contains("cut")) {
+           value = Value(auxvaluec) * GetScaleVal(auxunitc);
+           if (region) region->AddCut(auxtypec, value);
+        }
+        subchild = gdml->GetNext(subchild);
+      }
+      if (region) {
+        gGeoManager->AddRegion(region);
+        // region->Print();
+      }
       child = gdml->GetNext(child);
    }
    return child;
-}   
+}
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the structure section of the GDML file, assembly volumes can be
-///declared. when the assembly keyword is found, this function is called,
-///and the name is converted into type TGeoVolumeAssembly and
-///stored in fvolmap map using the name as its key. Some assembly volumes
-///reference to other physical volumes to contain inside that assembly,
-///declaring positions and rotations within that volume. When each 'physvol'
-///is declared, a matrix for its rotation and translation is built and the
-///'physvol node' is added to the original assembly using TGeoVolume->AddNode.
+/// In the structure section of the GDML file, assembly volumes can be
+/// declared. when the assembly keyword is found, this function is called,
+/// and the name is converted into type TGeoVolumeAssembly and
+/// stored in fvolmap map using the name as its key. Some assembly volumes
+/// reference to other physical volumes to contain inside that assembly,
+/// declaring positions and rotations within that volume. When each 'physvol'
+/// is declared, a matrix for its rotation and translation is built and the
+/// 'physvol node' is added to the original assembly using TGeoVolume->AddNode.
 
 XMLNodePointer_t TGDMLParse::AssProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 {
@@ -1925,44 +2084,44 @@ XMLNodePointer_t TGDMLParse::AssProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the setup section of the GDML file, the top volume need to be
-///declared. when the setup keyword is found, this function is called,
-///and the top volume ref is taken and 'world' is set
+/// In the setup section of the GDML file, the top volume need to be
+/// declared. when the setup keyword is found, this function is called,
+/// and the top volume ref is taken and 'world' is set
 
 XMLNodePointer_t TGDMLParse::TopProcess(TXMLEngine* gdml, XMLNodePointer_t node)
 {
-  const char* name = gdml->GetAttr(node, "name");
-  gGeoManager->SetName(name);
-  XMLNodePointer_t child = gdml->GetChild(node);
-  TString reftemp = "";
+   const char* name = gdml->GetAttr(node, "name");
+   gGeoManager->SetName(name);
+   XMLNodePointer_t child = gdml->GetChild(node);
+   TString reftemp = "";
 
-  while (child != 0) {
-    
-    if ((strcmp(gdml->GetNodeName(child), "world") == 0)) {
-      //const char* reftemp;
-      //TString reftemp = "";
-      reftemp = gdml->GetAttr(child, "ref");	 	
+   while (child != 0) {
 
-      
-      if ((strcmp(fCurrentFile, fStartFile)) != 0) {
-      reftemp = TString::Format("%s_%s", reftemp.Data(), fCurrentFile);
-     
+      if ((strcmp(gdml->GetNodeName(child), "world") == 0)) {
+         //const char* reftemp;
+         //TString reftemp = "";
+         reftemp = gdml->GetAttr(child, "ref");
+
+
+         if ((strcmp(fCurrentFile, fStartFile)) != 0) {
+            reftemp = TString::Format("%s_%s", reftemp.Data(), fCurrentFile);
+
+         }
+         fWorld = fvolmap[reftemp.Data()];
+         fWorldName = reftemp.Data();
+
       }
-      fWorld = fvolmap[reftemp.Data()]; 
-      fWorldName = reftemp.Data();
-      
-    }
-    child = gdml->GetNext(child);
-  }
-  return node;
+      child = gdml->GetNext(child);
+   }
+   return node;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a box may be declared.
-///when the box keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoBBox and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a box may be declared.
+/// when the box keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoBBox and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Box(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2013,13 +2172,13 @@ XMLNodePointer_t TGDMLParse::Box(TXMLEngine* gdml, XMLNodePointer_t node, XMLAtt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, an ellipsoid may be declared.
-///Unfortunately, the ellipsoid is not supported under ROOT so,
-///when the ellipsoid keyword is found, this function is called
-///to convert it to a simple box with similar dimensions, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoBBox and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, an ellipsoid may be declared.
+/// Unfortunately, the ellipsoid is not supported under ROOT so,
+/// when the ellipsoid keyword is found, this function is called
+/// to convert it to a simple box with similar dimensions, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoBBox and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Ellipsoid(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2099,13 +2258,13 @@ XMLNodePointer_t TGDMLParse::Ellipsoid(TXMLEngine* gdml, XMLNodePointer_t node, 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, an elliptical cone may be declared.
-///Unfortunately, the elliptical cone is not supported under ROOT so,
-///when the elcone keyword is found, this function is called
-///to convert it to a simple box with similar dimensions, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoBBox and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, an elliptical cone may be declared.
+/// Unfortunately, the elliptical cone is not supported under ROOT so,
+/// when the elcone keyword is found, this function is called
+/// to convert it to a simple box with similar dimensions, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoBBox and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::ElCone(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2178,11 +2337,11 @@ XMLNodePointer_t TGDMLParse::ElCone(TXMLEngine* gdml, XMLNodePointer_t node, XML
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Paraboloid may be declared.
-///when the paraboloid keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoParaboloid and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Paraboloid may be declared.
+/// when the paraboloid keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoParaboloid and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Paraboloid(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2232,11 +2391,11 @@ XMLNodePointer_t TGDMLParse::Paraboloid(TXMLEngine* gdml, XMLNodePointer_t node,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, an Arb8 may be declared.
-///when the arb8 keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoArb8 and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, an Arb8 may be declared.
+/// when the arb8 keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoArb8 and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Arb8(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2352,11 +2511,11 @@ XMLNodePointer_t TGDMLParse::Arb8(TXMLEngine* gdml, XMLNodePointer_t node, XMLAt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Tube may be declared.
-///when the tube keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoTubeSeg and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Tube may be declared.
+/// when the tube keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoTubeSeg and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Tube(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2428,11 +2587,11 @@ XMLNodePointer_t TGDMLParse::Tube(TXMLEngine* gdml, XMLNodePointer_t node, XMLAt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Cut Tube may be declared.
-///when the cutTube keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoCtub and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Cut Tube may be declared.
+/// when the cutTube keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoCtub and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::CutTube(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2530,11 +2689,11 @@ XMLNodePointer_t TGDMLParse::CutTube(TXMLEngine* gdml, XMLNodePointer_t node, XM
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a cone may be declared.
-///when the cone keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoConSeg and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a cone may be declared.
+/// when the cone keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoConSeg and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Cone(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2618,11 +2777,11 @@ XMLNodePointer_t TGDMLParse::Cone(TXMLEngine* gdml, XMLNodePointer_t node, XMLAt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Trap may be declared.
-///when the trap keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoTrap and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Trap may be declared.
+/// when the trap keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoTrap and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Trap(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2718,11 +2877,11 @@ XMLNodePointer_t TGDMLParse::Trap(TXMLEngine* gdml, XMLNodePointer_t node, XMLAt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Trd may be declared.
-///when the trd keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoTrd2 and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Trd may be declared.
+/// when the trd keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoTrd2 and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Trd(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2785,12 +2944,12 @@ XMLNodePointer_t TGDMLParse::Trd(TXMLEngine* gdml, XMLNodePointer_t node, XMLAtt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Polycone may be declared.
-///when the polycone keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoPCon and stored in fsolmap map using the name
-///as its key. Polycone has Zplanes, planes along the z axis specifying
-///the rmin, rmax dimenstions at that point along z.
+/// In the solids section of the GDML file, a Polycone may be declared.
+/// when the polycone keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoPCon and stored in fsolmap map using the name
+/// as its key. Polycone has Zplanes, planes along the z axis specifying
+/// the rmin, rmax dimensions at that point along z.
 
 XMLNodePointer_t TGDMLParse::Polycone(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -2908,12 +3067,12 @@ XMLNodePointer_t TGDMLParse::Polycone(TXMLEngine* gdml, XMLNodePointer_t node, X
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Polyhedra may be declared.
-///when the polyhedra keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoPgon and stored in fsolmap map using the name
-///as its key. Polycone has Zplanes, planes along the z axis specifying
-///the rmin, rmax dimenstions at that point along z.
+/// In the solids section of the GDML file, a Polyhedra may be declared.
+/// when the polyhedra keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoPgon and stored in fsolmap map using the name
+/// as its key. Polycone has Zplanes, planes along the z axis specifying
+/// the rmin, rmax dimensions at that point along z.
 
 XMLNodePointer_t TGDMLParse::Polyhedra(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3038,11 +3197,11 @@ XMLNodePointer_t TGDMLParse::Polyhedra(TXMLEngine* gdml, XMLNodePointer_t node, 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Sphere may be declared.
-///when the sphere keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoSphere and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Sphere may be declared.
+/// when the sphere keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoSphere and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Sphere(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3113,11 +3272,11 @@ XMLNodePointer_t TGDMLParse::Sphere(TXMLEngine* gdml, XMLNodePointer_t node, XML
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Torus may be declared.
-///when the torus keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoTorus and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Torus may be declared.
+/// when the torus keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoTorus and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Torus(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3184,11 +3343,11 @@ XMLNodePointer_t TGDMLParse::Torus(TXMLEngine* gdml, XMLNodePointer_t node, XMLA
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Hype may be declared.
-///when the hype keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoHype and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Hype may be declared.
+/// when the hype keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoHype and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Hype(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3255,11 +3414,11 @@ XMLNodePointer_t TGDMLParse::Hype(TXMLEngine* gdml, XMLNodePointer_t node, XMLAt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Para may be declared.
-///when the para keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoPara and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a Para may be declared.
+/// when the para keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoPara and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Para(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3332,11 +3491,11 @@ XMLNodePointer_t TGDMLParse::Para(TXMLEngine* gdml, XMLNodePointer_t node, XMLAt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a TwistTrap may be declared.
-///when the twistedtrap keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoGTra and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a TwistTrap may be declared.
+/// when the twistedtrap keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoGTra and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::TwistTrap(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3440,11 +3599,11 @@ XMLNodePointer_t TGDMLParse::TwistTrap(TXMLEngine* gdml, XMLNodePointer_t node, 
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a ElTube may be declared.
-///when the eltube keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoEltu and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, a ElTube may be declared.
+/// when the eltube keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoEltu and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::ElTube(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3495,11 +3654,11 @@ XMLNodePointer_t TGDMLParse::ElTube(TXMLEngine* gdml, XMLNodePointer_t node, XML
 
 }
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, an Orb may be declared.
-///when the orb keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoSphere and stored in fsolmap map using the name
-///as its key.
+/// In the solids section of the GDML file, an Orb may be declared.
+/// when the orb keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoSphere and stored in fsolmap map using the name
+/// as its key.
 
 XMLNodePointer_t TGDMLParse::Orb(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3542,14 +3701,14 @@ XMLNodePointer_t TGDMLParse::Orb(TXMLEngine* gdml, XMLNodePointer_t node, XMLAtt
 
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, an Xtru may be declared.
-///when the xtru keyword is found, this function is called, and the
-///dimensions required are taken and stored, these are then bound and
-///converted to type TGeoXtru and stored in fsolmap map using the name
-///as its key. The xtru has child nodes of either 'twoDimVertex'or
-///'section'.   These two nodes define the real structure of the shape.
-///The twoDimVertex's define the x,y sizes of a vertice. The section links
-///the vertice to a position within the xtru.
+/// In the solids section of the GDML file, an Xtru may be declared.
+/// when the xtru keyword is found, this function is called, and the
+/// dimensions required are taken and stored, these are then bound and
+/// converted to type TGeoXtru and stored in fsolmap map using the name
+/// as its key. The xtru has child nodes of either 'twoDimVertex'or
+/// 'section'.   These two nodes define the real structure of the shape.
+/// The twoDimVertex's define the x,y sizes of a vertice. The section links
+/// the vertice to a position within the xtru.
 
 XMLNodePointer_t TGDMLParse::Xtru(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3702,14 +3861,14 @@ XMLNodePointer_t TGDMLParse::Xtru(TXMLEngine* gdml, XMLNodePointer_t node, XMLAt
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///In the solids section of the GDML file, a Reflected Solid may be
-///declared when the ReflectedSolid keyword is found, this function
-///is called. The rotation, position and scale for the reflection are
-///applied to a matrix that is then stored in the class object
-///TGDMLRefl.   This is then stored in the map freflsolidmap, with
-///the reflection name as a reference. also the name of the solid to
-///be reflected is stored in a map called freflectmap with the reflection
-///name as a reference.
+/// In the solids section of the GDML file, a Reflected Solid may be
+/// declared when the ReflectedSolid keyword is found, this function
+/// is called. The rotation, position and scale for the reflection are
+/// applied to a matrix that is then stored in the class object
+/// TGDMLRefl.   This is then stored in the map freflsolidmap, with
+/// the reflection name as a reference. also the name of the solid to
+/// be reflected is stored in a map called freflectmap with the reflection
+/// name as a reference.
 
 XMLNodePointer_t TGDMLParse::Reflection(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr)
 {
@@ -3790,18 +3949,8 @@ XMLNodePointer_t TGDMLParse::Reflection(TXMLEngine* gdml, XMLNodePointer_t node,
    return node;
 }
 
-
-
-//===================================================================
-
-ClassImp(TGDMLRefl)
-
-/******************************************************************
-____________________________________________________________
-
-TGDMLRefl Class
-
-------------------------------------------------------------
+/** \class TGDMLRefl
+\ingroup Geometry_gdml
 
 This class is a helper class for TGDMLParse.   It assists in the
 reflection process.   This process takes a previously defined solid
@@ -3811,10 +3960,12 @@ reflected, and finally the reflected solid's matrix.   This is then
 recalled when the volume is used in the structure part of the gdml
 file.
 
-******************************************************************/
+*/
+
+ClassImp(TGDMLRefl);
 
 ////////////////////////////////////////////////////////////////////////////////
-///this constructor method stores the values brought in as params.
+/// This constructor method stores the values brought in as params.
 
 TGDMLRefl::TGDMLRefl(const char* name, const char* solid, TGeoMatrix* matrix)
 {
@@ -3824,7 +3975,7 @@ TGDMLRefl::TGDMLRefl(const char* name, const char* solid, TGeoMatrix* matrix)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///this accessor method returns the matrix.
+/// This accessor method returns the matrix.
 
 TGeoMatrix* TGDMLRefl::GetMatrix()
 {

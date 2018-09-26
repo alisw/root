@@ -21,7 +21,6 @@
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/Twine.h"
 #include <memory>
 #include <vector>
 
@@ -36,6 +35,8 @@ class ArgKind {
  public:
   enum Kind {
     AK_Matcher,
+    AK_Boolean,
+    AK_Double,
     AK_Unsigned,
     AK_String
   };
@@ -57,7 +58,7 @@ class ArgKind {
   /// \param To the requested destination type.
   ///
   /// \param Specificity value corresponding to the "specificity" of the
-  ///   convertion.
+  ///   conversion.
   bool isConvertibleTo(ArgKind To, unsigned *Specificity) const;
 
   bool operator<(const ArgKind &Other) const {
@@ -111,7 +112,7 @@ class VariantMatcher {
                               ArrayRef<VariantMatcher> InnerMatchers) const;
 
   protected:
-    ~MatcherOps() {}
+    ~MatcherOps() = default;
 
   private:
     ast_type_traits::ASTNodeKind NodeKind;
@@ -120,7 +121,7 @@ class VariantMatcher {
   /// \brief Payload interface to be specialized by each matcher type.
   ///
   /// It follows a similar interface as VariantMatcher itself.
-  class Payload : public RefCountedBaseVPTR {
+  class Payload {
   public:
     virtual ~Payload();
     virtual llvm::Optional<DynTypedMatcher> getSingleMatcher() const = 0;
@@ -183,7 +184,7 @@ public:
   /// \param Kind the requested destination type.
   ///
   /// \param Specificity value corresponding to the "specificity" of the
-  ///   convertion.
+  ///   conversion.
   bool isConvertibleTo(ast_type_traits::ASTNodeKind Kind,
                        unsigned *Specificity) const {
     if (Value)
@@ -209,7 +210,8 @@ public:
   std::string getTypeAsString() const;
 
 private:
-  explicit VariantMatcher(Payload *Value) : Value(Value) {}
+  explicit VariantMatcher(std::shared_ptr<Payload> Value)
+      : Value(std::move(Value)) {}
 
   template <typename T> struct TypedMatcherOps;
 
@@ -217,7 +219,7 @@ private:
   class PolymorphicPayload;
   class VariadicOpPayload;
 
-  IntrusiveRefCntPtr<const Payload> Value;
+  std::shared_ptr<const Payload> Value;
 };
 
 template <typename T>
@@ -241,8 +243,10 @@ struct VariantMatcher::TypedMatcherOps final : VariantMatcher::MatcherOps {
 /// copy/assignment.
 ///
 /// Supported types:
+///  - \c bool
+//   - \c double
 ///  - \c unsigned
-///  - \c std::string
+///  - \c llvm::StringRef
 ///  - \c VariantMatcher (\c DynTypedMatcher / \c Matcher<T>)
 class VariantValue {
 public:
@@ -253,13 +257,28 @@ public:
   VariantValue &operator=(const VariantValue &Other);
 
   /// \brief Specific constructors for each supported type.
+  VariantValue(bool Boolean);
+  VariantValue(double Double);
   VariantValue(unsigned Unsigned);
-  VariantValue(const std::string &String);
+  VariantValue(StringRef String);
   VariantValue(const VariantMatcher &Matchers);
 
+  /// \brief Constructs an \c unsigned value (disambiguation from bool).
+  VariantValue(int Signed) : VariantValue(static_cast<unsigned>(Signed)) {}
+
   /// \brief Returns true iff this is not an empty value.
-  LLVM_EXPLICIT operator bool() const { return hasValue(); }
+  explicit operator bool() const { return hasValue(); }
   bool hasValue() const { return Type != VT_Nothing; }
+
+  /// \brief Boolean value functions.
+  bool isBoolean() const;
+  bool getBoolean() const;
+  void setBoolean(bool Boolean);
+
+  /// \brief Double value functions.
+  bool isDouble() const;
+  double getDouble() const;
+  void setDouble(double Double);
 
   /// \brief Unsigned value functions.
   bool isUnsigned() const;
@@ -269,7 +288,7 @@ public:
   /// \brief String value functions.
   bool isString() const;
   const std::string &getString() const;
-  void setString(const std::string &String);
+  void setString(StringRef String);
 
   /// \brief Matcher value functions.
   bool isMatcher() const;
@@ -281,7 +300,7 @@ public:
   /// \param Kind the requested destination type.
   ///
   /// \param Specificity value corresponding to the "specificity" of the
-  ///   convertion.
+  ///   conversion.
   bool isConvertibleTo(ArgKind Kind, unsigned* Specificity) const;
 
   /// \brief Determines if the contained value can be converted to any kind
@@ -290,7 +309,7 @@ public:
   /// \param Kinds the requested destination types.
   ///
   /// \param Specificity value corresponding to the "specificity" of the
-  ///   convertion. It is the maximum specificity of all the possible
+  ///   conversion. It is the maximum specificity of all the possible
   ///   conversions.
   bool isConvertibleTo(ArrayRef<ArgKind> Kinds, unsigned *Specificity) const;
 
@@ -303,6 +322,8 @@ private:
   /// \brief All supported value types.
   enum ValueType {
     VT_Nothing,
+    VT_Boolean,
+    VT_Double,
     VT_Unsigned,
     VT_String,
     VT_Matcher
@@ -311,6 +332,8 @@ private:
   /// \brief All supported value types.
   union AllValues {
     unsigned Unsigned;
+    double Double;
+    bool Boolean;
     std::string *String;
     VariantMatcher *Matcher;
   };

@@ -11,6 +11,7 @@
 
 /** \class TAttImage
 \ingroup BasicGraphics
+\ingroup GraphicsAtt
 
 TImage attributes.
 
@@ -93,9 +94,9 @@ This class provides a way to edit the palette via a GUI.
 #include "TStyle.h"
 
 
-ClassImp(TPaletteEditor)
-ClassImp(TAttImage)
-ClassImp(TImagePalette)
+ClassImp(TPaletteEditor);
+ClassImp(TAttImage);
+ClassImp(TImagePalette);
 
 
 // definition of a default palette
@@ -738,7 +739,7 @@ TImagePalette* TImagePalette::Create(Option_t* opts)
 /// the palette used in the "col2" and "colz2" options. It handles the
 /// color selection for contours.
 ///
-/// \param opts   the type of palette to create
+/// \param ncontours   number of contours
 ///
 /// Ownership of the returned object transfers to the caller.
 ///
@@ -772,6 +773,7 @@ TImagePalette* TImagePalette::CreateCOLPalette(Int_t ncontours)
 
    return pPalette;
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Opens a GUI to edit the color palette.
 

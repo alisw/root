@@ -20,28 +20,22 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMatrixT
 #include "TMatrixT.h"
-#endif
-#ifndef ROOT_TMatrixTSym
 #include "TMatrixTSym.h"
-#endif
-#ifndef ROOT_TMatrixTSparse
 #include "TMatrixTSparse.h"
-#endif
 
 template<class Element> class TVectorT : public TObject {
 
 protected:
-   Int_t    fNrows;                // number of rows
-   Int_t    fRowLwb;               // lower bound of the row index
-   Element *fElements;             //[fNrows] elements themselves
+   Int_t    fNrows{0};                // number of rows
+   Int_t    fRowLwb{0};               // lower bound of the row index
+   Element *fElements{nullptr};             //[fNrows] elements themselves
 
    enum {kSizeMax = 5};             // size data container on stack, see New_m(),Delete_m()
    enum {kWorkMax = 100};           // size of work array's in several routines
 
    Element  fDataStack[kSizeMax];  //! data container
-   Bool_t   fIsOwner;              //!default kTRUE, when Use array kFALSE
+   Bool_t   fIsOwner{kTRUE};              //!default kTRUE, when Use array kFALSE
 
    Element* New_m   (Int_t size);
    void     Delete_m(Int_t size,Element*&);
@@ -72,7 +66,7 @@ public:
       *this = another;
    }
 #ifndef __CINT__
-   TVectorT(Int_t lwb,Int_t upb,Element iv1, ...);
+   TVectorT(Int_t lwb,Int_t upb,Double_t iv1, ...);
 #endif
    virtual ~TVectorT() { Clear(); }
 
@@ -178,7 +172,8 @@ public:
    void Add(const TVectorT<Element> &v);
    void Add(const TVectorT<Element> &v1, const TVectorT<Element> &v2);
    void Clear(Option_t * /*option*/ ="") { if (fIsOwner) Delete_m(fNrows,fElements);
-                                           else fElements = 0; fNrows = 0; }
+                                           else fElements = 0;
+                                           fNrows = 0; }
    void Draw (Option_t *option=""); // *MENU*
    void Print(Option_t *option="") const;  // *MENU*
 

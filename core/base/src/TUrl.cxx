@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TUrl
+\ingroup Base
+
 This class represents a WWW compatible URL.
 It provides member functions to return the different parts of
 an URL. The supported url format is:
@@ -52,7 +54,7 @@ namespace {
 }
 #endif
 
-ClassImp(TUrl)
+ClassImp(TUrl);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Parse url character string and split in its different subcomponents.

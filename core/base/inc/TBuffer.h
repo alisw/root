@@ -21,9 +21,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
 #include <vector>
 
@@ -70,8 +68,10 @@ protected:
 
 public:
    enum EMode { kRead = 0, kWrite = 1 };
-   enum { kIsOwner = BIT(16) };                        //if set TBuffer owns fBuffer
-   enum { kCannotHandleMemberWiseStreaming = BIT(17)}; //if set TClonesArray should not use member wise streaming
+   enum EStatusBits {
+     kIsOwner = BIT(16), //if set TBuffer owns fBuffer
+     kCannotHandleMemberWiseStreaming = BIT(17) //if set TClonesArray should not use member wise streaming
+   };
    enum { kInitialSize = 1024, kMinimalSize = 128 };
 
    TBuffer(EMode mode);
@@ -149,9 +149,11 @@ public:
    virtual void       WriteClass(const TClass *cl) = 0;
 
    virtual TObject   *ReadObject(const TClass *cl) = 0;
-   virtual void       WriteObject(const TObject *obj) = 0;
+   virtual void       WriteObject(const TObject *obj, Bool_t cacheReuse) = 0;
 
-   virtual Int_t      WriteObjectAny(const void *obj, const TClass *ptrClass) = 0;
+   template <class T> Int_t WriteObject(const T *objptr, Bool_t cacheReuse = kTRUE);
+
+   virtual Int_t      WriteObjectAny(const void *obj, const TClass *ptrClass, Bool_t cacheReuse = kTRUE) = 0;
 
    virtual UShort_t   GetPidOffset() const  = 0;
    virtual void       SetPidOffset(UShort_t offset) = 0;
@@ -279,7 +281,10 @@ public:
    virtual   void     ReadDouble(Double_t   &d) = 0;
    virtual   void     ReadCharP(Char_t      *c) = 0;
    virtual   void     ReadTString(TString   &s) = 0;
-   virtual   void     ReadStdString(std::string &s) = 0;
+   virtual   void     ReadStdString(std::string *s) = 0;
+   virtual   void     ReadCharStar(char* &s) = 0;
+
+   virtual inline void ReadStdString(std::string &s) { ReadStdString(&s); }
 
    virtual   void     WriteBool(Bool_t       b) = 0;
    virtual   void     WriteChar(Char_t       c) = 0;
@@ -296,7 +301,10 @@ public:
    virtual   void     WriteDouble(Double_t   d) = 0;
    virtual   void     WriteCharP(const Char_t *c) = 0;
    virtual   void     WriteTString(const TString &s) = 0;
-   virtual   void     WriteStdString(const std::string &s) = 0;
+   virtual   void     WriteStdString(const std::string *s) = 0;
+   virtual   void     WriteCharStar(char *s) = 0;
+
+   virtual inline void WriteStdString(std::string &s) { WriteStdString(&s); }
 
    // Special basic ROOT objects and collections
    virtual   TProcessID *GetLastProcessID(TRefTable *reftable) const = 0;
@@ -400,4 +408,11 @@ template <>
 inline TBuffer &operator<<(TBuffer &buf, const TObject *obj)
    { buf.WriteObjectAny(obj, TObject::Class()); return buf; }
 
-#endif
+template <class T>
+inline Int_t TBuffer::WriteObject(const T *objptr, Bool_t cacheReuse)
+{
+   TClass *cl = (objptr) ? TBuffer::GetClass(typeid(T)) : 0;
+   return WriteObjectAny(objptr, cl, cacheReuse);
+}
+
+#endif // ROOT_TBuffer

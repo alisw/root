@@ -14,9 +14,13 @@
 #ifndef LLVM_LIB_TARGET_HEXAGON_MCTARGETDESC_HEXAGONMCTARGETDESC_H
 #define LLVM_LIB_TARGET_HEXAGON_MCTARGETDESC_HEXAGONMCTARGETDESC_H
 
+#include "llvm/Support/CommandLine.h"
 #include <cstdint>
 
 namespace llvm {
+
+struct InstrItinerary;
+struct InstrStage;
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
@@ -24,23 +28,45 @@ class MCInstrInfo;
 class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
+class MCTargetOptions;
 class Target;
+class Triple;
 class StringRef;
 class raw_ostream;
+class raw_pwrite_stream;
 
-extern Target TheHexagonTarget;
+Target &getTheHexagonTarget();
+extern cl::opt<bool> HexagonDisableCompound;
+extern cl::opt<bool> HexagonDisableDuplex;
+extern const InstrStage HexagonStages[];
 
-MCCodeEmitter *createHexagonMCCodeEmitter(MCInstrInfo const &MCII,
-                                          MCRegisterInfo const &MRI,
-                                          MCSubtargetInfo const &MST,
+MCInstrInfo *createHexagonMCInstrInfo();
+MCRegisterInfo *createHexagonMCRegisterInfo(StringRef TT);
+
+namespace Hexagon_MC {
+  StringRef ParseHexagonTriple(const Triple &TT, StringRef CPU);
+  StringRef selectHexagonCPU(const Triple &TT, StringRef CPU);
+
+  /// Create a Hexagon MCSubtargetInfo instance. This is exposed so Asm parser,
+  /// etc. do not need to go through TargetRegistry.
+  MCSubtargetInfo *createHexagonMCSubtargetInfo(const Triple &TT, StringRef CPU,
+                                                StringRef FS);
+  unsigned GetELFFlags(const MCSubtargetInfo &STI);
+}
+
+MCCodeEmitter *createHexagonMCCodeEmitter(const MCInstrInfo &MCII,
+                                          const MCRegisterInfo &MRI,
                                           MCContext &MCT);
 
-MCAsmBackend *createHexagonAsmBackend(Target const &T,
-                                      MCRegisterInfo const &MRI, StringRef TT,
-                                      StringRef CPU);
+MCAsmBackend *createHexagonAsmBackend(const Target &T,
+                                      const MCRegisterInfo &MRI,
+                                      const Triple &TT, StringRef CPU,
+                                      const MCTargetOptions &Options);
 
-MCObjectWriter *createHexagonELFObjectWriter(raw_ostream &OS, uint8_t OSABI,
-                                             StringRef CPU);
+MCObjectWriter *createHexagonELFObjectWriter(raw_pwrite_stream &OS,
+                                             uint8_t OSABI, StringRef CPU);
+
+unsigned HexagonGetLastSlot();
 
 } // End llvm namespace
 
@@ -58,4 +84,4 @@ MCObjectWriter *createHexagonELFObjectWriter(raw_ostream &OS, uint8_t OSABI,
 #define GET_SUBTARGETINFO_ENUM
 #include "HexagonGenSubtargetInfo.inc"
 
-#endif
+#endif // LLVM_LIB_TARGET_HEXAGON_MCTARGETDESC_HEXAGONMCTARGETDESC_H

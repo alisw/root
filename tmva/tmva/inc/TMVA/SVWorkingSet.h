@@ -30,9 +30,7 @@
 
 #include <vector>
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
 namespace TMVA {
 
@@ -62,6 +60,12 @@ namespace TMVA {
       Bool_t TakeStepReg(SVEvent*, SVEvent*);
       Bool_t IsDiffSignificant(Float_t, Float_t, Float_t);
       void   TrainReg();
+
+      //setting up helper variables for JsMVA
+      void SetIPythonInteractive(bool* ExitFromTraining, UInt_t *fIPyCurrentIter_){
+        fExitFromTraining = ExitFromTraining;
+        fIPyCurrentIter = fIPyCurrentIter_;
+      }
          
                 
    private:
@@ -81,6 +85,10 @@ namespace TMVA {
       
       mutable MsgLogger*          fLogger;      //! message logger
       
+      // variables for JsMVA
+      UInt_t *fIPyCurrentIter = nullptr;
+      bool * fExitFromTraining = nullptr;
+
       void SetIndex( TMVA::SVEvent* );
    };
 }

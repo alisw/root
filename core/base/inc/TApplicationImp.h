@@ -21,9 +21,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 class TGWin32Command;
 
@@ -36,7 +34,7 @@ protected:
 public:
    TApplicationImp(): fApplicationName() { }
    TApplicationImp(const char *appClassName, int *argc, char **argv);
-   virtual ~TApplicationImp() { }
+   virtual ~TApplicationImp();
 
    virtual const char *ApplicationName() const { return fApplicationName.Data(); }
    virtual void        Show() { }

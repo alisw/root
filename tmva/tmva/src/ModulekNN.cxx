@@ -23,21 +23,26 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::kNN
+\ingroup TMVA
+  kNN::Event describes point in input variable vector-space, with
+  additional functionality like distance between points
+*/
+
 #include "TMVA/ModulekNN.h"
 
-// C++
+#include "TMVA/MsgLogger.h"
+#include "TMVA/Types.h"
+
+#include "ThreadLocalStorage.h"
+#include "TMath.h"
+#include "TRandom3.h"
+
 #include <assert.h>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <algorithm>
-
-#include "TMath.h"
-#include "TRandom3.h"
-
-// TMVA
-#include "TMVA/MsgLogger.h"
-#include "TMVA/Types.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 /// default constructor
@@ -328,7 +333,7 @@ Bool_t TMVA::kNN::ModulekNN::Fill(const UShort_t odepth, const UInt_t ifrac, con
 
    for (std::map<Short_t, UInt_t>::const_iterator it = fCount.begin(); it != fCount.end(); ++it) {
       Log() << kINFO << "<Fill> Class " << it->first << " has " << std::setw(8)
-              << it->second << " events" << Endl;
+            << it->second << " events" << Endl;
    }
 
    return kTRUE;
@@ -338,7 +343,7 @@ Bool_t TMVA::kNN::ModulekNN::Fill(const UShort_t odepth, const UInt_t ifrac, con
 /// find in tree
 /// if tree has been filled then search for nfind closest events
 /// if metic (fVarScale map) is computed then rescale event variables
-/// using previsouly computed width of variable distribution
+/// using previously computed width of variable distribution
 
 Bool_t TMVA::kNN::ModulekNN::Find(Event event, const UInt_t nfind, const std::string &option) const
 {
@@ -366,18 +371,18 @@ Bool_t TMVA::kNN::ModulekNN::Find(Event event, const UInt_t nfind, const std::st
    fkNNList.clear();
 
    if(option.find("weight") != std::string::npos)
-   {
-      // recursive kd-tree search for nfind-nearest neighbors
-      // use event weight to find all nearest events
-      // that have sum of weights >= nfind
-      kNN::Find<kNN::Event>(fkNNList, fTree, event, Double_t(nfind), 0.0);
-   }
+      {
+         // recursive kd-tree search for nfind-nearest neighbors
+         // use event weight to find all nearest events
+         // that have sum of weights >= nfind
+         kNN::Find<kNN::Event>(fkNNList, fTree, event, Double_t(nfind), 0.0);
+      }
    else
-   {
-      // recursive kd-tree search for nfind-nearest neighbors
-      // count nodes and do not use event weight
-      kNN::Find<kNN::Event>(fkNNList, fTree, event, nfind);
-   }
+      {
+         // recursive kd-tree search for nfind-nearest neighbors
+         // count nodes and do not use event weight
+         kNN::Find<kNN::Event>(fkNNList, fTree, event, nfind);
+      }
 
    return kTRUE;
 }
@@ -439,7 +444,7 @@ Bool_t TMVA::kNN::ModulekNN::Find(const UInt_t nfind, const std::string &option)
 ////////////////////////////////////////////////////////////////////////////////
 /// Optimize() balances binary tree for first odepth levels
 /// for each depth we split sorted depth % dimension variables
-/// into 2^odepth parts
+/// into \f$ 2^{odepth} \f$ parts
 
 TMVA::kNN::Node<TMVA::kNN::Event>* TMVA::kNN::ModulekNN::Optimize(const UInt_t odepth)
 {
@@ -467,7 +472,7 @@ TMVA::kNN::Node<TMVA::kNN::Event>* TMVA::kNN::ModulekNN::Optimize(const UInt_t o
       return 0;
    }
 
-   Log() << kINFO << "Optimizing tree for " << fDimn << " variables with " << size << " values" << Endl;
+   Log() << kHEADER << "Optimizing tree for " << fDimn << " variables with " << size << " values" << Endl;
 
    std::vector<Node<Event> *> pvec, cvec;
 
@@ -530,7 +535,7 @@ TMVA::kNN::Node<TMVA::kNN::Event>* TMVA::kNN::ModulekNN::Optimize(const UInt_t o
 
 ////////////////////////////////////////////////////////////////////////////////
 /// compute scale factor for each variable (dimension) so that
-/// distance is computed uniformely along each dimension
+/// distance is computed uniformly along each dimension
 /// compute width of interval that includes (100 - 2*ifrac)% of events
 /// below, assume that in fVar each vector of values is sorted
 
@@ -556,7 +561,7 @@ void TMVA::kNN::ModulekNN::ComputeMetric(const UInt_t ifrac)
    const UInt_t rfrac = 100 - (100 - ifrac)/2;
 
    Log() << kINFO << "Computing scale factor for 1d distributions: "
-           << "(ifrac, bottom, top) = (" << ifrac << "%, " << lfrac << "%, " << rfrac << "%)" << Endl;
+         << "(ifrac, bottom, top) = (" << ifrac << "%, " << lfrac << "%, " << rfrac << "%)" << Endl;
 
    fVarScale.clear();
 

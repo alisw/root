@@ -373,10 +373,7 @@ void do_put(const char *files, const char *opt)
 
    // If no match, notify
    if (printerr == 1) {
-      if (ndp > 0)
-         Printf("%s: WARNING: problems with %d dataset(s)", action, ndp);
-      else
-         Printf("%s: WARNING: some problems occured", action);
+      Printf("%s: WARNING: problems with %d dataset(s)", action, ndp);
       gSystem->Rename(flog.Data(), ferr.Data());
    }
    Printf("%s: %d dataset(s) registered", action, nd);
@@ -1118,7 +1115,7 @@ void do_anadist_getkey(TUrl *u, TString &key)
 /// Create the plot for the histogram, and save to 'fnout'.
 /// Format determined by th extension of fnout.
 
-int do_anadist_plot(TH1D *h1d, const char */*fnout*/)
+int do_anadist_plot(TH1D *h1d, const char * /*fnout*/)
 {
    Printf("do_anadist_plot: will be doing a plot here ... ");
 

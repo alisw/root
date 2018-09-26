@@ -10,6 +10,9 @@
  *************************************************************************/
 
 /** \class TVirtualPS
+\ingroup Base
+\ingroup PS
+
 TVirtualPS is an abstract interface to Postscript, PDF, SVG. TeX etc... drivers
 */
 
@@ -20,7 +23,7 @@ TVirtualPS *gVirtualPS = 0;
 
 const Int_t  kMaxBuffer = 250;
 
-ClassImp(TVirtualPS)
+ClassImp(TVirtualPS);
 
 
 ////////////////////////////////////////////////////////////////////////////////

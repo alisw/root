@@ -3,16 +3,18 @@
 # @author Pere Mato, CERN
 ############################################################################
 
-include(${QT_USE_FILE})
-
-if(CMAKE_COMPILER_IS_GNUCXX)
-  add_definitions(-Wno-deprecated-register -Wno-uninitialized)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-  add_definitions(-Wno-deprecated -Wno-uninitialized)
+if(fail-on-missing)
+  set(QT_REQUIRED REQUIRED)
 endif()
 
-ROOT_GENERATE_DICTIONARY(G__QtRoot *.h MODULE QtRoot LINKDEF LinkDef.h)
+find_package(Qt4 4.8 COMPONENTS QtCore QtGui ${QT_REQUIRED})
 
-ROOT_LINKER_LIBRARY(QtRoot *.cxx G__QtRoot.cxx LIBRARIES Core DEPENDENCIES Gui GQt)
+if(NOT QT4_FOUND)
+  message(STATUS "Qt4 not found. Switching off qt option")
+  set(qt OFF CACHE BOOL "" FORCE)
+  return()
+endif()
 
-ROOT_INSTALL_HEADERS()
+include(${QT_USE_FILE})
+
+ROOT_STANDARD_LIBRARY_PACKAGE(QtRoot DEPENDENCIES Core Gui GQt)

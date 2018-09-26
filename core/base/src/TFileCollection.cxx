@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TFileCollection
+\ingroup Base
 
 Class that contains a list of TFileInfo's and accumulated meta
 data information about its entries. This class is used to describe
@@ -32,7 +33,7 @@ collection of TFile names.
 #include "TError.h"
 
 
-ClassImp(TFileCollection)
+ClassImp(TFileCollection);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// TFileCollection constructor. Specify a name and title describing
@@ -71,6 +72,7 @@ Int_t TFileCollection::Add(TFileInfo *info)
       if (!fList->FindObject(info->GetName())) {
          fList->Add(info);
          if (info->GetIndex() < 0) info->SetIndex(fList->GetSize());
+         Update();
          return 1;
       } else {
          Warning("Add", "file: '%s' already in the list - ignoring",
@@ -93,6 +95,7 @@ Int_t TFileCollection::Add(TFileCollection *coll)
          fList->Add(info);
          if (fi->GetIndex() < 0) info->SetIndex(fList->GetSize());
       }
+      Update();
       return 1;
    } else {
       return 0;

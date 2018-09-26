@@ -69,19 +69,17 @@ fi
 
 ### ROOT libraries ###
 
-if test "$platform" = "ios"; then
-   newlib=
-   rootglibs=
-   rootevelibs=
-   rootlibs="-lRoota"
-else
-   newlib="-lNew"
-   rootglibs="-lGui"
-   rootevelibs="-lEve -lEG -lTreePlayer -lGeom -lGed -lRGL"
-   rootlibs="-lCore -lRIO -lNet -lHist -lGraf -lGraf3d -lGpad -lTree \
-             -lRint -lPostscript -lMatrix -lPhysics -lMathCore -lThread\
-             -lMultiProc"
+newlib="-lNew"
+rootglibs="-lGui"
+rootevelibs="-lEve -lEG -lGeom -lGed -lRGL"
+rootlibs="-lCore -lImt -lRIO -lNet -lHist -lGraf -lGraf3d -lGpad -lROOTVecOps -lTree -lTreePlayer\
+          -lRint -lPostscript -lMatrix -lPhysics -lMathCore -lThread\
+          -lMultiProc"
+
+if [ `uname -m` != 'i686' ]; then
+   rootlibs="$rootlibs -lROOTDataFrame"
 fi
+
 
 if test "$platform" = "win32"; then
    rootulibs="-include:_G__cpp_setupG__Net        \
@@ -91,6 +89,7 @@ if test "$platform" = "win32"; then
               -include:_G__cpp_setupG__G3D        \
               -include:_G__cpp_setupG__GPad       \
               -include:_G__cpp_setupG__Tree       \
+              -include:_G__cpp_setupG__TreePlayer \
               -include:_G__cpp_setupG__Thread     \
               -include:_G__cpp_setupG__Rint       \
               -include:_G__cpp_setupG__PostScript \
@@ -98,7 +97,6 @@ if test "$platform" = "win32"; then
               -include:_G__cpp_setupG__Physics"
    rootuglibs="-include:_G__cpp_setupG__Gui1"
    rootuevelibs="-include:_G__cpp_setupG__EG         \
-                 -include:_G__cpp_setupG__TreePlayer \
                  -include:_G__cpp_setupG__Geom1      \
                  -include:_G__cpp_setupG__Ged        \
                  -include:_G__cpp_setupG__GL         \
@@ -111,6 +109,7 @@ elif test "$platform" = "aix5"; then
               -Wl,-u,.G__cpp_setupG__G3D        \
               -Wl,-u,.G__cpp_setupG__GPad       \
               -Wl,-u,.G__cpp_setupG__Tree       \
+              -Wl,-u,.G__cpp_setupG__TreePlayer \
               -Wl,-u,.G__cpp_setupG__Thread     \
               -Wl,-u,.G__cpp_setupG__Rint       \
               -Wl,-u,.G__cpp_setupG__PostScript \
@@ -118,27 +117,26 @@ elif test "$platform" = "aix5"; then
               -Wl,-u,.G__cpp_setupG__Physics"
    rootuglibs="-Wl,-u,.G__cpp_setupG__Gui1"
    rootuevelibs="-Wl,-u,.G__cpp_setupG__EG         \
-                 -Wl,-u,.G__cpp_setupG__TreePlayer \
                  -Wl,-u,.G__cpp_setupG__Geom1      \
                  -Wl,-u,.G__cpp_setupG__Ged        \
                  -Wl,-u,.G__cpp_setupG__GL         \
                  -Wl,-u,.G__cpp_setupG__Eve1"
 else
-   rootulibs="-Wl,-u,_G__cpp_setupG__Net        \
-              -Wl,-u,_G__cpp_setupG__IO         \
-              -Wl,-u,_G__cpp_setupG__Hist       \
-              -Wl,-u,_G__cpp_setupG__Graf       \
-              -Wl,-u,_G__cpp_setupG__G3D        \
-              -Wl,-u,_G__cpp_setupG__GPad       \
-              -Wl,-u,_G__cpp_setupG__Tree       \
-              -Wl,-u,_G__cpp_setupG__Thread     \
-              -Wl,-u,_G__cpp_setupG__Rint       \
-              -Wl,-u,_G__cpp_setupG__PostScript \
-              -Wl,-u,_G__cpp_setupG__Matrix     \
+   rootulibs="-Wl,-u,_G__cpp_setupG__Net           \
+              -Wl,-u,_G__cpp_setupG__IO            \
+              -Wl,-u,_G__cpp_setupG__Hist          \
+              -Wl,-u,_G__cpp_setupG__Graf          \
+              -Wl,-u,_G__cpp_setupG__G3D           \
+              -Wl,-u,_G__cpp_setupG__GPad          \
+              -Wl,-u,_G__cpp_setupG__Tree          \
+              -Wl,-u,_G__cpp_setupG__TreePlayer    \
+              -Wl,-u,_G__cpp_setupG__Thread        \
+              -Wl,-u,_G__cpp_setupG__Rint          \
+              -Wl,-u,_G__cpp_setupG__PostScript    \
+              -Wl,-u,_G__cpp_setupG__Matrix        \
               -Wl,-u,_G__cpp_setupG__Physics"
    rootuglibs="-Wl,-u,_G__cpp_setupG__Gui1"
    rootuevelibs="-Wl,-u,_G__cpp_setupG__EG         \
-                 -Wl,-u,_G__cpp_setupG__TreePlayer \
                  -Wl,-u,_G__cpp_setupG__Geom1      \
                  -Wl,-u,_G__cpp_setupG__Ged        \
                  -Wl,-u,_G__cpp_setupG__GL         \
@@ -147,11 +145,11 @@ fi
 
 ### machine dependent settings ###
 
-if test "x$cxxversion" = "xcxx14" ; then
-   cxxversionflag="-std=c++1y "
-else
-   cxxversionflag="-std=c++11 "
-fi
+case "$cxxversion" in
+  cxx17) cxxversionflag="-std=c++1z " ;;
+  cxx14) cxxversionflag="-std=c++1y " ;;
+  *)     cxxversionflag="-std=c++11 " ;;
+esac
 
 case $arch in
 aix5)
@@ -194,7 +192,7 @@ solaris64CC5)
    ;;
 linux)
    # Linux with gcc >= 3.x
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations -m32 -msse -mfpmath=sse "
+   auxcflags="${cxxversionflag} -m32 -msse -mfpmath=sse "
    auxldflags="-m32 -msse -mfpmath=sse "
    auxlibs="-lm -ldl -rdynamic"
    ;;
@@ -205,24 +203,19 @@ linuxicc)
    ;;
 linuxppcgcc)
    # PPC Linux with gcc
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations -fsigned-char -I/usr/X11/include"
+   auxcflags="${cxxversionflag} -m32 -fsigned-char"
+   auxldflags="-m32"
    auxlibs="-lm -ldl -rdynamic"
    ;;
 linuxppc64gcc)
-   # PPC64 (64 bit mode) Linux with gcc 3.x
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations -m64 -fsigned-char"
-   auxldflags="-m64"
-   auxlibs="-lm -ldl -rdynamic"
-   ;;
-ppc64le)
-   # PPC64 (64 bit mode) little endian
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations -m64 -fsigned-char"
+   # PPC64/PPC64LE (64 bit mode) Linux with gcc
+   auxcflags="${cxxversionflag} -m64 -fsigned-char"
    auxldflags="-m64"
    auxlibs="-lm -ldl -rdynamic"
    ;;
 linuxx8664gcc)
    # AMD Opteron and Intel EM64T (64 bit mode) Linux with gcc 3.x
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations -m64"
+   auxcflags="${cxxversionflag} -m64"
    auxldflags="-m64"
    auxlibs="-lm -ldl -rdynamic"
    ;;
@@ -238,7 +231,7 @@ linuxx8664k1omicc)
    ;;
 linuxx32gcc)
    # x32 ABI (64 bit mode with 32 bit pointers) Linux with gcc > 4.7
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations -mx32"
+   auxcflags="${cxxversionflag} -mx32"
    auxldflags="-mx32"
    auxlibs="-lm -ldl -rdynamic"
    ;;
@@ -252,24 +245,36 @@ linuxarm64)
    auxcflags="${cxxversionflag} -fsigned-char"
    auxlibs="-lm -ldl -rdynamic"
    ;;
+linuxs390gcc)
+   # s390 (31 bit mode) Linux with gcc
+   auxcflags="${cxxversionflag} -m31 -fsigned-char"
+   auxldflags="-m31"
+   auxlibs="-lm -ldl -rdynamic"
+   ;;
+linuxs390xgcc)
+   # s390x (64 bit mode) Linux with gcc
+   auxcflags="${cxxversionflag} -m64 -fsigned-char"
+   auxldflags="-m64"
+   auxlibs="-lm -ldl -rdynamic"
+   ;;
 freebsd)
    # FreeBSD with libc5
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations"
+   auxcflags="${cxxversionflag}"
    auxlibs="-lm -lg++"
    ;;
 freebsd4)
    # FreeBSD 4 with glibc
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations"
+   auxcflags="${cxxversionflag}"
    auxlibs="-lm -lstdc++"
    ;;
 freebsd5|freebsd7)
    # FreeBSD 5/7 with glibc
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations"
+   auxcflags="${cxxversionflag}"
    auxlibs="-lm -lstdc++"
    ;;
 openbsd)
    # OpenBSD with libc
-   auxcflags="${cxxversionflag} -Wno-deprecated-declarations"
+   auxcflags="${cxxversionflag}"
    auxlibs="-lm -lstdc++"
    ;;
 macosx)
@@ -312,11 +317,6 @@ macosx64)
    fi
    auxcflags="${cxxversionflag} -m64"
    auxldflags="-m64"
-   auxlibs="-lm -ldl"
-   ;;
-ios*)
-   auxcflags="${cxxversionflag} -m32"
-   auxldflags="-m32"
    auxlibs="-lm -ldl"
    ;;
 hiux)
@@ -428,6 +428,7 @@ auxcflags="$auxcflags @usercflags@"
 
 ### end of machine and compiler dependent settings ###
 
+srcdir=@top_srcdir@
 prefix=@prefix@
 if test "$platform" = "win32" && test "$prefix" != ""; then
    prefix=`cygpath -u $prefix`
@@ -443,8 +444,8 @@ noldflags=no
 
 usage="\
 Usage: root-config [--prefix[=DIR]] [--exec-prefix[=DIR]] [--version]\
- [--cflags] [--auxcflags] [--ldflags] [--new] [--nonew] [--libs]\
- [--glibs] [--evelibs] [--bindir] [--libdir] [--incdir] [--etcdir]\
+ [--cflags] [--auxcflags] [--ldflags] [--new] [--nonew] [--libs] [--glibs]\
+ [--evelibs] [--bindir] [--libdir] [--incdir] [--etcdir] [--srcdir]\
  [--noauxcflags] [--noauxlibs] [--noldflags] [--has-<feature>] [--arch]\
  [--platform] [--config] [--features] [--ncpu] [--git-revision]\
  [--python-version] [--cc] [--cxx] [--f77] [--ld ] [--help]"
@@ -741,6 +742,10 @@ while test $# -gt 0; do
       ### output the etc directory
       out="$out $etcdir"
       ;;
+    --srcdir)
+      ### output the src directory
+      out="$out $srcdir"
+      ;;
     --config)
       ### output the configure arguments
       out="$out $configargs"
@@ -805,13 +810,14 @@ while test $# -gt 0; do
       echo "  --libdir              Print the library directory"
       echo "  --incdir              Print the header directory"
       echo "  --etcdir              Print the configuration directory"
+      echo "  --srcdir              Print the top of the original source directory"
       echo "  --auxlibs             Print auxiliary libraries"
       echo "  --auxcflags           Print auxiliary compiler flags"
       echo "  --[no]new             Turn on[off] use of libNew.so"
       echo "  --noauxlibs           Do not print auxiliary/system libraries"
       echo "  --noauxcflags         Do not print auxiliary compiler flags"
       echo "  --noldflags           Do not print linker flags"
-      echo "  --config              Print arguments used for ./configure"
+      echo "  --config              Print arguments used for configuration with CMake"
       echo "  --features            Print list of all supported features"
       echo "  --has-<feature>       Test if <feature> is compiled in"
       echo "  --version             Print the ROOT version"

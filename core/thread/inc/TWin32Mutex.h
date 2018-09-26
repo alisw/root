@@ -21,9 +21,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMutexImp
 #include "TMutexImp.h"
-#endif
 
 #include "Windows4Root.h"
 
@@ -37,6 +35,8 @@ friend class TWin32Condition;
 
 private:
    CRITICAL_SECTION fCritSect;
+
+   enum EStatusBits { kIsRecursive = BIT(14) };
 
 public:
    TWin32Mutex(Bool_t recursive=kFALSE);

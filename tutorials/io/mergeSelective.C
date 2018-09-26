@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_io
+/// \notebook -nodraw
 /// Merge only part of the content of a set of files.
 /// This macro demonstrates how to merge only a part of the content of a set
 /// of input files, specified via the interface.
@@ -17,8 +18,8 @@
 ///
 /// 2. kSkipListed: via <tt>TFileMerger::PartialMerge(kSkipListed)</tt>
 ///    This will skip merging of specified objects. If a folder is specified, its
-///    whole content will be skipped.
-///
+///    whole content will be skipped. 
+/// 
 /// Important note: the kOnlyListed and kSkipListed flags have to be bitwise OR-ed
 /// on top of the merging defaults: kAll | kIncremental (as in the example)
 ///
@@ -48,7 +49,7 @@ void mergeSelective(Int_t nfiles=5)
    // Create the files to be merged
    TStopwatch timer;
    timer.Start();
-   TString tutdir = gROOT->GetTutorialsDir();
+   TString tutdir = gROOT->GetTutorialDir();
    if (gROOT->LoadMacro(tutdir + "/hsimple.C")) return;
    Int_t i;
    for (i=0; i<nfiles; i++) CreateFile(Form("tomerge%03d.root",i));

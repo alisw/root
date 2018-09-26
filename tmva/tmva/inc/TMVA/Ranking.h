@@ -38,9 +38,7 @@
 
 #include <vector>
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 namespace TMVA {
 
@@ -70,7 +68,7 @@ namespace TMVA {
       mutable MsgLogger*      fLogger;                   //! message logger
       MsgLogger& Log() const { return *fLogger; }                       
 
-      ClassDef(Ranking,0) // Method-specific ranking for input variables 
+      ClassDef(Ranking,0); // Method-specific ranking for input variables 
    };
 
    // --------------------------------------------------------------------------

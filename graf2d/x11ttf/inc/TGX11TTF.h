@@ -14,29 +14,11 @@
 #define ROOT_TGX11TTF
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGX11TTF                                                             //
-//                                                                      //
-// Interface to low level X11 (Xlib). This class gives access to basic  //
-// X11 graphics via the parent class TGX11. However, all text and font  //
-// handling is done via the Freetype TrueType library. When the         //
-// shared library containing this class is loaded the global gVirtualX  //
-// is redirected to point to this class.                                //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TGX11
 #include "TGX11.h"
-#endif
 
-#ifndef ROOT_TTF
 #include "TTF.h"
-#endif
 
-#ifndef ROOT_RConfigure
 #include "RConfigure.h"
-#endif
 
 #ifdef R__HAS_XFT
 class TXftFontHash;
@@ -48,9 +30,9 @@ private:
    enum EAlign { kNone, kTLeft, kTCenter, kTRight, kMLeft, kMCenter, kMRight,
                         kBLeft, kBCenter, kBRight };
 
-   FT_Vector   fAlign;                 // alignment vector
+   FT_Vector   fAlign;                 ///< alignment vector
 #ifdef R__HAS_XFT
-   TXftFontHash  *fXftFontHash;        // hash table for Xft fonts
+   TXftFontHash  *fXftFontHash;        ///< hash table for Xft fonts
 #endif
 
    void     Align(void);

@@ -12,36 +12,16 @@
 #ifndef ROOT_TFilePrefetch
 #define ROOT_TFilePrefetch
 
-#ifndef ROOT_TFile
 #include "TFile.h"
-#endif
-#ifndef ROOT_TThread
 #include "TThread.h"
-#endif
-#ifndef ROOT_TFPBlock
 #include "TFPBlock.h"
-#endif
-#ifndef ROOT_TSemaphore
 #include "TSemaphore.h"
-#endif
-#ifndef ROOT_TMD5
 #include "TMD5.h"
-#endif
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TObjString
 #include "TObjString.h"
-#endif
-#ifndef ROOT_TObjArray
 #include "TObjArray.h"
-#endif
-#ifndef ROOT_TStopwatch
 #include "TStopwatch.h"
-#endif
 
 #include <atomic>
 #include <condition_variable>
@@ -94,7 +74,7 @@ public:
    Bool_t    BinarySearchReadList(TFPBlock*, Long64_t, Int_t, Int_t*);
    Long64_t  GetWaitTime();
 
-   void      SetFile(TFile*);
+   void      SetFile(TFile* file, TFile::ECacheAction action = TFile::kDisconnect);
    std::condition_variable &GetCondNewBlock() { return fNewBlockAdded; };
    void      WaitFinishPrefetch();
    Bool_t    IsPrefetchFinished() const { return fPrefetchFinished; }

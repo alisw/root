@@ -10,13 +10,16 @@
  *************************************************************************/
 
 /** \class TAtt3D
+\ingroup Base
+\ingroup GraphicsAtt
+
 Use this attribute class when an object should have 3D capabilities.
 */
 
 #include "TAtt3D.h"
 
 
-ClassImp(TAtt3D)
+ClassImp(TAtt3D);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Set total size of this 3D object (used by X3D interface).

@@ -377,18 +377,26 @@ int XrdROOTMgr::Config(bool rcf)
                delete (*tri);
                tri = fROOT.erase(tri);
             } else {
-               tri++;
+               ++tri;
             }
          }
       }
    } else {
       // Check the ROOT dirs
       if (fROOT.size() <= 0) {
+         XrdOucString dir, bd, ld, id, dd;
 #ifdef R__HAVE_CONFIG
-         XrdOucString dir(ROOTPREFIX), bd(ROOTBINDIR), ld(ROOTLIBDIR),
-                      id(ROOTINCDIR), dd(ROOTDATADIR);
-#else
-         XrdOucString dir(getenv("ROOTSYS")), bd, ld, id, dd;
+         if (getenv("ROOTIGNOREPREFIX"))
+#endif
+            dir = getenv("ROOTSYS");
+#ifdef R__HAVE_CONFIG
+         else {
+            dir = ROOTPREFIX;
+            bd = ROOTBINDIR;
+            ld = ROOTLIBDIR;
+            id = ROOTINCDIR;
+            dd = ROOTDATADIR;
+         }
 #endif
          // None defined: use ROOTSYS as default, if any; otherwise we fail
          if (dir.length() > 0) {
@@ -479,7 +487,7 @@ int XrdROOTMgr::DoDirectiveRootSys(char *val, XrdOucStream *cfg, bool)
                                    a[1].c_str(), a[2].c_str(), a[3].c_str());
       // Check if already validated
       std::list<XrdROOT *>::iterator ori;
-      for (ori = fROOT.begin(); ori != fROOT.end(); ori++) {
+      for (ori = fROOT.begin(); ori != fROOT.end(); ++ori) {
          if ((*ori)->Match(rootc->Dir(), rootc->Tag())) {
             if ((*ori)->IsParked()) {
                (*ori)->SetValid();

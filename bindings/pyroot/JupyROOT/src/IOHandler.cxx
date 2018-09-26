@@ -1,7 +1,20 @@
 // Author: Danilo Piparo, Omar Zapata   16/12/2015
 
-#include <unistd.h>
 #include <fcntl.h>
+#ifdef _MSC_VER // Visual Studio
+#include <winsock2.h>
+#include <io.h>
+#pragma comment(lib, "Ws2_32.lib")
+#define pipe(fds) _pipe(fds, 1048575, _O_BINARY)
+#define read _read
+#define dup _dup
+#define dup2 _dup2
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+#else
+#include <unistd.h>
+#endif
 #include <string>
 #include <iostream>
 #include "TInterpreter.h"
@@ -14,10 +27,10 @@ private:
    bool fCapturing = false;
    std::string fStdoutpipe;
    std::string fStderrpipe;
-   int fStdout_pipe[2];
-   int fStderr_pipe[2];
-   int fSaved_stderr;
-   int fSaved_stdout;
+   int fStdout_pipe[2] = {0,0};
+   int fStderr_pipe[2] = {0,0};
+   int fSaved_stderr = 0;
+   int fSaved_stdout = 0;
 public:
    JupyROOTExecutorHandler();
    void Poll();
@@ -66,10 +79,16 @@ static void InitCaptureImpl(int &savedStdStream, int *pipeHandle, int FILENO)
    if (pipe(pipeHandle) != 0) {
       return;
    }
+#ifdef _MSC_VER // Visual Studio
+   unsigned long mode = 1;
+   ioctlsocket(pipeHandle[0], FIONBIO, &mode);
+#else
    long flags_stdout = fcntl(pipeHandle[0], F_GETFL);
+   if (flags_stdout == -1) return;
    flags_stdout |= O_NONBLOCK;
    fcntl(pipeHandle[0], F_SETFL, flags_stdout);
    fcntl(pipeHandle[0], F_SETPIPE_SZ, MAX_PIPE_SIZE);
+#endif
    dup2(pipeHandle[1], FILENO);
    close(pipeHandle[1]);
 }
@@ -166,7 +185,7 @@ extern "C" {
       if (!JupyROOTExecutorHandler_ptr) {
          JupyROOTExecutorHandler_ptr = new JupyROOTExecutorHandler();
          // Fixes for ROOT-7999
-         gInterpreter->ProcessLine("SetErrorHandler((ErrorHandlerFunc_t)&DefaultErrorHandler)");
+         gInterpreter->ProcessLine("SetErrorHandler((ErrorHandlerFunc_t)&DefaultErrorHandler);");
       }
    }
 

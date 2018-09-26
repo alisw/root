@@ -12,18 +12,28 @@
 #ifndef ROOT_TMPWorker
 #define ROOT_TMPWorker
 
-#include "TSysEvtHandler.h" //TFileHandler
+#include "MPCode.h"
 #include "MPSendRecv.h" //MPCodeBufPair
-#include <unistd.h> //pid_t
+#include "PoolUtils.h"
+#include "TSysEvtHandler.h" //TFileHandler
+
 #include <memory> //unique_ptr
+#include <string>
+#include <sstream>
+#include <type_traits> //std::result_of
+#include <unistd.h> //pid_t
 
 class TMPWorker {
    /// \cond
    ClassDef(TMPWorker, 0);
    /// \endcond
 public:
-   TMPWorker();
-   virtual ~TMPWorker() {};
+   TMPWorker() : fNWorkers(0), fMaxNEntries(0),
+                 fProcessedEntries(0), fS(), fPid(0), fNWorker(0) { }
+   TMPWorker(unsigned nWorkers, ULong64_t maxEntries)
+               : fNWorkers(nWorkers), fMaxNEntries(maxEntries),
+                 fProcessedEntries(0), fS(), fPid(0), fNWorker(0) { }
+   virtual ~TMPWorker() { }
    //it doesn't make sense to copy a TMPWorker (each one has a uniq_ptr to its socket)
    TMPWorker(const TMPWorker &) = delete;
    TMPWorker &operator=(const TMPWorker &) = delete;
@@ -34,6 +44,13 @@ public:
    pid_t GetPid() { return fPid; }
    unsigned GetNWorker() const { return fNWorker; }
 
+protected:
+   std::string fId; ///< identifier string in the form W<nwrk>|P<proc id>
+   unsigned fNWorkers; ///< the number of workers spawned
+   ULong64_t fMaxNEntries; ///< the maximum number of entries to be processed by this worker
+   ULong64_t fProcessedEntries; ///< the number of entries processed by this worker so far
+
+   void   SendError(const std::string& errmsg, unsigned int code = MPCode::kError);
 
 private:
    virtual void HandleInput(MPCodeBufPair &msg);

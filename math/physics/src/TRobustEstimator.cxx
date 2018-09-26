@@ -94,13 +94,12 @@ Technical details of the algorithm:
 */
 
 #include "TRobustEstimator.h"
+#include "TMatrixDSymEigen.h"
 #include "TRandom.h"
 #include "TMath.h"
-#include "TH1D.h"
-#include "TPaveLabel.h"
 #include "TDecompChol.h"
 
-ClassImp(TRobustEstimator)
+ClassImp(TRobustEstimator);
 
 const Double_t kChiMedian[50]= {
          0.454937, 1.38629, 2.36597, 3.35670, 4.35146, 5.34812, 6.34581, 7.34412, 8.34283,

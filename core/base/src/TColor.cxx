@@ -20,9 +20,10 @@
 #include "TError.h"
 #include "TMathBase.h"
 #include "TApplication.h"
+#include <algorithm>
 #include <cmath>
 
-ClassImp(TColor)
+ClassImp(TColor);
 
 namespace {
    static Bool_t& TColor__GrayScaleMode() {
@@ -39,7 +40,10 @@ namespace {
    }
 }
 
-static Int_t gHighestColorIndex = 0;
+static Int_t   gHighestColorIndex = 0;   ///< Highest color index defined
+static Float_t gColorThreshold    = -1.; ///< Color threshold used by GetColor
+static Int_t   gDefinedColors     = 0;   ///< Number of defined colors.
+static Int_t   gLastDefinedColors = 649; ///< Previous number of defined colors
 
 #define fgGrayscaleMode TColor__GrayScaleMode()
 #define fgPalette TColor__Palette()
@@ -48,6 +52,9 @@ static Int_t gHighestColorIndex = 0;
 using std::floor;
 
 /** \class TColor
+\ingroup Base
+\ingroup GraphicsAtt
+
 The color creation and management class.
 
   - [Introduction](#C00)
@@ -57,6 +64,7 @@ The color creation and management class.
   - [Gray scale view of of canvas with colors](#C04)
   - [Color palettes](#C05)
   - [High quality predefined palettes](#C06)
+  - [Palette inversion](#C061)
   - [Color transparency](#C07)
 
 ## <a name="C00"></a> Introduction
@@ -83,6 +91,15 @@ A new color can be created the following way:
 
 ~~~ {.cpp}
    Int_t ci = 1756; // color index
+   TColor *color = new TColor(ci, 0.1, 0.2, 0.3);
+~~~
+
+\since **6.07/07:**
+TColor::GetFreeColorIndex() allows to make sure the new color is created with an
+unused color index:
+
+~~~ {.cpp}
+   Int_t ci = TColor::GetFreeColorIndex();
    TColor *color = new TColor(ci, 0.1, 0.2, 0.3);
 ~~~
 
@@ -121,6 +138,7 @@ Each color chip is identified by a mnemonic (e.g. kYellow) and a number.
 The keywords, kRed, kBlue, kYellow, kPink, etc are defined in the header file
 Rtypes.h that is included in all ROOT other header files. It is better
 to use these keywords in user code instead of hardcoded color numbers, e.g.:
+
 ~~~ {.cpp}
    myObject.SetFillColor(kRed);
    myObject.SetFillColor(kYellow-10);
@@ -130,10 +148,29 @@ to use these keywords in user code instead of hardcoded color numbers, e.g.:
 Begin_Macro(source)
 {
    TColorWheel *w = new TColorWheel();
+   cw = new TCanvas("cw","cw",0,0,400,400);
+   w->SetCanvas(cw);
    w->Draw();
-   return w->GetCanvas();
 }
 End_Macro
+
+The complete list of predefined color names is the following:
+
+~~~ {.cpp}
+kWhite  = 0,   kBlack  = 1,   kGray    = 920,  kRed    = 632,  kGreen  = 416,
+kBlue   = 600, kYellow = 400, kMagenta = 616,  kCyan   = 432,  kOrange = 800,
+kSpring = 820, kTeal   = 840, kAzure   =  860, kViolet = 880,  kPink   = 900
+~~~
+
+Note the special role of color `kWhite` (color number 0). It is the default
+background color also. For instance in a PDF or PS files (as paper is usually white)
+it is simply not painted. To have a white color behaving like the other color the
+simplest is to define an other white color not attached to the color index 0:
+
+~~~ {.cpp}
+   Int_t ci = TColor::GetFreeColorIndex();
+   TColor *color = new TColor(ci, 1., 1., 1.);
+~~~
 
 ## <a name="C03"></a> Bright and dark colors
 The dark and bright color are used to give 3-D effects when drawing various
@@ -159,11 +196,10 @@ image below shows the ROOT color wheel in grayscale mode.
 Begin_Macro(source)
 {
    TColorWheel *w = new TColorWheel();
+   cw = new TCanvas("cw","cw",0,0,400,400);
+   cw->GetCanvas()->SetGrayscale();
+   w->SetCanvas(cw);
    w->Draw();
-   w->GetCanvas()->SetGrayscale();
-   w->GetCanvas()->Modified();
-   w->GetCanvas()->Update();
-   return w->GetCanvas();
 }
 End_Macro
 
@@ -229,11 +265,11 @@ To store a palette in an array it is enough to do:
 
 ~~~ {.cpp}
    Int_t MyPalette[100];
-   Double_t r[]    = {0., 0.0, 1.0, 1.0, 1.0};
-   Double_t g[]    = {0., 0.0, 0.0, 1.0, 1.0};
-   Double_t b[]    = {0., 1.0, 0.0, 0.0, 1.0};
-   Double_t stop[] = {0., .25, .50, .75, 1.0};
-   Int_t FI = TColor::CreateGradientColorTable(5, stop, r, g, b, 100);
+   Double_t Red[]    = {0., 0.0, 1.0, 1.0, 1.0};
+   Double_t Green[]  = {0., 0.0, 0.0, 1.0, 1.0};
+   Double_t Blue[]   = {0., 1.0, 0.0, 0.0, 1.0};
+   Double_t Length[] = {0., .25, .50, .75, 1.0};
+   Int_t FI = TColor::CreateGradientColorTable(5, Length, Red, Green, Blue, 100);
    for (int i=0;i<100;i++) MyPalette[i] = FI+i;
 ~~~
 
@@ -280,7 +316,7 @@ kSienna=99,           kSolar=100,       kSouthWest=101,
 kStarryNight=102,     kSunset=103,      kTemperatureMap=104,
 kThermometer=105,     kValentine=106,   kVisibleSpectrum=107,
 kWaterMelon=108,      kCool=109,        kCopper=110,
-kGistEarth=111,       kViridis=112
+kGistEarth=111,       kViridis=112,     kCividis=113
 ~~~
 
 <table border=0>
@@ -862,8 +898,31 @@ Begin_Macro
    f2->Draw("surf2Z"); f2->SetTitle("kViridis");
 }
 End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCividis);
+   f2->Draw("surf2Z"); f2->SetTitle("kCividis");
+}
+End_Macro
 </td></tr>
 </table>
+
+## <a name="C061"></a> Palette inversion
+Once a palette is defined, it is possible to invert the color order thanks to the
+method TColor::InvertPalette. The top of the palette becomes the bottom and vice versa.
+
+Begin_Macro(source)
+{
+   auto c  = new TCanvas("c","c",0,0,600,400);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCherry);
+   TColor::InvertPalette();
+   f2->Draw("surf2Z"); f2->SetTitle("kCherry inverted");
+}
+End_Macro
 
 ## <a name="C07"></a> Color transparency
 To make a graphics object transparent it is enough to set its color to a
@@ -884,7 +943,7 @@ A new color can be created transparent the following way:
 ~~~
 
 An example of transparency usage with parallel coordinates can be found
-in `$ROOTSYS/tutorials/tree/parallelcoordtrans.C`.
+in parallelcoordtrans.C.
 
 To ease the creation of a transparent color the static method
 `GetColorTransparent(Int_t color, Float_t a)` is provided.
@@ -910,7 +969,13 @@ itself remains fully opaque.
 The transparency is available on all platforms when the flag `OpenGL.CanvasPreferGL` is set to `1`
 in `$ROOTSYS/etc/system.rootrc`, or on Mac with the Cocoa backend. On the file output
 it is visible with PDF, PNG, Gif, JPEG, SVG ... but not PostScript.
- */
+The following macro gives an example of transparency usage:
+
+Begin_Macro(source)
+../../../tutorials/graphics/transparency.C
+End_Macro
+
+*/
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
@@ -963,6 +1028,7 @@ TColor::TColor(Int_t color, Float_t r, Float_t g, Float_t b, const char *name,
    // fill color structure
    SetRGB(r, g, b);
    fAlpha = a;
+   gDefinedColors++;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -978,10 +1044,12 @@ TColor::TColor(Float_t r, Float_t g, Float_t b, Float_t a): TNamed("","")
    fGreen  = g;
    fBlue   = b;
    fAlpha  = a;
+   RGBtoHLS(r, g, b, fHue, fLight, fSaturation);
 
    // enter in the list of colors
    TObjArray *lcolors = (TObjArray*)gROOT->GetListOfColors();
    lcolors->AddAtAndExpand(this, fNumber);
+   gDefinedColors++;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1092,7 +1160,7 @@ void TColor::InitializeColors()
       Float_t  hue;
       Float_t r=0., g=0., b=0., h, l, s;
 
-      for (i=0 ; i<maxPretty ; i++) {
+      for (i=0 ; i<maxPretty-1 ; i++) {
          hue = maxHue-(i+1)*((maxHue-minHue)/maxPretty);
          TColor::HLStoRGB(hue, lightness, saturation, r, g, b);
          new TColor(i+51, r, g, b);
@@ -1104,9 +1172,9 @@ void TColor::InitializeColors()
          s0 = gROOT->GetColor(i);
          if (s0) s0->GetRGB(r,g,b);
          if (i == 1) { r = 0.6; g = 0.6; b = 0.6; }
-         if (r == 1) r = 0.9; if (r == 0) r = 0.1;
-         if (g == 1) g = 0.9; if (g == 0) g = 0.1;
-         if (b == 1) b = 0.9; if (b == 0) b = 0.1;
+         if (r == 1) r = 0.9; else if (r == 0) r = 0.1;
+         if (g == 1) g = 0.9; else if (g == 0) g = 0.1;
+         if (b == 1) b = 0.9; else if (b == 0) b = 0.1;
          TColor::RGBtoHLS(r,g,b,h,l,s);
          TColor::HLStoRGB(h,0.6*l,s,r,g,b);
          new TColor(200+4*i-3,r,g,b);
@@ -1323,11 +1391,33 @@ Int_t TColor::GetColorPalette(Int_t i)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function returning the current active palette.
+
+const TArrayI& TColor::GetPalette()
+{
+   return fgPalette;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Static function returning number of colors in the color palette.
 
 Int_t TColor::GetNumberOfColors()
 {
    return fgPalette.fN;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Static function returning kTRUE if some new colors have been defined after
+/// initialisation or since the last call to this method. This allows to avoid
+/// the colors and palette streaming in TCanvas::Streamer if not needed.
+
+Bool_t TColor::DefinedColors()
+{
+   // After initialization gDefinedColors == 649. If it is bigger it means some new
+   // colors have been defined
+   Bool_t hasChanged = (gDefinedColors - gLastDefinedColors) > 50;
+   gLastDefinedColors = gDefinedColors;
+   return hasChanged;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1358,9 +1448,9 @@ void TColor::HLS2RGB(Float_t hue, Float_t light, Float_t satur,
 
    Float_t rh, rl, rs, rm1, rm2;
    rh = rl = rs = 0;
-   if (hue   > 0) rh = hue;   if (rh > 360) rh = 360;
-   if (light > 0) rl = light; if (rl > 1)   rl = 1;
-   if (satur > 0) rs = satur; if (rs > 1)   rs = 1;
+   if (hue   > 0) { rh = hue;   if (rh > 360) rh = 360; }
+   if (light > 0) { rl = light; if (rl > 1)   rl = 1; }
+   if (satur > 0) { rs = satur; if (rs > 1)   rs = 1; }
 
    if (rl <= 0.5)
       rm2 = rl*(1.0 + rs);
@@ -1498,9 +1588,9 @@ void TColor::RGB2HLS(Float_t rr, Float_t gg, Float_t bb,
    Float_t rnorm, gnorm, bnorm, minval, maxval, msum, mdiff, r, g, b;
    minval = maxval =0 ;
    r = g = b = 0;
-   if (rr > 0) r = rr; if (r > 1) r = 1;
-   if (gg > 0) g = gg; if (g > 1) g = 1;
-   if (bb > 0) b = bb; if (b > 1) b = 1;
+   if (rr > 0) { r = rr; if (r > 1) r = 1; }
+   if (gg > 0) { g = gg; if (g > 1) g = 1; }
+   if (bb > 0) { b = bb; if (b > 1) b = 1; }
 
    minval = r;
    if (g < minval) minval = g;
@@ -1644,6 +1734,7 @@ void TColor::SetRGB(Float_t r, Float_t g, Float_t b)
       if (nplanes > 8) light->SetRGB(lr, lg, lb);
       else             light->SetRGB(0.8,0.8,0.8);
    }
+   gDefinedColors++;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1708,6 +1799,35 @@ Int_t TColor::GetColor(ULong_t pixel)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// This method specifies the color threshold used by GetColor to retrieve a color.
+///
+/// \param[in] t   Color threshold. By default is equal to 1./31. or 1./255.
+///                depending on the number of available color planes.
+///
+/// When GetColor is called, it scans the defined colors and compare them to the
+/// requested color.
+/// If the Red Green and Blue values passed to GetColor are Rr Gr Br
+/// and Rd Gd Bd the values of a defined color. These two colors are considered equal
+/// if (abs(Rr-Rd) < t  & abs(Br-Bd) < t & abs(Br-Bd) < t). If this test passes,
+/// the color defined by Rd Gd Bd is returned by GetColor.
+///
+/// To make sure GetColor will return a color having exactly the requested
+/// R G B values it is enough to specify a nul :
+/// ~~~ {.cpp}
+///   TColor::SetColorThreshold(0.);
+/// ~~~
+///
+/// To reset the color threshold to its default value it is enough to do:
+/// ~~~ {.cpp}
+///   TColor::SetColorThreshold(-1.);
+/// ~~~
+
+void TColor::SetColorThreshold(Float_t t)
+{
+   gColorThreshold = t;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Static method returning color number for color specified by
 /// r, g and b. The r,g,b should be in the range [0,255].
 /// If the specified color does not exist it will be created
@@ -1730,7 +1850,7 @@ Int_t TColor::GetColor(Int_t r, Int_t g, Int_t b)
    TColor *color = 0;
 
    // Look for color by name
-   if ((color = (TColor*)colors->FindObject(Form("#%02x%02x%02x", r, g, b))))
+   if ((color = (TColor*) colors->FindObject(Form("#%02x%02x%02x", r, g, b))))
       // We found the color by name, so we use that right away
       return color->GetNumber();
 
@@ -1741,21 +1861,21 @@ Int_t TColor::GetColor(Int_t r, Int_t g, Int_t b)
 
    TIter next(colors);
 
-   Int_t nplanes = 16;
-   Float_t thres = 1.0/31.0;   // 5 bits per color : 0 - 0x1F !
-   if (gVirtualX) gVirtualX->GetPlanes(nplanes);
-   if (nplanes >= 24)
-      thres = 1.0/255.0;       // 8 bits per color : 0 - 0xFF !
+   Float_t thres;
+   if (gColorThreshold >= 0) {
+      thres = gColorThreshold;
+   } else {
+      Int_t nplanes = 16;
+      thres = 1.0/31.0;   // 5 bits per color : 0 - 0x1F !
+      if (gVirtualX) gVirtualX->GetPlanes(nplanes);
+      if (nplanes >= 24) thres = 1.0/255.0;       // 8 bits per color : 0 - 0xFF !
+   }
 
    // Loop over all defined colors
    while ((color = (TColor*)next())) {
-      if (TMath::Abs(color->GetRed() - rr) > thres)
-         continue;
-      if (TMath::Abs(color->GetGreen() - gg) > thres)
-         continue;
-      if (TMath::Abs(color->GetBlue() - bb) > thres)
-         continue;
-
+      if (TMath::Abs(color->GetRed() - rr) > thres)   continue;
+      if (TMath::Abs(color->GetGreen() - gg) > thres) continue;
+      if (TMath::Abs(color->GetBlue() - bb) > thres)  continue;
       // We found a matching color in the color table
       return color->GetNumber();
    }
@@ -1852,6 +1972,20 @@ Int_t TColor::GetColorTransparent(Int_t n, Float_t a)
       ::Error("TColor::GetColorTransparent", "color with index %d not defined", n);
       return -1;
    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Static function: Returns a free color index which can be used to define
+/// a user custom color.
+///
+/// ~~~ {.cpp}
+///   Int_t ci = TColor::GetFreeColorIndex();
+///   TColor *color = new TColor(ci, 0.1, 0.2, 0.3);
+/// ~~~
+
+Int_t TColor::GetFreeColorIndex()
+{
+   return gHighestColorIndex+1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2220,6 +2354,7 @@ Int_t TColor::CreateGradientColorTable(UInt_t Number, Double_t* Stops,
 /// if ncolors = 110 and colors=0, a Copper palette is used.
 /// if ncolors = 111 and colors=0, a Gist Earth palette is used.
 /// if ncolors = 112 and colors=0, a Viridis palette is used.
+/// if ncolors = 113 and colors=0, a Cividis palette is used.
 /// ~~~
 /// These palettes can also be accessed by names:
 /// ~~~ {.cpp}
@@ -2243,7 +2378,7 @@ Int_t TColor::CreateGradientColorTable(UInt_t Number, Double_t* Stops,
 /// kStarryNight=102,     kSunset=103,      kTemperatureMap=104,
 /// kThermometer=105,     kValentine=106,   kVisibleSpectrum=107,
 /// kWaterMelon=108,      kCool=109,        kCopper=110,
-/// kGistEarth=111        kViridis=112
+/// kGistEarth=111        kViridis=112,     kCividis=113
 /// ~~~
 /// For example:
 /// ~~~ {.cpp}
@@ -2285,7 +2420,8 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
    if (ncolors == 1 && colors == 0) {
       ncolors = 50;
       fgPalette.Set(ncolors);
-      for (i=0;i<ncolors;i++) fgPalette.fArray[i] = 51+i;
+      for (i=0;i<ncolors-1;i++) fgPalette.fArray[i] = 51+i;
+      fgPalette.fArray[ncolors-1] = kRed; // the last color of this palette is red
       paletteType = 2;
       return;
    }
@@ -2293,7 +2429,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
    // High quality palettes (255 levels)
    if (colors == 0 && ncolors>50) {
 
-      if (!fgPalettesList.fN) fgPalettesList.Set(62);        // Right now 62 high quality palettes
+      if (!fgPalettesList.fN) fgPalettesList.Set(63);        // Right now 63 high quality palettes
       Int_t Idx = (Int_t)fgPalettesList.fArray[ncolors-51];  // High quality palettes indices start at 51
 
       // This high quality palette has already been created. Reuse it.
@@ -2941,6 +3077,16 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
          }
          break;
 
+      // Cividis
+      case 113:
+         {
+            Double_t red[9]   = {  0./255.,   5./255.,  65./255.,  97./255., 124./255., 156./255., 189./255., 224./255., 255./255.};
+            Double_t green[9] = { 32./255.,  54./255.,  77./255., 100./255., 123./255., 148./255., 175./255., 203./255., 234./255.};
+            Double_t blue[9]  = { 77./255., 110./255., 107./255., 111./255., 120./255., 119./255., 111./255.,  94./255.,  70./255.};
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+         }
+         break;
+
       default:
          ::Error("SetPalette", "Unknown palette number %d", ncolors);
          return;
@@ -2963,3 +3109,12 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
    paletteType = 3;
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+/// Invert the current color palette.
+/// The top of the palette becomes the bottom and vice versa.
+
+void TColor::InvertPalette()
+{
+   std::reverse(fgPalette.fArray, fgPalette.fArray + fgPalette.GetSize());
+}

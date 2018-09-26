@@ -2,7 +2,7 @@ from __future__ import generators
 # @(#)root/pyroot:$Id$
 # Author: Wim Lavrijsen (WLavrijsen@lbl.gov)
 # Created: 02/20/03
-# Last: 03/25/15
+# Last: 09/30/16
 
 """PyROOT user module.
 
@@ -15,13 +15,14 @@ from __future__ import generators
 
 """
 
-__version__ = '8.0.0'
+__version__ = '9.0.0'
 __author__  = 'Wim Lavrijsen (WLavrijsen@lbl.gov)'
 
 
 ### system and interpreter setup ------------------------------------------------
 import os, sys, types
 import cppyy
+
 
 ## there's no version_info in 1.5.2
 if sys.version[0:3] < '2.2':
@@ -30,6 +31,9 @@ if sys.version[0:3] < '2.2':
 ## 2.2 has 10 instructions as default, > 2.3 has 100 ... make same
 if sys.version[0:3] == '2.2':
    sys.setcheckinterval( 100 )
+
+## hooks and other customizations are not used ith iPython
+_is_ipython = hasattr(__builtins__, '__IPYTHON__') or 'IPython' in sys.modules
 
 ## readline support, if available
 try:
@@ -96,35 +100,75 @@ if sys.platform == 'darwin':
 ### load PyROOT C++ extension module, special case for linux and Sun ------------
 _root = cppyy._backend
 
+if 'cppyy' in sys.builtin_module_names:
+   _builtin_cppyy = True
+   PYPY_CPPYY_COMPATIBILITY_FIXME = True
+
+   import warnings
+   warnings.warn( "adding no-ops for: SetMemoryPolicy, SetSignalPolicy, MakeNullPointer" )
+
+ # enable compatibility features (TODO: either breakup libPyROOT or provide
+ # equivalents in pypy/cppyy)
+   def _SetMemoryPolicy( self, policy ):
+      pass
+   _root.__class__.SetMemoryPolicy = _SetMemoryPolicy; del _SetMemoryPolicy
+   _root.kMemoryHeuristics =  8
+   _root.kMemoryStrict     = 16
+
+   def _SetSignalPolicy( self, policy ):
+      pass
+   _root.__class__.SetSignalPolicy = _SetSignalPolicy; del _SetSignalPolicy
+   _root.kSignalFast     = 128
+   _root.kSignalSafe     = 256
+
+   def _MakeNullPointer( self, klass = None ):
+      pass
+   _root.__class__.MakeNullPointer = _MakeNullPointer; del _MakeNullPointer
+
+   def _GetCppGlobal( self, name ):
+      return getattr( self, name )
+   _root.__class__.GetCppGlobal = _GetCppGlobal; del _GetCppGlobal
+
+   _root.__class__.Template = cppyy.Template
+
+   def _SetOwnership( self, obj, owns ):
+      obj._python_owns = owns
+   _root.__class__.SetOwnership = _SetOwnership; del _SetOwnership
+else:
+   _builtin_cppyy = False
+   PYPY_CPPYY_COMPATIBILITY_FIXME = False
+
+
 ## convince 2.2 it's ok to use the expand function
 if sys.version[0:3] == '2.2':
    import copy_reg
    copy_reg.constructor( _root._ObjectProxy__expand__ )
 
-## convince inspect that PyROOT method proxies are possible drop-ins for python
-## methods and classes for pydoc
-import inspect
+if not _builtin_cppyy:
+   ## convince inspect that PyROOT method proxies are possible drop-ins for python
+   ## methods and classes for pydoc
+   import inspect
 
-inspect._old_isfunction = inspect.isfunction
-def isfunction( object ):
-   if type(object) == _root.MethodProxy and not object.im_class:
-      return True
-   return inspect._old_isfunction( object )
-inspect.isfunction = isfunction
+   inspect._old_isfunction = inspect.isfunction
+   def isfunction( object ):
+      if type(object) == _root.MethodProxy and not object.im_class:
+         return True
+      return inspect._old_isfunction( object )
+   inspect.isfunction = isfunction
 
-inspect._old_ismethod = inspect.ismethod
-def ismethod( object ):
-   if type(object) == _root.MethodProxy:
-      return True
-   return inspect._old_ismethod( object )
-inspect.ismethod = ismethod
+   inspect._old_ismethod = inspect.ismethod
+   def ismethod( object ):
+      if type(object) == _root.MethodProxy:
+         return True
+      return inspect._old_ismethod( object )
+   inspect.ismethod = ismethod
 
-del isfunction, ismethod
+   del isfunction, ismethod
 
 
 ### configuration ---------------------------------------------------------------
 class _Configuration( object ):
-   __slots__ = [ 'IgnoreCommandLineOptions', 'StartGuiThread', 'ExposeCppMacros', 
+   __slots__ = [ 'IgnoreCommandLineOptions', 'StartGuiThread', 'ExposeCppMacros',
                  '_gts', 'DisableRootLogon' ]
 
    def __init__( self ):
@@ -180,37 +224,9 @@ _root.std = cppyy.gbl.std
 sys.modules['ROOT.std'] = cppyy.gbl.std
 
 
-### special cases for gPad, gVirtualX (are C++ macro's) -------------------------
-class _ExpandMacroFunction( object ):
-   def __init__( self, klass, func ):
-      c = _root.CreateScopeProxy( klass )
-      self.func = getattr( c, func )
-
-   def __getattr__( self, what ):
-      return getattr( self.__dict__[ 'func' ](), what )
-
-   def __cmp__( self, other ):
-      return cmp( self.func(), other )
-
-   def __nonzero__( self ):
-      if self.func():
-         return True
-      return False
-
-   def __repr__( self ):
-      return repr( self.func() )
-
-   def __str__( self ):
-      return str( self.func() )
-
-_root.gPad         = _ExpandMacroFunction( "TVirtualPad",  "Pad" )
-_root.gVirtualX    = _ExpandMacroFunction( "TVirtualX",    "Instance" )
-_root.gDirectory   = _ExpandMacroFunction( "TDirectory",   "CurrentDirectory" )
-_root.gFile        = _ExpandMacroFunction( "TFile",        "CurrentFile" )
-_root.gInterpreter = _ExpandMacroFunction( "TInterpreter", "Instance" )
-
-
 ### special case pythonization --------------------------------------------------
+
+# TTree iterator
 def _TTree__iter__( self ):
    i = 0
    bytes_read = self.GetEntry(i)
@@ -223,6 +239,149 @@ def _TTree__iter__( self ):
       raise RuntimeError( "TTree I/O error" )
 
 _root.CreateScopeProxy( "TTree" ).__iter__    = _TTree__iter__
+
+# Array interface
+def _proxy__array_interface__(self):
+    getter_array_interface = "_get__array_interface__"
+    if hasattr(self, getter_array_interface):
+        return self._get__array_interface__()
+    else:
+        raise Exception("Class {} does not have method {}.".format(
+            type(self), getter_array_interface))
+
+for pyclass in [
+        "std::vector<{dtype}>",
+        "ROOT::VecOps::RVec<{dtype}>"
+        ]:
+    dtypes = ["float", "double", "int", "unsigned int", "long", "unsigned long"]
+    for dtype in dtypes:
+        class_scope = _root.CreateScopeProxy(pyclass.format(dtype=dtype))
+        class_scope._proxy__array_interface__ = _proxy__array_interface__
+        class_scope.__array_interface__ = property(class_scope._proxy__array_interface__)
+
+# TTree.AsMatrix functionality
+def _TTreeAsMatrix(self, columns=None, exclude=None, dtype="double", return_labels=False):
+    """Read-out the TTree as a numpy array.
+
+    Note that the reading is performed in multiple threads if the implicit
+    multi-threading of ROOT is enabled.
+
+    Parameters:
+        columns: If None return all branches as columns, otherwise specify names in iterable.
+        exclude: Exclude branches from selection.
+        dtype: Set return data-type of numpy array.
+        return_labels: Return additionally to the numpy array the names of the columns.
+
+    Returns:
+        array(, labels): Numpy array(, labels of columns)
+    """
+
+    # Import numpy lazily
+    try:
+        import numpy as np
+    except:
+        raise ImportError("Failed to import numpy during call of TTree.AsMatrix.")
+
+    # Check that tree has entries
+    if self.GetEntries() == 0:
+        raise Exception("Tree {} has no entries.".format(self.GetName()))
+
+    # Get all columns of the tree if no columns are specified
+    if columns is None:
+        columns = [branch.GetName() for branch in self.GetListOfBranches()]
+
+    # Exclude columns
+    if exclude == None:
+        exclude = []
+    columns = [col for col in columns if not col in exclude]
+
+    if not columns:
+        raise Exception("Arguments resulted in no selected branches.")
+
+    # Check validity of branches
+    supported_branch_dtypes = ["Float_t", "Double_t", "Char_t", "UChar_t", "Short_t", "UShort_t",
+            "Int_t", "UInt_t", "Long64_t", "ULong64_t"]
+    col_dtypes = []
+    invalid_cols_notfound = []
+    invalid_cols_dtype = {}
+    invalid_cols_multipleleaves = {}
+    invalid_cols_leafname = {}
+    for col in columns:
+        # Check that column exists
+        branch = self.GetBranch(col)
+        if branch == None:
+            invalid_cols_notfound.append(col)
+            continue
+
+        # Check that the branch has only one leaf with the name of the branch
+        leaves = [leaf.GetName() for leaf in branch.GetListOfLeaves()]
+        if len(leaves) != 1:
+            invalid_cols_multipleleaves[col] = len(leaves)
+            continue
+        if leaves[0] != col:
+            invalid_cols_leafname[col] = len(leaves[0])
+            continue
+
+        # Check that the leaf of the branch has an arithmetic data-type
+        col_dtype = self.GetBranch(col).GetLeaf(col).GetTypeName()
+        col_dtypes.append(col_dtype)
+        if not col_dtype in supported_branch_dtypes:
+            invalid_cols_dtype[col] = col_dtype
+
+    exception_template = "Reading of branch {} is not supported ({})."
+    if invalid_cols_notfound:
+        raise Exception(exception_template.format(invalid_cols_notfound, "branch not existent"))
+    if invalid_cols_multipleleaves:
+        raise Exception(exception_template.format([k for k in invalid_cols_multipleleaves], "branch has multiple leaves"))
+    if invalid_cols_leafname:
+        raise Exception(exception_template.format(
+            [k for k in invalid_cols_leafname], "name of leaf is different from name of branch {}".format(
+                [invalid_cols_leafname[k] for k in invalid_cols_leafname])))
+    if invalid_cols_dtype:
+        raise Exception(exception_template.format(
+            [k for k in invalid_cols_dtype], "branch has unsupported data-type {}".format(
+                [invalid_cols_dtype[k] for k in invalid_cols_dtype])))
+
+    # Check that given data-type is supported
+    supported_output_dtypes = ["int", "unsigned int", "long", "unsigned long", "float", "double"]
+    if not dtype in supported_output_dtypes:
+        raise Exception("Data-type {} is not supported, select from {}.".format(
+            dtype, supported_output_dtypes))
+
+    # Convert columns iterable to std.vector("string")
+    columns_vector = _root.std.vector("string")(len(columns))
+    for i, col in enumerate(columns):
+        columns_vector[i] = col
+
+    # Allocate memory for the read-out
+    flat_matrix = _root.std.vector(dtype)(self.GetEntries()*len(columns))
+
+    # Read the tree as flat std.vector(dtype)
+    tree_ptr = _root.PyROOT.GetAddress(self)
+    columns_vector_ptr = _root.PyROOT.GetAddress(columns_vector)
+    flat_matrix_ptr = _root.PyROOT.GetVectorAddress(dtype)(flat_matrix)
+    jit_code = "PyROOT::TTreeAsFlatMatrixHelper<{dtype}, {col_dtypes}>(*reinterpret_cast<TTree*>({tree_ptr}), *reinterpret_cast<std::vector<{dtype}>* >({flat_matrix_ptr}), *reinterpret_cast<std::vector<string>* >({columns_vector_ptr}));".format(
+            col_dtypes = ", ".join(col_dtypes),
+            dtype = dtype,
+            tree_ptr = tree_ptr,
+            flat_matrix_ptr = flat_matrix_ptr,
+            columns_vector_ptr = columns_vector_ptr)
+    _root.gInterpreter.Calc(jit_code)
+
+    # Convert the std.vector(dtype) to a numpy array by memory-adoption and
+    # reshape the flat array to the correct shape of the matrix
+    flat_matrix_np = np.asarray(flat_matrix)
+    reshaped_matrix_np = np.reshape(flat_matrix_np,
+            (int(len(flat_matrix)/len(columns)), len(columns)))
+
+    if return_labels:
+        return (reshaped_matrix_np, columns)
+    else:
+        return reshaped_matrix_np
+
+# This Pythonisation is there only for 64 bits builds
+if (sys.maxsize > 2**32): # https://docs.python.org/3/library/platform.html#cross-platform
+    _root.CreateScopeProxy( "TTree" ).AsMatrix = _TTreeAsMatrix
 
 
 ### RINT command emulation ------------------------------------------------------
@@ -276,7 +435,8 @@ please use operator[] instead, as in e.g. "mymatrix[i][j] = somevalue".
  # normal exception processing
    _orig_ehook( exctype, value, traceb )
 
-if not '__IPYTHON__' in __builtins__:
+
+if not _is_ipython:
  # IPython has its own ways of executing shell commands etc.
    sys.excepthook = _excepthook
 
@@ -412,7 +572,9 @@ class ModuleFacade( types.ModuleType ):
    def __getattr2( self, name ):             # "running" getattr
     # handle "from ROOT import *" ... can be called multiple times
       if name == '__all__':
-         if '__IPYTHON__' in __builtins__:
+         if sys.hexversion >= 0x3000000:
+            raise ImportError('"from ROOT import *" is not supported in Python 3')
+         if _is_ipython:
             import warnings
             warnings.warn( '"from ROOT import *" is not supported under IPython' )
             # continue anyway, just in case it works ...
@@ -435,7 +597,11 @@ class ModuleFacade( types.ModuleType ):
 
     # lookup into ROOT (which may cause python-side enum/class/global creation)
       try:
-         attr = _root.LookupCppEntity( name, PyConfig.ExposeCppMacros )
+         if PYPY_CPPYY_COMPATIBILITY_FIXME:
+          # TODO: this fails descriptor setting, but may be okay on gbl
+            return getattr( _root, name )
+         else:
+            attr = _root.LookupCppEntity( name, PyConfig.ExposeCppMacros )
          if type(attr) == _root.PropertyProxy:
             setattr( self.__class__, name, attr )      # descriptor
             return getattr( self, name )
@@ -475,16 +641,16 @@ class ModuleFacade( types.ModuleType ):
          sys.argv = []
 
       appc = _root.CreateScopeProxy( 'PyROOT::TPyROOTApplication' )
-      if appc.CreatePyROOTApplication():
-         appc.InitROOTGlobals()
-         # TODO Cling equivalent needed: appc.InitCINTMessageCallback();
-         appc.InitROOTMessageCallback();
+      if (not _builtin_cppyy and appc.CreatePyROOTApplication()) or _builtin_cppyy:
+            appc.InitROOTGlobals()
+            # TODO Cling equivalent needed: appc.InitCINTMessageCallback();
+            appc.InitROOTMessageCallback();
 
       if hasargv and PyConfig.IgnoreCommandLineOptions:
          sys.argv = argv
 
     # must be called after gApplication creation:
-      if '__IPYTHON__' in __builtins__:
+      if _is_ipython:
        # IPython's FakeModule hack otherwise prevents usage of python from Cling (TODO: verify necessity)
          _root.gROOT.ProcessLine( 'TPython::Exec( "" );' )
          sys.modules[ '__main__' ].__builtins__ = __builtins__
@@ -500,8 +666,13 @@ class ModuleFacade( types.ModuleType ):
          buf.SetSize(self.GetN())
          return buf
 
-      cppyy.add_pythonization(
-         cppyy.compose_method("^TGraph(2D)?$|^TGraph.*Errors$", "GetE?[XYZ]$", set_size))
+    # TODO: add pythonization API to pypy-c
+      if not PYPY_CPPYY_COMPATIBILITY_FIXME:
+         cppyy.add_pythonization(
+            cppyy.compose_method("^TGraph(2D)?$|^TGraph.*Errors$", "GetE?[XYZ]$", set_size))
+         gRootDir = self.gRootDir
+      else:
+         gRootDir = _root.gRootDir
 
     # custom logon file (must be after creation of ROOT globals)
       if hasargv and not '-n' in sys.argv and not PyConfig.DisableRootLogon:
@@ -516,7 +687,7 @@ class ModuleFacade( types.ModuleType ):
 
           # system logon, user logon, and local logon (skip Rint.Logon)
             name = '.rootlogon.C'
-            logons = [ os.path.join( str(self.gRootDir), 'etc', 'system' + name ),
+            logons = [ os.path.join( str(self.TROOT.GetEtcDir()), 'system' + name ),
                        os.path.expanduser( os.path.join( '~', name ) ) ]
             if logons[-1] != os.path.join( os.getcwd(), name ):
                logons.append( name )
@@ -528,7 +699,16 @@ class ModuleFacade( types.ModuleType ):
     # use either the input hook or thread to send events to GUIs
       if self.PyConfig.StartGuiThread and \
             not ( self.keeppolling or _root.gROOT.IsBatch() ):
-         if self.PyConfig.StartGuiThread == 'inputhook' or\
+         if _is_ipython and 'IPython' in sys.modules and sys.modules['IPython'].version_info[0] >= 5 :
+            from IPython.terminal import pt_inputhooks
+            import time
+            def _inputhook(context):
+               while not context.input_is_ready():
+                  _root.gSystem.ProcessEvents()
+                  time.sleep( 0.01 )
+            pt_inputhooks.register('ROOT',_inputhook)
+            if get_ipython() : get_ipython().run_line_magic('gui', 'ROOT')
+         elif self.PyConfig.StartGuiThread == 'inputhook' or\
                _root.gSystem.InheritsFrom( 'TMacOSXSystem' ):
           # new, PyOS_InputHook based mechanism
             if PyConfig.GUIThreadScheduleOnce:
@@ -560,7 +740,9 @@ class ModuleFacade( types.ModuleType ):
     # the macro NULL is not available from Cling globals, but might be useful
       setattr( _root, 'NULL', 0 )
 
-      for name in cppyy.gbl.std.stlclasses:
+    # TODO: is the following still necessary? Note: dupe of classes in cppyy.py
+      for name in ( 'complex', 'pair', 'deque', 'list', 'queue', 'stack',
+            'vector', 'map', 'multimap', 'set', 'multiset' ):
          setattr( _root, name, getattr( cppyy.gbl.std, name ) )
 
     # set the display hook
@@ -574,11 +756,12 @@ sys.modules[ __name__ ] = ModuleFacade( sys.modules[ __name__ ] )
 del ModuleFacade
 
 ### Add some infrastructure if we are being imported via a Jupyter Kernel ------
-if '__IPYTHON__' in __builtins__ and __IPYTHON__:
+if _is_ipython:
    from IPython import get_ipython
    ip = get_ipython()
    if hasattr(ip,"kernel"):
       import JupyROOT
+      import JsMVA
 
 ### b/c of circular references, the facade needs explicit cleanup ---------------
 import atexit
@@ -589,14 +772,15 @@ def cleanup():
  # restore hooks
    import sys
    sys.displayhook = sys.__displayhook__
-   if not '__IPYTHON__' in __builtins__:
+   if not _is_ipython:
       sys.excepthook = sys.__excepthook__
    __builtin__.__import__ = _orig_ihook
 
    facade = sys.modules[ __name__ ]
 
  # shutdown GUI thread, as appropriate (always save to call)
-   _root.RemoveGUIEventInputHook()
+   if hasattr( _root, 'RemoveGUIEventInputHook' ):
+      _root.RemoveGUIEventInputHook()
 
  # prevent further spurious lookups into ROOT libraries
    del facade.__class__.__getattr__
@@ -624,18 +808,21 @@ def cleanup():
    facade.__dict__.clear()
    del facade
 
- # run part the gROOT shutdown sequence ... running it here ensures that
- # it is done before any ROOT libraries are off-loaded, with unspecified
- # order of static object destruction;
-   gROOT = sys.modules[ 'libPyROOT' ].gROOT
-   gROOT.EndOfProcessCleanups()
-   del gROOT
+   if 'libPyROOT' in sys.modules:
+    # run part the gROOT shutdown sequence ... running it here ensures that
+    # it is done before any ROOT libraries are off-loaded, with unspecified
+    # order of static object destruction;
+      gROOT = sys.modules[ 'libPyROOT' ].gROOT
+      gROOT.EndOfProcessCleanups()
+      del gROOT
 
- # cleanup cached python strings
-   sys.modules[ 'libPyROOT' ]._DestroyPyStrings()
+    # cleanup cached python strings
+      sys.modules[ 'libPyROOT' ]._DestroyPyStrings()
 
- # destroy ROOT extension module and ROOT module
-   del sys.modules[ 'libPyROOT' ]
+    # destroy ROOT extension module
+      del sys.modules[ 'libPyROOT' ]
+
+ # destroy ROOT module
    del sys.modules[ 'ROOT' ]
 
 atexit.register( cleanup )

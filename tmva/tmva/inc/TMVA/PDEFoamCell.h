@@ -9,7 +9,7 @@
  *                                                                                *
  * Description:                                                                   *
  *      Objects of this class are hyperrectangular cells organized in             *
- *      the binary tree. Special algoritm for encoding relalive                   *
+ *      the binary tree. Special algoritm for encoding relative                   *
  *      positioning of the cells saves total memory allocation needed             *
  *      for the system of cells.                                                  *
  *                                                                                *
@@ -31,16 +31,10 @@
 #ifndef ROOT_TMVA_PDEFoamCell
 #define ROOT_TMVA_PDEFoamCell
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TRef
 #include "TRef.h"
-#endif
 
-#ifndef ROOT_TMVA_PDEFoamVect
 #include "TMVA/PDEFoamVect.h"
-#endif
 
 namespace TMVA {
 
@@ -110,10 +104,10 @@ namespace TMVA {
       void Print(Option_t *option) const ;                   // Prints cell content
       //--- getter and setter for user variable ---
       void SetElement(TObject* fobj){ fElement = fobj; }     // Set user variable
-      TObject* GetElement() const { return fElement; }       // Get pointer to user varibale
+      TObject* GetElement() const { return fElement; }       // Get pointer to user variable
       ////////////////////////////////////////////////////////////////////////////
       ClassDef(PDEFoamCell,2)  //Single cell of FOAM
-   }; // end of PDEFoamCell
+         }; // end of PDEFoamCell
 } // namespace TMVA
 
 #endif

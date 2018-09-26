@@ -10,10 +10,13 @@
  *************************************************************************/
 
 /** \class TCanvasImp
+\ingroup Base
+
 ABC describing GUI independent main window (with menubar, scrollbars
 and a drawing area).
 */
 
 #include "TCanvasImp.h"
 
-ClassImp(TCanvasImp)
+ClassImp(TCanvasImp);
+void TCanvasImp::Lock() {}

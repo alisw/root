@@ -10,11 +10,13 @@
  *************************************************************************/
 
 /** \class TBrowserImp
+\ingroup Base
+
 ABC describing GUI independent browser implementation protocol.
 */
 
 #include "TBrowserImp.h"
 
-ClassImp(TBrowserImp)
+ClassImp(TBrowserImp);
 
 void TBrowserImp::SetDrawOption(Option_t * /*option*/) {}

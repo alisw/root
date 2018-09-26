@@ -54,6 +54,7 @@
 #include "TSystem.h"
 #include "TApplication.h"
 #include "TBrowser.h"
+#include "TClass.h"
 #include "TGClient.h"
 #include "TGFrame.h"
 #include "TGTab.h"
@@ -103,7 +104,7 @@ static const char *gPluginFileTypes[] = {
 // The main ROOT object browser.
 //_____________________________________________________________________________
 
-ClassImp(TRootBrowser)
+ClassImp(TRootBrowser);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create browser with a specified width and height.
@@ -212,6 +213,9 @@ void TRootBrowser::CreateBrowser(const char *name)
                       "HandleMenu(Int_t)");
    fPreMenuFrame->AddFrame(fMenuBar, fLH2);
    fTopMenuFrame->AddFrame(fPreMenuFrame, fLH0);
+
+   if (!TClass::GetClass("TGHtmlBrowser"))
+      fMenuFile->DisableEntry(kNewHtml);
 
    fMenuFrame = new TGHorizontalFrame(fTopMenuFrame, 100, 20, kRaisedFrame);
    fTopMenuFrame->AddFrame(fMenuFrame, fLH5);
@@ -398,6 +402,8 @@ void TRootBrowser::CloseTabs()
    TGFrameElement *el;
    TGCompositeFrame *container;
    Int_t i;
+   TQObject::Disconnect("TCanvas", "ProcessedEvent(Int_t,Int_t,Int_t,TObject*)",
+                        this, "EventInfo(Int_t, Int_t, Int_t, TObject*)");
    Disconnect(fMenuFile, "Activated(Int_t)", this, "HandleMenu(Int_t)");
    Disconnect(fTabRight, "Selected(Int_t)", this, "DoTab(Int_t)");
    if (fPlugins.IsEmpty()) return;
@@ -412,6 +418,7 @@ void TRootBrowser::CloseTabs()
             TVirtualPadEditor::Terminate();
          }
          else if (el->fFrame->InheritsFrom("TGMainFrame")) {
+            el->fFrame->UnmapWindow();
             ((TGMainFrame *)el->fFrame)->CloseWindow();
             gSystem->ProcessEvents();
          }
@@ -436,7 +443,10 @@ void TRootBrowser::CloseTabs()
       if (el && el->fFrame) {
          el->fFrame->SetFrameElement(0);
          if (el->fFrame->InheritsFrom("TGMainFrame")) {
+            el->fFrame->UnmapWindow();
             Bool_t sleep = (el->fFrame->InheritsFrom("TRootCanvas")) ? kTRUE : kFALSE;
+            if (sleep)
+               gSystem->Sleep(150);
             ((TGMainFrame *)el->fFrame)->CloseWindow();
             if (sleep)
                gSystem->Sleep(150);
@@ -463,7 +473,9 @@ void TRootBrowser::CloseTabs()
       if (el && el->fFrame) {
          el->fFrame->SetFrameElement(0);
          if (el->fFrame->InheritsFrom("TGMainFrame")) {
+            el->fFrame->UnmapWindow();
             ((TGMainFrame *)el->fFrame)->CloseWindow();
+            gSystem->Sleep(150);
             gSystem->ProcessEvents();
          }
          else
@@ -702,14 +714,7 @@ void TRootBrowser::HandleMenu(Int_t id)
       case kHelpAbout:
          {
 #ifdef R__UNIX
-            TString rootx;
-# ifdef ROOTBINDIR
-            rootx = ROOTBINDIR;
-# else
-            rootx = gSystem->Getenv("ROOTSYS");
-            if (!rootx.IsNull()) rootx += "/bin";
-# endif
-            rootx += "/root -a &";
+            TString rootx = TROOT::GetBinDir() + "/root -a &";
             gSystem->Exec(rootx);
 #else
 #ifdef WIN32
@@ -905,11 +910,8 @@ void TRootBrowser::InitPlugins(Option_t *opt)
 
 void TRootBrowser::ReallyDelete()
 {
-   gInterpreter->DeleteGlobal(fBrowser);
-   if (fBrowser->IsOnHeap())
-      delete fBrowser; // will in turn delete this object
-   else
-      fBrowser->Destructor(); // will in turn delete this object
+   if (fBrowser) fBrowser->SetBrowserImp(0);
+   delete this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

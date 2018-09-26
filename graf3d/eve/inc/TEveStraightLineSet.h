@@ -14,7 +14,6 @@
 
 #include "TEveUtil.h"
 
-#include <Gtypes.h>
 #include "TNamed.h"
 #include "TQObject.h"
 #include "TAtt3D.h"
@@ -119,7 +118,7 @@ public:
    virtual void ComputeBBox();
    virtual void Paint(Option_t* option="");
 
-   ClassDef(TEveStraightLineSet, 1); // Set of straight lines with optional markers along the lines.
+   ClassDef(TEveStraightLineSet, 0); // Set of straight lines with optional markers along the lines.
 };
 
 
@@ -143,7 +142,7 @@ public:
    virtual void UpdateProjection();
    virtual TEveElement* GetProjectedAsElement() { return this; }
 
-   ClassDef(TEveStraightLineSetProjected, 1); // Projected copy of a TEveStraightLineSet.
+   ClassDef(TEveStraightLineSetProjected, 0); // Projected copy of a TEveStraightLineSet.
 };
 
 #endif

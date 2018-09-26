@@ -12,25 +12,15 @@
 #ifndef ROOT_R_TRInterface
 #define ROOT_R_TRInterface
 
-#ifndef ROOT_R_TRObject
-#include<TRObject.h>
-#endif
+#include <TRObject.h>
 
-#ifndef ROOT_R_TRDataFrame
-#include<TRDataFrame.h>
-#endif
+#include <TRDataFrame.h>
 
-#ifndef ROOT_R_TFunctionExport
-#include<TRFunctionExport.h>
-#endif
+#include <TRFunctionExport.h>
 
-#ifndef ROOT_R_TFunctionImport
-#include<TRFunctionImport.h>
-#endif
+#include <TRFunctionImport.h>
 
-#ifndef ROOT_TThread
-#include<TThread.h>
-#endif
+#include <TThread.h>
 
 /**
  @namespace ROOT::R
@@ -221,7 +211,9 @@ namespace ROOT {
          \param verbose default false
          \param interactive default true
          */
-         TRInterface(const int argc = 0, const char *argv[] = NULL, const bool loadRcpp = true, const bool verbose = false, const bool interactive = true);
+         TRInterface(const Int_t argc = 0, const Char_t *argv[] = NULL, const Bool_t loadRcpp = true,
+                     const Bool_t verbose = false, const Bool_t interactive = true);
+
       public:
          ~TRInterface();
 
@@ -243,6 +235,9 @@ namespace ROOT {
          \param code R code
          */
          void  Execute(const TString &code);
+
+         // "unhide" TObject::Execute methods.
+         using TObject::Execute;
 
          /**
          Method to eval R code and you get the result in a  TRObject

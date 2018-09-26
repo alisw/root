@@ -26,23 +26,21 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_____________________________________________________________________
-//
-// PDEFoamEvent
-//
-// This PDEFoam variant stores in every cell the sum of event weights
-// and the sum of the squared event weights.  It therefore acts as
-// event density estimator.  It should be booked together with the
-// PDEFoamEventDensity density estimator, which returns the event
-// weight density at a given phase space point during the foam
-// build-up.
-//
-//_____________________________________________________________________
+/*! \class TMVA::PDEFoamEvent
+\ingroup TMVA
+This PDEFoam variant stores in every cell the sum of event weights
+and the sum of the squared event weights.  It therefore acts as
+event density estimator. It should be booked together with the
+PDEFoamEventDensity density estimator, which returns the event
+weight density at a given phase space point during the foam
+build-up.
+*/
 
 #include "TMVA/PDEFoamEvent.h"
 
 #include "TMVA/Event.h"
 #include "TMVA/MsgLogger.h"
+#include "TMVA/PDEFoam.h"
 #include "TMVA/Types.h"
 
 #include "Rtypes.h"
@@ -52,13 +50,13 @@ namespace TMVA {
 }
 class TString;
 
-ClassImp(TMVA::PDEFoamEvent)
+ClassImp(TMVA::PDEFoamEvent);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for streamer, user should not use it.
 
 TMVA::PDEFoamEvent::PDEFoamEvent()
-   : PDEFoam()
+: PDEFoam()
 {
 }
 

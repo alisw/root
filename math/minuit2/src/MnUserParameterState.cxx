@@ -30,7 +30,7 @@ MnUserParameterState::MnUserParameterState(const MnUserParameters& par) :
    fValid(true), fCovarianceValid(false), fGCCValid(false), fCovStatus(-1), fFVal(0.), fEDM(0.), fNFcn(0), fParameters(par), fCovariance(MnUserCovariance()), fGlobalCC(MnGlobalCorrelationCoeff()), fIntParameters(std::vector<double>()), fIntCovariance(MnUserCovariance()) {
    // construct from user parameters (befor minimization)
 
-   for(std::vector<MinuitParameter>::const_iterator ipar = MinuitParameters().begin(); ipar != MinuitParameters().end(); ipar++) {
+   for(std::vector<MinuitParameter>::const_iterator ipar = MinuitParameters().begin(); ipar != MinuitParameters().end(); ++ipar) {
       if((*ipar).IsConst() || (*ipar).IsFixed()) continue;
       if((*ipar).HasLimits())
          fIntParameters.push_back(Ext2int((*ipar).Number(), (*ipar).Value()));
@@ -78,7 +78,7 @@ MnUserParameterState::MnUserParameterState(const MnUserParameters& par, const Mn
    // MnUserParameters and MnUserCovariance objects
 
    fIntCovariance.Scale(0.5);
-   for(std::vector<MinuitParameter>::const_iterator ipar = MinuitParameters().begin(); ipar != MinuitParameters().end(); ipar++) {
+   for(std::vector<MinuitParameter>::const_iterator ipar = MinuitParameters().begin(); ipar != MinuitParameters().end(); ++ipar) {
       if((*ipar).IsConst() || (*ipar).IsFixed()) continue;
       if((*ipar).HasLimits())
          fIntParameters.push_back(Ext2int((*ipar).Number(), (*ipar).Value()));
@@ -102,7 +102,7 @@ MnUserParameterState::MnUserParameterState(const MinimumState& st, double up, co
    //
    //std::cout << "build a MnUSerParameterState after minimization.." << std::endl;
    
-   for(std::vector<MinuitParameter>::const_iterator ipar = trafo.Parameters().begin(); ipar != trafo.Parameters().end(); ipar++) {
+   for(std::vector<MinuitParameter>::const_iterator ipar = trafo.Parameters().begin(); ipar != trafo.Parameters().end(); ++ipar) {
       if((*ipar).IsConst()) {
          Add((*ipar).GetName(), (*ipar).Value());
       } else if((*ipar).IsFixed()) {
@@ -118,7 +118,7 @@ MnUserParameterState::MnUserParameterState(const MinimumState& st, double up, co
          Fix((*ipar).GetName());
       } else if((*ipar).HasLimits()) {
          unsigned int i = trafo.IntOfExt((*ipar).Number());
-         double err = st.HasCovariance() ? sqrt(2.*up*st.Error().InvHessian()(i,i)) : st.Parameters().Dirin()(i);
+         double err = st.Error().IsValid() ? sqrt(2.*up*st.Error().InvHessian()(i,i)) : st.Parameters().Dirin()(i);
          Add((*ipar).GetName(), trafo.Int2ext(i, st.Vec()(i)), trafo.Int2extError(i, st.Vec()(i), err));
          if((*ipar).HasLowerLimit() && (*ipar).HasUpperLimit())
             SetLimits((*ipar).GetName(), (*ipar).LowerLimit(), (*ipar).UpperLimit());
@@ -128,7 +128,7 @@ MnUserParameterState::MnUserParameterState(const MinimumState& st, double up, co
             SetUpperLimit((*ipar).GetName(), (*ipar).UpperLimit());
       } else {
          unsigned int i = trafo.IntOfExt((*ipar).Number());
-         double err = st.HasCovariance() ? sqrt(2.*up*st.Error().InvHessian()(i,i)) : st.Parameters().Dirin()(i);
+         double err = st.Error().IsValid() ? sqrt(2.*up*st.Error().InvHessian()(i,i)) : st.Parameters().Dirin()(i);
          Add((*ipar).GetName(), st.Vec()(i), err);
       }
    }

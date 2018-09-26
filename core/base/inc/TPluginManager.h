@@ -85,21 +85,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TMethodCall
 #include "TMethodCall.h"
-#endif
-#ifndef ROOT_TVirtualMutex
 #include "TVirtualMutex.h"
-#endif
-#ifndef ROOT_TInterpreter
 #include "TInterpreter.h"
-#endif
 
 class TEnv;
 class TList;
@@ -165,7 +155,7 @@ public:
       // resource ... and both SetParams and Execute ends up taking the lock
       // individually anyway ...
 
-      R__LOCKGUARD2(gInterpreterMutex);
+      R__LOCKGUARD(gInterpreterMutex);
       fCallEnv->SetParams(params...);
 
       Long_t ret;

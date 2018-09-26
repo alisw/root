@@ -8,10 +8,12 @@
 //------------------------------------------------------------------------------
 
 #include "cling/Interpreter/LookupHelper.h"
+#include "cling/Utils/Output.h"
 
-#include "TransactionUnloader.h"
+#include "DeclUnloader.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Utils/AST.h"
+#include "cling/Utils/ParserStateRAII.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -24,88 +26,7 @@
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 
-#if defined(_MSC_VER) && (_MSC_VER <= 1800)
-#define constexpr const
-#endif
-
 using namespace clang;
-
-namespace clang {
-
-  ///\brief Cleanup Parser state after a failed lookup.
-  ///
-  /// After a failed lookup we need to discard the remaining unparsed input,
-  /// restore the original state of the incremental parsing flag, clear any
-  /// pending diagnostics, restore the suppress diagnostics flag, and restore
-  /// the spell checking language options.
-  ///
-  class ParserStateRAII {
-  private:
-    Parser* P;
-    Preprocessor& PP;
-    decltype(Parser::TemplateIds) OldTemplateIds;
-    bool ResetIncrementalProcessing;
-    bool OldSuppressAllDiagnostics;
-    bool OldPPSuppressAllDiagnostics;
-    bool OldSpellChecking;
-    SourceLocation OldPrevTokLocation;
-    unsigned short OldParenCount, OldBracketCount, OldBraceCount;
-    unsigned OldTemplateParameterDepth;
-    decltype(P->getActions().InNonInstantiationSFINAEContext)
-       OldInNonInstantiationSFINAEContext;
-
-  public:
-    ParserStateRAII(Parser& p)
-      : P(&p), PP(p.getPreprocessor()),
-        ResetIncrementalProcessing(p.getPreprocessor()
-                                   .isIncrementalProcessingEnabled()),
-        OldSuppressAllDiagnostics(P->getActions().getDiagnostics()
-                                  .getSuppressAllDiagnostics()),
-        OldPPSuppressAllDiagnostics(p.getPreprocessor().getDiagnostics()
-                                  .getSuppressAllDiagnostics()),
-        OldSpellChecking(p.getPreprocessor().getLangOpts().SpellChecking),
-        OldPrevTokLocation(p.PrevTokLocation),
-        OldParenCount(p.ParenCount), OldBracketCount(p.BracketCount),
-        OldBraceCount(p.BraceCount),
-        OldTemplateParameterDepth(p.TemplateParameterDepth),
-        OldInNonInstantiationSFINAEContext(P->getActions()
-                                           .InNonInstantiationSFINAEContext)
-    {
-       OldTemplateIds.swap(P->TemplateIds);
-    }
-
-    ~ParserStateRAII()
-    {
-      //
-      // Advance the parser to the end of the file, and pop the include stack.
-      //
-      // Note: Consuming the EOF token will pop the include stack.
-      //
-      {
-         // Cleanup the TemplateIds before swapping the previous set back.
-         DestroyTemplateIdAnnotationsRAIIObj CleanupTemplateIds(*P);
-      }
-      P->TemplateIds.swap(OldTemplateIds);
-      P->SkipUntil(tok::eof);
-      PP.enableIncrementalProcessing(ResetIncrementalProcessing);
-      // Doesn't reset the diagnostic mappings
-      P->getActions().getDiagnostics().Reset(/*soft=*/true);
-      P->getActions().getDiagnostics().setSuppressAllDiagnostics(OldSuppressAllDiagnostics);
-      PP.getDiagnostics().Reset(/*soft=*/true);
-      PP.getDiagnostics().setSuppressAllDiagnostics(OldPPSuppressAllDiagnostics);
-      const_cast<LangOptions&>(PP.getLangOpts()).SpellChecking =
-         OldSpellChecking;
-
-      P->PrevTokLocation = OldPrevTokLocation;
-      P->ParenCount = OldParenCount;
-      P->BracketCount = OldBracketCount;
-      P->BraceCount = OldBraceCount;
-      P->TemplateParameterDepth = OldTemplateParameterDepth;
-      P->getActions().InNonInstantiationSFINAEContext =
-         OldInNonInstantiationSFINAEContext;
-    }
-  };
-}
 
 namespace cling {
   ///\brief Class to help with the custom allocation of clang::Expr
@@ -114,24 +35,29 @@ namespace cling {
      char fBuffer[sizeof(clang::OpaqueValueExpr)];
   };
 
-  // pin *tor here so that we can have clang::Parser defined and be able to call
-  // the dtor on the OwningPtr
-  LookupHelper::LookupHelper(clang::Parser* P, Interpreter* interp)
-    : m_Parser(P), m_Interpreter(interp) {}
+  class StartParsingRAII {
+    LookupHelper& m_LH;
+    ParserStateRAII ResetParserState;
 
-  LookupHelper::~LookupHelper() {}
+    void prepareForParsing(llvm::StringRef code, llvm::StringRef bufferName,
+                           LookupHelper::DiagSetting diagOnOff);
+  public:
+    StartParsingRAII(LookupHelper& LH, llvm::StringRef code,
+                     llvm::StringRef bufferName,
+                     LookupHelper::DiagSetting diagOnOff)
+      : m_LH(LH), ResetParserState(*LH.m_Parser.get(), true /*skipToEOF*/) {
+    prepareForParsing(code, bufferName, diagOnOff);
+  }
 
-  static
-  DeclContext* getContextAndSpec(CXXScopeSpec &SS,
-                                 const Decl* scopeDecl,
-                                 ASTContext& Context, Sema &S);
+    ~StartParsingRAII() { pop(); }
+    void pop() const {}
+  };
 
-  static void prepareForParsing(Parser& P,
-                                const Interpreter* Interp,
-                                llvm::StringRef code,
-                                llvm::StringRef bufferName,
-                                LookupHelper::DiagSetting diagOnOff) {
-    //Parser& P = *m_Parser;
+  void StartParsingRAII::prepareForParsing(llvm::StringRef code,
+                                           llvm::StringRef bufferName,
+                                          LookupHelper::DiagSetting diagOnOff) {
+    ++m_LH.m_TotalParseRequests;
+    Parser& P = *m_LH.m_Parser.get();
     Sema& S = P.getActions();
     Preprocessor& PP = P.getPreprocessor();
     //
@@ -160,17 +86,58 @@ namespace cling {
     }
     assert(!code.empty()&&"prepareForParsing should only be called when needd");
 
-    //
-    //  Create a fake file to parse the type name.
-    //
-    std::unique_ptr<llvm::MemoryBuffer>
-      SB = llvm::MemoryBuffer::getMemBufferCopy(code.str() + "\n",
-                                                bufferName.str());
-    SourceLocation NewLoc = Interp->getNextAvailableLoc();
-    FileID FID = S.getSourceManager().createFileID(std::move(SB),
-                                                   SrcMgr::C_User,
-                                                   /*LoadedID*/0,
-                                                   /*LoadedOffset*/0, NewLoc);
+    // Create a fake file to parse the type name.
+    FileID FID;
+    llvm::hash_code hashedCode = llvm::hash_value(code);
+    auto cacheItr = m_LH.m_ParseBufferCache.find(hashedCode);
+    SourceLocation NewLoc;
+    SourceManager& SM = S.getSourceManager();
+    bool CacheIsValid = false;
+    if (cacheItr != m_LH.m_ParseBufferCache.end()) {
+      SourceLocation FileStartLoc =
+        SourceLocation::getFromRawEncoding(cacheItr->second);
+      FID = SM.getFileID(FileStartLoc);
+
+      bool Invalid = true;
+      llvm::StringRef FIDContents = SM.getBuffer(FID, &Invalid)->getBuffer();
+
+      // A FileID is a (cached via ContentCache) SourceManager view of a
+      // FileManager::FileEntry (which is a wrapper on the file system file).
+      // In a subtle cases, code unloading can remove the cached region.
+      // However we are safe because it will empty the ContentCache and force
+      // the FileEntry to be re-read. It will keep the FileID intact and valid
+      // by design. When we reprocess the same (but modified) file it will get
+      // a new FileID. Then the Invalid flag will be false but the underlying
+      // buffer content will be empty. It will not compare equal to the lookup
+      // string and we will avoid using (a potentially broken) cache.
+      assert(!Invalid);
+
+      // Compare the contents of the cached buffer and the string we should
+      // process. If there are hash collisions this assert should trigger
+      // making it easier to debug.
+      CacheIsValid = FIDContents.equals(llvm::StringRef(code.str() + "\n"));
+      assert(CacheIsValid && "Hash collision!");
+      if (CacheIsValid) {
+        // We have already included this file once. Reuse the include loc.
+        NewLoc = SM.getIncludeLoc(FID);
+        // The Preprocessor will try to set the NumCreatedFIDs but we are
+        // reparsing and this value was already set. Force reset it to avoid
+        // triggering an assertion in the setNumCreatedFIDsForFileID routine.
+        SM.setNumCreatedFIDsForFileID(FID, 0, /*force*/ true);
+        ++m_LH.m_CacheHits;
+      }
+    }
+    if (!CacheIsValid) {
+      std::unique_ptr<llvm::MemoryBuffer> SB
+        = llvm::MemoryBuffer::getMemBufferCopy(code.str() + "\n",
+                                               bufferName.str());
+      NewLoc = m_LH.m_Interpreter->getNextAvailableLoc();
+      FID = SM.createFileID(std::move(SB), SrcMgr::C_User, /*LoadedID*/0,
+                            /*LoadedOffset*/0, NewLoc);
+      SourceLocation FileStartLoc = SM.getLocForStartOfFile(FID);
+      m_LH.m_ParseBufferCache[hashedCode] = FileStartLoc.getRawEncoding();
+    }
+
     //
     //  Switch to the new file the way #include does.
     //
@@ -179,6 +146,18 @@ namespace cling {
     PP.EnterSourceFile(FID, /*DirLookup*/0, NewLoc);
     PP.Lex(const_cast<Token&>(P.getCurToken()));
   }
+
+  // pin *tor here so that we can have clang::Parser defined and be able to call
+  // the dtor on the OwningPtr
+  LookupHelper::LookupHelper(clang::Parser* P, Interpreter* interp)
+    : m_Parser(P), m_Interpreter(interp) {
+  }
+
+  LookupHelper::~LookupHelper() {}
+
+  static
+  DeclContext* getCompleteContext(const Decl* scopeDecl,
+                                  ASTContext& Context, Sema &S);
 
   static const TagDecl* RequireCompleteDeclContext(Sema& S,
                                                    Preprocessor& PP,
@@ -193,16 +172,16 @@ namespace cling {
     PP.getDiagnostics().setSuppressAllDiagnostics(
                                       diagOnOff == LookupHelper::NoDiagnostics);
 
-    CXXScopeSpec SS;
     ASTContext& Context = S.getASTContext();
-    DeclContext* complete = getContextAndSpec(SS,tobeCompleted,Context,S);
+    DeclContext* complete = getCompleteContext(tobeCompleted,Context,S);
 
     PP.getDiagnostics().setSuppressAllDiagnostics(OldSuppressAllDiagnostics);
 
-    if (complete) {
-      const TagDecl *result = dyn_cast<TagDecl>(complete);
+    if (!complete)
+      return 0;
+    if (const TagDecl *result = dyn_cast<TagDecl>(complete))
       return result->getDefinition();
-    } else return 0;
+    return 0;
   }
 
   ///\brief Look for a tag decl based on its name
@@ -242,7 +221,10 @@ namespace cling {
           return true;
         }
         next = utils::Lookup::Named(&S, declName.substr(last, c - last), sofar);
-        if (next && next != (void *) -1) {
+        if (next == (void *) -1) {
+          // Ambiguous result, we need to go through the long path
+          return false;
+        } else if (next && next != (void *) -1) {
           // Need to handle typedef here too.
           const TypedefNameDecl *typedefDecl = dyn_cast<TypedefNameDecl>(next);
           if (typedefDecl) {
@@ -299,7 +281,7 @@ namespace cling {
         }
         if (!sofar) {
           // We are looking into something that is not a decl context,
-          // we won't find anything.
+          // so we won't find anything.
           return true;
         }
         last = c + 2;
@@ -307,7 +289,8 @@ namespace cling {
       } else if (c + 1 == declName.size()) {
         // End of the line.
         next = utils::Lookup::Named(&S, declName.substr(last, c + 1 - last), sofar);
-        if (next == (void *) -1) next = 0;
+        // If there is an ambiguity, we need to go the long route.
+        if (next == (void *) -1) return false;
         if (next) {
           resultDecl = next;
         }
@@ -394,9 +377,9 @@ namespace cling {
                                 quickTypeName.size()-6);
       innerConst = true;
     }
-    constexpr int pointerType = 0;
-    constexpr int lrefType = 1;
-    constexpr int rrefType = 2;
+
+    enum PointerType { kPointerType, kLRefType, kRRefType, };
+
     if (quickTypeName.endswith("const")) {
       if (quickTypeName.size() < 6) return true;
       auto c = quickTypeName[quickTypeName.size()-6];
@@ -409,16 +392,16 @@ namespace cling {
                                        quickTypeName.size() - 5);
       }
     }
-    std::vector<int> ptrref;
+    std::vector<PointerType> ptrref;
     for(auto c = quickTypeName.end()-1; c != quickTypeName.begin(); --c) {
-      if (*c == '*')  ptrref.push_back(pointerType);
+      if (*c == '*')  ptrref.push_back(kPointerType);
       else if (*c == '&') {
         if (*(c-1)== '&') {
           --c;
-          ptrref.push_back(rrefType);
+          ptrref.push_back(kRRefType);
 
         } else
-          ptrref.push_back(lrefType);
+          ptrref.push_back(kLRefType);
       }
       else break;
     }
@@ -449,14 +432,14 @@ namespace cling {
 
       for(auto t : ptrref) {
         switch (t) {
-          case pointerType :
+          case kPointerType :
             quickFind = Context.getPointerType(quickFind);
             break;
-          case rrefType :
-            quickFind = Context.getRValueReferenceType(quickFind);
-            break;
-          case lrefType :
+          case kLRefType :
             quickFind = Context.getLValueReferenceType(quickFind);
+            break;
+          case kRRefType :
+            quickFind = Context.getRValueReferenceType(quickFind);
             break;
         }
       }
@@ -492,10 +475,10 @@ namespace cling {
 
     // Use P for shortness
     Parser& P = *m_Parser;
-    ParserStateRAII ResetParserState(P);
-    prepareForParsing(P,m_Interpreter,
-                      typeName, llvm::StringRef("lookup.type.by.name.file"),
-                      diagOnOff);
+    StartParsingRAII ParseStarted(const_cast<LookupHelper&>(*this),
+                                  typeName,
+                                  llvm::StringRef("lookup.type.by.name.file"),
+                                  diagOnOff);
     //
     //  Try parsing the type name.
     //
@@ -532,6 +515,13 @@ namespace cling {
     Sema &S = P.getActions();
     Preprocessor &PP = P.getPreprocessor();
     ASTContext &Context = S.getASTContext();
+
+
+    // The user wants to see the template instantiation, existing or not.
+    // Here we might not have an active transaction to handle
+    // the caused instantiation decl.
+    // Also quickFindDecl could trigger deserialization of decls.
+    Interpreter::PushTransactionRAII pushedT(m_Interpreter);
 
     // See if we can find it without a buffer and any clang parsing,
     // We need to go scope by scope.
@@ -594,15 +584,10 @@ namespace cling {
       }
     }
 
-    // The user wants to see the template instantiation, existing or not.
-    // Here we might not have an active transaction to handle
-    // the caused instantiation decl.
-    Interpreter::PushTransactionRAII pushedT(m_Interpreter);
-
-    ParserStateRAII ResetParserState(P);
-    prepareForParsing(P,m_Interpreter,
-                      className.str() + "::",
-                      llvm::StringRef("lookup.class.by.name.file"), diagOnOff);
+    StartParsingRAII ParseStarted(const_cast<LookupHelper&>(*this),
+                                  className.str() + "::",
+                                  llvm::StringRef("lookup.class.by.name.file"),
+                                  diagOnOff);
     //
     //  Our return values.
     //
@@ -701,22 +686,21 @@ namespace cling {
 
                       // Make sure it is not just forward declared, and
                       // instantiate any templates.
-                      if (!S.RequireCompleteDeclContext(SS, TD)) {
+                      DeclContext *ctxt = TD;
+                      if (!S.RequireCompleteDeclContext(SS, ctxt)) {
                         // Success, type is complete, instantiations have
                         // been done.
                         TheDecl = TD->getDefinition();
                         if (TheDecl->isInvalidDecl()) {
                           // if the decl is invalid try to clean up
-                          TransactionUnloader U(&S, /*CodeGenerator*/0);
-                          U.UnloadDecl(TheDecl);
+                          UnloadDecl(&S, TheDecl);
                           *setResultType = nullptr;
                           return 0;
                         }
                       } else {
                         // NOTE: We cannot instantiate the scope: not a valid decl.
                         // Need to rollback transaction.
-                        TransactionUnloader U(&S, /*CodeGenerator*/0);
-                        U.UnloadDecl(TD);
+                        UnloadDecl(&S, TD);
                         *setResultType = nullptr;
                         return 0;
                       }
@@ -762,7 +746,7 @@ namespace cling {
     //
     //  Now try to parse the name as a type.
     //
-    if (P.TryAnnotateTypeOrScopeToken(false, false)) {
+    if (P.TryAnnotateTypeOrScopeToken()) {
       // error path
       return 0;
     }
@@ -796,10 +780,10 @@ namespace cling {
     Parser& P = *m_Parser;
     Sema& S = P.getActions();
     ASTContext& Context = S.getASTContext();
-    ParserStateRAII ResetParserState(P);
-    prepareForParsing(P,m_Interpreter,
-                      Name.str(),
-                      llvm::StringRef("lookup.class.by.name.file"), diagOnOff);
+    StartParsingRAII ParseStarted(const_cast<LookupHelper&>(*this),
+                                  Name.str(),
+                                  llvm::StringRef("lookup.class.by.name.file"),
+                                  diagOnOff);
 
     //
     //  Prevent failing on an assert in TryAnnotateCXXScopeToken.
@@ -816,7 +800,7 @@ namespace cling {
     //
     //  Now try to parse the name as a type.
     //
-    if (P.TryAnnotateTypeOrScopeToken(false, false)) {
+    if (P.TryAnnotateTypeOrScopeToken()) {
       // error path
       return 0;
     }
@@ -827,7 +811,7 @@ namespace cling {
                                              P.getCurToken().getAnnotationRange(),
                                              SS);
       if (SS.isValid()) {
-        P.ConsumeToken();
+        P.ConsumeAnyToken();
         if (!P.getCurToken().is(clang::tok::identifier)) {
           return 0;
         }
@@ -855,6 +839,27 @@ namespace cling {
           // Microsoft's __super::
           return 0;
         };
+      }
+    } else if (P.getCurToken().is(clang::tok::annot_typename)) {
+      // A deduced template?
+
+      // P.getTypeAnnotation() takes a non-const Token& until clang r306291.
+      //auto ParsedTy = P.getTypeAnnotation(P.getCurToken());
+      auto ParsedTy
+        = ParsedType::getFromOpaquePtr(P.getCurToken().getAnnotationValue());
+      if (ParsedTy) {
+        QualType QT = ParsedTy.get();
+        const Type* TyPtr = QT.getTypePtr();
+        if (const auto *LocInfoTy = dyn_cast<LocInfoType>(TyPtr))
+          TyPtr = LocInfoTy->getType().getTypePtr();
+        TyPtr = TyPtr->getUnqualifiedDesugaredType();
+        if (const auto *DTST
+            = dyn_cast<DeducedTemplateSpecializationType>(TyPtr)) {
+          if (auto TD = DTST->getTemplateName().getAsTemplateDecl()) {
+            if (auto CTD = dyn_cast<ClassTemplateDecl>(TD))
+              return CTD;
+          }
+        }
       }
     } else if (P.getCurToken().is(clang::tok::identifier)) {
       // We have a single indentifier, let's look for it in the
@@ -904,8 +909,22 @@ namespace cling {
 
   static
   DeclContext* getContextAndSpec(CXXScopeSpec &SS,
-                                 const Decl* scopeDecl,
-                                 ASTContext& Context, Sema &S) {
+                                  const Decl* scopeDecl,
+                                  ASTContext& Context, Sema &S) {
+    //
+    //  Some validity checks on the passed decl.
+    //
+    DeclContext* foundDC = dyn_cast<DeclContext>(const_cast<Decl*>(scopeDecl));
+    if (foundDC->isDependentContext()) {
+      // Passed decl is a template, we cannot use it.
+      return 0;
+    }
+    if (scopeDecl->isInvalidDecl()) {
+      // if the decl is invalid try to clean up
+      UnloadDecl(&S, const_cast<Decl*>(scopeDecl));
+      return 0;
+    }
+
     //
     //  Convert the passed decl into a nested name specifier,
     //  a scope spec, and a decl context.
@@ -914,36 +933,76 @@ namespace cling {
     if (const NamespaceDecl* NSD = dyn_cast<NamespaceDecl>(scopeDecl)) {
       classNNS = NestedNameSpecifier::Create(Context, 0,
                                              const_cast<NamespaceDecl*>(NSD));
+      SS.MakeTrivial(Context, classNNS, scopeDecl->getSourceRange());
+      return foundDC;
     }
     else if (const RecordDecl* RD = dyn_cast<RecordDecl>(scopeDecl)) {
       const Type* T = Context.getRecordType(RD).getTypePtr();
       classNNS = NestedNameSpecifier::Create(Context, 0, false, T);
+      // We pass a 'random' but valid source range.
+      SS.MakeTrivial(Context, classNNS, scopeDecl->getSourceRange());
+      if (S.RequireCompleteDeclContext(SS, foundDC)) {
+        // Forward decl or instantiation failure, we cannot use it.
+        return 0;
+      }
+      return foundDC;
     }
     else if (llvm::isa<TranslationUnitDecl>(scopeDecl)) {
-      classNNS = NestedNameSpecifier::GlobalSpecifier(Context);
+      // We pass a 'random' but valid source range.
+      SS.MakeGlobal(Context,scopeDecl->getLocation());
+      return foundDC;
     }
-    else {
-      // Not a namespace or class, we cannot use it.
-      return 0;
-    }
-    DeclContext* foundDC = dyn_cast<DeclContext>(const_cast<Decl*>(scopeDecl));
+    // Not a namespace or class, we cannot use it.
+    return 0;
+  }
+
+  static
+  DeclContext* getCompleteContext(const Decl* scopeDecl,
+                                  ASTContext& Context, Sema &S) {
     //
     //  Some validity checks on the passed decl.
     //
+    DeclContext* foundDC = dyn_cast<DeclContext>(const_cast<Decl*>(scopeDecl));
     if (foundDC->isDependentContext()) {
       // Passed decl is a template, we cannot use it.
       return 0;
     }
-    // We pass a 'random' but valid source range.
-    SS.MakeTrivial(Context, classNNS, scopeDecl->getSourceRange());
-    if (S.RequireCompleteDeclContext(SS, foundDC)) {
-      // Forward decl or instantiation failure, we cannot use it.
-      return 0;
-    }
     if (scopeDecl->isInvalidDecl()) {
       // if the decl is invalid try to clean up
-      TransactionUnloader U(&S, /*CodeGenerator*/0);
-      U.UnloadDecl(const_cast<Decl*>(scopeDecl));
+      UnloadDecl(&S, const_cast<Decl*>(scopeDecl));
+      return 0;
+    }
+    //
+    //  Convert the passed decl into a nested name specifier,
+    //  a scope spec, and a decl context.
+    //
+    NestedNameSpecifier* classNNS = 0;
+    if (isa<NamespaceDecl>(scopeDecl)) {
+      return foundDC;
+    }
+    else if (const RecordDecl* RD = dyn_cast<RecordDecl>(scopeDecl)) {
+      if (RD->getDefinition()) {
+        // We are already complete, we are done.
+        return foundDC;
+      } else {
+        //const Type* T = Context.getRecordType(RD).getTypePtr();
+        const Type* T = Context.getTypeDeclType(RD).getTypePtr();
+        classNNS = NestedNameSpecifier::Create(Context, 0, false, T);
+        // We pass a 'random' but valid source range.
+        CXXScopeSpec SS;
+        SS.MakeTrivial(Context, classNNS, scopeDecl->getSourceRange());
+
+        if (S.RequireCompleteDeclContext(SS, foundDC)) {
+          // Forward decl or instantiation failure, we cannot use it.
+          return 0;
+        }
+      }
+    }
+    else if (llvm::isa<TranslationUnitDecl>(scopeDecl)) {
+      return dyn_cast<DeclContext>(const_cast<Decl*>(scopeDecl));
+    }
+    else {
+      // Not a namespace or class, we cannot use it.
       return 0;
     }
 
@@ -1003,7 +1062,8 @@ namespace cling {
                                      LookupResult &Result,
                                      DeclarationNameInfo &FuncNameInfo,
                               const TemplateArgumentListInfo* FuncTemplateArgs,
-                                     ASTContext& Context, Parser &P, Sema &S) {
+                                     ASTContext& Context, Parser &P, Sema &S,
+                                          LookupHelper::DiagSetting diagOnOff) {
     //
     //  Our return value.
     //
@@ -1106,13 +1166,22 @@ namespace cling {
           // We prefer to get the canonical decl for consistency and ease
           // of comparison.
           TheDecl = TheDecl->getCanonicalDecl();
-          if (TheDecl->isTemplateInstantiation() && !TheDecl->isDefined())
+          if (TheDecl->isTemplateInstantiation() && !TheDecl->isDefined()) {
+            //
+            //  Tell the diagnostic engine to ignore all diagnostics.
+            //
+            bool OldSuppressAllDiagnostics
+              = S.getDiagnostics().getSuppressAllDiagnostics();
+            S.getDiagnostics().setSuppressAllDiagnostics(
+                diagOnOff == LookupHelper::NoDiagnostics);
+
             S.InstantiateFunctionDefinition(SourceLocation(), TheDecl,
                                             true /*recursive instantiation*/);
+            S.getDiagnostics().setSuppressAllDiagnostics(OldSuppressAllDiagnostics);
+          }
           if (TheDecl->isInvalidDecl()) {
             // if the decl is invalid try to clean up
-            TransactionUnloader U(&S, /*CodeGenerator*/0);
-            U.UnloadDecl(const_cast<FunctionDecl*>(TheDecl));
+            UnloadDecl(&S, const_cast<FunctionDecl*>(TheDecl));
             return 0;
           }
        }
@@ -1127,7 +1196,8 @@ namespace cling {
                                      LookupResult &Result,
                                      DeclarationNameInfo &FuncNameInfo,
                               const TemplateArgumentListInfo* FuncTemplateArgs,
-                                     ASTContext& Context, Parser &P, Sema &S) {
+                                     ASTContext& Context, Parser &P, Sema &S,
+                                          LookupHelper::DiagSetting diagOnOff) {
     //
     //  Our return value.
     //
@@ -1135,7 +1205,8 @@ namespace cling {
                                                            GivenArgs, Result,
                                                            FuncNameInfo,
                                                            FuncTemplateArgs,
-                                                           Context,P,S);
+                                                           Context,P,S,
+                                                           diagOnOff);
 
     if (TheDecl) {
       if ( IsOverload(Context, FuncTemplateArgs, GivenArgs, TheDecl) ) {
@@ -1159,7 +1230,7 @@ namespace cling {
     return TheDecl;
   }
 
-  static bool ParseWithShortcuts(DeclContext* foundDC, CXXScopeSpec &SS,
+  static bool ParseWithShortcuts(DeclContext* foundDC, ASTContext& Context,
                                  llvm::StringRef funcName,
                                  Interpreter* Interp,
                                  UnqualifiedId &FuncId,
@@ -1282,9 +1353,15 @@ namespace cling {
     //  Parse the function name.
     //
     SourceLocation TemplateKWLoc;
+    CXXScopeSpec SS;
+    {
+      Decl *decl = llvm::dyn_cast<Decl>(foundDC);
+      getContextAndSpec(SS,decl,Context,S);
+    }
     if (P.ParseUnqualifiedId(SS, /*EnteringContext*/false,
                              /*AllowDestructorName*/true,
                              /*AllowConstructorName*/true,
+                             /*AllowDeductionGuide*/ false,
                              ParsedType(), TemplateKWLoc,
                              FuncId)) {
       // Failed parse, cleanup.
@@ -1294,7 +1371,7 @@ namespace cling {
   }
 
   template <typename T>
-  T findFunction(DeclContext* foundDC, CXXScopeSpec &SS,
+  T findFunction(DeclContext* foundDC,
                  llvm::StringRef funcName,
                  const llvm::SmallVectorImpl<Expr*> &GivenArgs,
                  bool objectIsConst,
@@ -1305,7 +1382,8 @@ namespace cling {
                                        LookupResult &Result,
                                        DeclarationNameInfo &FuncNameInfo,
                               const TemplateArgumentListInfo* FuncTemplateArgs,
-                                       ASTContext& Context, Parser &P, Sema &S),
+                                       ASTContext& Context, Parser &P, Sema &S,
+                                           LookupHelper::DiagSetting diagOnOff),
                  LookupHelper::DiagSetting diagOnOff
                  ) {
     // Given the correctly types arguments, etc. find the function itself.
@@ -1329,8 +1407,9 @@ namespace cling {
     S.EnterDeclaratorContext(P.getCurScope(), foundDC);
 
     UnqualifiedId FuncId;
-    ParserStateRAII ResetParserState(P);
-    if (!ParseWithShortcuts(foundDC, SS, funcName, Interp, FuncId, diagOnOff)) {
+    ParserStateRAII ResetParserState(P, true /*skipToEOF*/);
+    if (!ParseWithShortcuts(foundDC, Context, funcName, Interp,
+                            FuncId, diagOnOff)) {
       // Failed parse, cleanup.
       // Destroy the scope we created first, and
       // restore the original.
@@ -1390,12 +1469,13 @@ namespace cling {
                             Result,
                             FuncNameInfo,
                             FuncTemplateArgs,
-                            Context, P, S);
+                            Context, P, S, diagOnOff);
   }
 
   template <typename DigestArgsInput, typename returnType>
   returnType execFindFunction(Parser &P,
                               Interpreter* Interp,
+                              LookupHelper &LH,
                               const clang::Decl* scopeDecl,
                               llvm::StringRef funcName,
                               const typename DigestArgsInput::ArgsInput &funcArgs,
@@ -1406,7 +1486,8 @@ namespace cling {
                                                            LookupResult &Result,
                                               DeclarationNameInfo &FuncNameInfo,
                                const TemplateArgumentListInfo* FuncTemplateArgs,
-                                       ASTContext& Context, Parser &P, Sema &S),
+                                        ASTContext& Context, Parser &P, Sema &S,
+                                           LookupHelper::DiagSetting diagOnOff),
                               LookupHelper::DiagSetting diagOnOff
                               )
   {
@@ -1425,16 +1506,15 @@ namespace cling {
     //  Do this 'early' to save on the expansive parser setup,
     //  in case of failure.
     //
-    CXXScopeSpec SS;
-    DeclContext* foundDC = getContextAndSpec(SS,scopeDecl,Context,S);
+    DeclContext* foundDC = getCompleteContext(scopeDecl,Context,S);
     if (!foundDC) return 0;
 
     DigestArgsInput inputEval;
     llvm::SmallVector<Expr*, 4> GivenArgs;
-    if (!inputEval(GivenArgs,funcArgs,diagOnOff,P,Interp)) return 0;
+    if (!inputEval(GivenArgs,funcArgs,diagOnOff,P,Interp,LH)) return 0;
 
     Interpreter::PushTransactionRAII pushedT(Interp);
-    return findFunction(foundDC, SS,
+    return findFunction(foundDC,
                         funcName, GivenArgs, objectIsConst,
                         Context, Interp, functionSelector,
                         diagOnOff);
@@ -1447,7 +1527,8 @@ namespace cling {
     bool operator()(llvm::SmallVectorImpl<Expr*> & /* GivenArgs */,
                     const ArgsInput &/* funcArgs */,
                     LookupHelper::DiagSetting /* diagOnOff */,
-                    Parser & /* P */, const Interpreter* /* Interp */)
+                    Parser & /* P */, const Interpreter* /* Interp */,
+                    const LookupHelper& /* LH */)
     {
       return true;
     }
@@ -1462,7 +1543,8 @@ namespace cling {
     bool operator()(llvm::SmallVectorImpl<Expr*> &GivenArgs,
                     const ArgsInput &GivenTypes,
                     LookupHelper::DiagSetting /* diagOnOff */,
-                    Parser & /* P */, const Interpreter* /* Interp */) {
+                    Parser & /* P */, const Interpreter* /* Interp */,
+                    LookupHelper& /* LH */) {
 
       if (GivenTypes.empty()) return true;
       else return getExprProto(GivenArgs,GivenTypes);
@@ -1505,24 +1587,26 @@ namespace cling {
     bool operator()(llvm::SmallVectorImpl<Expr*> &GivenArgs,
                     const ArgsInput &funcProto,
                     LookupHelper::DiagSetting diagOnOff,
-                    Parser &P, const Interpreter* Interp) {
+                    Parser& P, const Interpreter* Interp,
+                    LookupHelper& LH) {
 
       if (funcProto.empty()) return true;
-      else return Parse(GivenArgs,funcProto,diagOnOff,P,Interp);
+      else return Parse(GivenArgs,funcProto,diagOnOff, P, Interp, LH);
     }
 
     bool Parse(llvm::SmallVectorImpl<Expr*> &GivenArgs,
                const ArgsInput &funcProto,
                LookupHelper::DiagSetting diagOnOff,
-               Parser &P, const Interpreter* Interp) {
+               Parser& P, const Interpreter* Interp,
+               LookupHelper& LH) {
 
       //
       //  Parse the prototype now.
       //
 
-      ParserStateRAII ResetParserState(P);
-      prepareForParsing(P,Interp,
-                        funcProto, llvm::StringRef("func.prototype.file"), diagOnOff);
+      StartParsingRAII ParseStarted(LH, funcProto,
+                                    llvm::StringRef("func.prototype.file"),
+                                    diagOnOff);
 
       unsigned int nargs = 0;
       while (P.getCurToken().isNot(tok::eof)) {
@@ -1580,7 +1664,8 @@ namespace cling {
                                                           DeclarationNameInfo &,
                            const TemplateArgumentListInfo* ExplicitTemplateArgs,
                                                           ASTContext&, Parser &,
-                                                           Sema &S) {
+                                                           Sema &S,
+                                          LookupHelper::DiagSetting diagOnOff) {
     //
     //  Check for lookup failure.
     //
@@ -1609,6 +1694,7 @@ namespace cling {
     // Lookup a function template based on its Decl(Context), name.
 
     return execFindFunction<NoParse>(*m_Parser, m_Interpreter,
+                                     const_cast<LookupHelper&>(*this),
                                      scopeDecl,
                                      templateName, "",
                                      objectIsConst,
@@ -1623,7 +1709,8 @@ namespace cling {
                            LookupResult &Result,
                            DeclarationNameInfo &,
                            const TemplateArgumentListInfo* ExplicitTemplateArgs,
-                           ASTContext&, Parser &, Sema &S) {
+                           ASTContext&, Parser &, Sema &S,
+                           LookupHelper::DiagSetting diagOnOff) {
     //
     //  Check for lookup failure.
     //
@@ -1648,12 +1735,12 @@ namespace cling {
         SourceLocation loc;
         sema::TemplateDeductionInfo Info(loc);
         FunctionDecl *fdecl = 0;
-        Sema::TemplateDeductionResult Result
+        Sema::TemplateDeductionResult TemplDedResult
           = S.DeduceTemplateArguments(MethodTmpl,
                     const_cast<TemplateArgumentListInfo*>(ExplicitTemplateArgs),
                                       fdecl,
                                       Info);
-        if (Result) {
+        if (TemplDedResult != Sema::TDK_Success) {
           // Deduction failure.
           return 0;
         } else {
@@ -1663,8 +1750,7 @@ namespace cling {
                                             true /*recursive instantiation*/);
           if (fdecl->isInvalidDecl()) {
             // if the decl is invalid try to clean up
-            TransactionUnloader U(&S, /*CodeGenerator*/0);
-            U.UnloadDecl(fdecl);
+            UnloadDecl(&S, fdecl);
             return 0;
           }
           return fdecl;
@@ -1680,6 +1766,7 @@ namespace cling {
                                                     bool objectIsConst) const {
 
     return execFindFunction<NoParse>(*m_Parser, m_Interpreter,
+                                     const_cast<LookupHelper&>(*this),
                                      scopeDecl,
                                      funcName, "",
                                      objectIsConst,
@@ -1695,6 +1782,7 @@ namespace cling {
     assert(scopeDecl && "Decl cannot be null");
 
     return execFindFunction<ExprFromTypes>(*m_Parser, m_Interpreter,
+                                           const_cast<LookupHelper&>(*this),
                                            scopeDecl,
                                            funcName,
                                            funcProto,
@@ -1711,6 +1799,7 @@ namespace cling {
     assert(scopeDecl && "Decl cannot be null");
 
     return execFindFunction<ParseProto>(*m_Parser, m_Interpreter,
+                                        const_cast<LookupHelper&>(*this),
                                         scopeDecl,
                                         funcName,
                                         funcProto,
@@ -1728,6 +1817,7 @@ namespace cling {
     assert(scopeDecl && "Decl cannot be null");
 
     return execFindFunction<ParseProto>(*m_Parser, m_Interpreter,
+                                        const_cast<LookupHelper&>(*this),
                                         scopeDecl,
                                         funcName,
                                         funcProto,
@@ -1745,6 +1835,7 @@ namespace cling {
     assert(scopeDecl && "Decl cannot be null");
 
     return execFindFunction<ExprFromTypes>(*m_Parser, m_Interpreter,
+                                           const_cast<LookupHelper&>(*this),
                                            scopeDecl,
                                            funcName,
                                            funcProto,
@@ -1760,25 +1851,27 @@ namespace cling {
     bool operator()(llvm::SmallVectorImpl<Expr*> &GivenArgs,
                     const ArgsInput &funcArgs,
                     LookupHelper::DiagSetting diagOnOff,
-                    Parser &P, const Interpreter* Interp) {
+                    Parser &P, const Interpreter* Interp,
+                    LookupHelper& LH) {
 
       if (funcArgs.empty()) return true;
-      else return Parse(GivenArgs,funcArgs,diagOnOff,P,Interp);
+      else return Parse(GivenArgs,funcArgs,diagOnOff, P, Interp, LH);
     }
 
     bool Parse(llvm::SmallVectorImpl<Expr*> &GivenArgs,
-                 llvm::StringRef funcArgs,
-                 LookupHelper::DiagSetting diagOnOff,
-                 Parser &P, const Interpreter* Interp) {
+               llvm::StringRef funcArgs,
+               LookupHelper::DiagSetting diagOnOff,
+               Parser &P, const Interpreter* Interp,
+               LookupHelper& LH) {
 
       //
       //  Parse the arguments now.
       //
 
       Interpreter::PushTransactionRAII TforDeser(Interp);
-      ParserStateRAII ResetParserState(P);
-      prepareForParsing(P,Interp,
-                        funcArgs, llvm::StringRef("func.args.file"), diagOnOff);
+      StartParsingRAII ParseStarted(LH, funcArgs,
+                                    llvm::StringRef("func.args.file"),
+                                    diagOnOff);
 
       Sema& S = P.getActions();
       ASTContext& Context = S.getASTContext();
@@ -1802,8 +1895,7 @@ namespace cling {
             else {
               proto += ',';
             }
-            std::string empty;
-            llvm::raw_string_ostream tmp(empty);
+            stdstrstream tmp;
             expr->printPretty(tmp, /*PrinterHelper=*/0, Policy,
                               /*Indentation=*/0);
             proto += tmp.str();
@@ -1839,6 +1931,7 @@ namespace cling {
     assert(scopeDecl && "Decl cannot be null");
 
     return execFindFunction<ParseArgs>(*m_Parser, m_Interpreter,
+                                       const_cast<LookupHelper&>(*this),
                                        scopeDecl,
                                        funcName,
                                        funcArgs,
@@ -1857,9 +1950,10 @@ namespace cling {
     //
     // Use P for shortness
     Parser& P = *m_Parser;
-    ParserStateRAII ResetParserState(P);
-    prepareForParsing(P,m_Interpreter,
-                      argList, llvm::StringRef("arg.list.file"), diagOnOff);
+    StartParsingRAII ParseStarted(const_cast<LookupHelper&>(*this),
+                                  argList,
+                                  llvm::StringRef("arg.list.file"),
+                                  diagOnOff);
     //
     //  Parse the arguments now.
     //
@@ -1892,7 +1986,8 @@ namespace cling {
                            LookupResult &Result,
                            DeclarationNameInfo &,
                            const TemplateArgumentListInfo* ,
-                           ASTContext&, Parser &, Sema &) {
+                           ASTContext&, Parser &, Sema &,
+                           LookupHelper::DiagSetting /*diagOnOff*/) {
     //
     //  Check for lookup failure.
     //
@@ -1909,10 +2004,54 @@ namespace cling {
                                  DiagSetting diagOnOff) const {
 
     return execFindFunction<NoParse>(*m_Parser, m_Interpreter,
+                                     const_cast<LookupHelper&>(*this),
                                      scopeDecl,
                                      funcName, "",
                                      false /* objectIsConst */,
                                      hasFunctionSelector,
                                      diagOnOff);
+  }
+
+  static const clang::Type* getType(LookupHelper* LH, llvm::StringRef Type) {
+    QualType Qt = LH->findType(Type, LookupHelper::WithDiagnostics);
+    assert(!Qt.isNull() && "Type should exist");
+    return Qt.getTypePtr();
+  }
+
+  LookupHelper::StringType
+  LookupHelper::getStringType(const clang::Type* Type) {
+    assert(Type && "Type cannot be null");
+    const Transaction*& Cache = m_Interpreter->getStdStringTransaction();
+    if (!Cache || !m_StringTy[kStdString]) {
+      // getStringType can be called multiple times with Cache being null, and
+      // the local cache should be discarded when that occurs.
+      if (!Cache)
+        m_StringTy = {};
+      QualType Qt = findType("std::string", WithDiagnostics);
+      m_StringTy[kStdString] = Qt.isNull() ? nullptr : Qt.getTypePtr();
+      if (!m_StringTy[kStdString]) return kNotAString;
+
+      Cache = m_Interpreter->getLatestTransaction();
+      m_StringTy[kWCharString] = getType(this, "std::wstring");
+
+      const clang::LangOptions& LO = m_Interpreter->getCI()->getLangOpts();
+      if (LO.CPlusPlus11) {
+        m_StringTy[kUTF16Str] = getType(this, "std::u16string");
+        m_StringTy[kUTF32Str] = getType(this, "std::u32string");
+      }
+    }
+
+    ASTContext& Ctx = m_Interpreter->getSema().getASTContext();
+    for (unsigned I = 0; I < kNumCachedStrings; ++I) {
+      if (m_StringTy[I] && Ctx.hasSameType(Type, m_StringTy[I]))
+        return StringType(I);
+    }
+    return kNotAString;
+  }
+
+  void LookupHelper::printStats() const {
+    llvm::errs() << "Cached entries: " << m_ParseBufferCache.size() << "\n";
+    llvm::errs() << "Total parse requests: " << m_TotalParseRequests << "\n";
+    llvm::errs() << "Cache hits: " << m_CacheHits << "\n";
   }
 } // end namespace cling

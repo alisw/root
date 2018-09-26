@@ -4,11 +4,11 @@
 ///
 /// to run, do:
 ///
-/// ~~~ {.cpp}
+/// ~~~{.cpp}
 ///  root > .x pythia8.C
 /// ~~~
 ///
-/// Note that before executing this script,
+/// Note that before executing this script, for some Pythia8 builds:
 ///
 ///  - the env variable PYTHIA8 must point to the pythia8100 (or newer) directory
 ///  - the env variable PYTHIA8DATA must be defined and it must point to $PYTHIA8/xmldoc
@@ -17,32 +17,17 @@
 ///
 /// \author Andreas Morsch
 
+#include "TSystem.h"
+#include "TH1F.h"
+#include "TClonesArray.h"
+#include "TPythia8.h"
+#include "TParticle.h"
+#include "TDatabasePDG.h"
+#include "TCanvas.h"
+
 void pythia8(Int_t nev  = 100, Int_t ndeb = 1)
 {
-   const char *p8dataenv = gSystem->Getenv("PYTHIA8DATA");
-   if (!p8dataenv) {
-      const char *p8env = gSystem->Getenv("PYTHIA8");
-      if (!p8env) {
-         Error("pythia8.C",
-               "Environment variable PYTHIA8 must contain path to pythia directory!");
-         return;
-      }
-      TString p8d = p8env;
-      p8d += "/xmldoc";
-      gSystem->Setenv("PYTHIA8DATA", p8d);
-   }
-
-   const char* path = gSystem->ExpandPathName("$PYTHIA8DATA");
-   if (gSystem->AccessPathName(path)) {
-         Error("pythia8.C",
-               "Environment variable PYTHIA8DATA must contain path to $PYTHIA8/xmldoc directory !");
-      return;
-   }
-
 // Load libraries
-#ifndef G__WIN32 // Pythia8 is a static library on Windows
-   gSystem->Load("$PYTHIA8/lib/libpythia8");
-#endif
    gSystem->Load("libEG");
    gSystem->Load("libEGPythia8");
 // Histograms
@@ -57,6 +42,9 @@ void pythia8(Int_t nev  = 100, Int_t ndeb = 1)
 
 // Configure
    pythia8->ReadString("HardQCD:all = on");
+   pythia8->ReadString("Random:setSeed = on");
+   // use a reproducible seed: always the same results for the tutorial.
+   pythia8->ReadString("Random:seed = 42");
 
 
 // Initialize

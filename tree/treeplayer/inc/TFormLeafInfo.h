@@ -12,13 +12,9 @@
 #ifndef ROOT_TFormLeafInfo
 #define ROOT_TFormLeafInfo
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
-#ifndef ROOT_TLeafElement
 #include "TLeafElement.h"
-#endif
 
 #include "TArrayI.h"
 #include "TDataType.h"
@@ -367,6 +363,7 @@ class TFormLeafInfoMethod : public TFormLeafInfo {
    Bool_t       fIsByValue;
 
 public:
+   static TClass *ReturnTClass(TMethodCall *mc);
 
    TFormLeafInfoMethod(TClass* classptr = 0, TMethodCall *method = 0);
    TFormLeafInfoMethod(const TFormLeafInfoMethod& orig);

@@ -32,44 +32,39 @@
 #include <string>
 #include <vector>
 #include <map>
-#ifndef ROOT_TCut
 #include "TCut.h"
-#endif
 
-#ifndef ROOT_TMVA_Factory
 #include "TMVA/Factory.h"
-#endif
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
-#ifndef ROOT_TMVA_DataSet
 #include "TMVA/DataSet.h"
-#endif
 
 class TFile;
 class TTree;
 class TDirectory;
+class TH2;
 
 namespace TMVA {
 
-   class IMethod;
-   class MethodBase;
+   class CvSplit;
    class DataInputHandler;
    class DataSetInfo;
    class DataSetManager;
+   class Envelope;
+   class MethodBase;
+   class IMethod;   
    class VariableTransformBase;
+   class VarTransformHandler;
 
    class DataLoader : public Configurable {
-     friend class Factory;
+      friend class Factory;
+      friend class Envelope;
    public:
 
-      // no default  constructor
-      DataLoader( TString thedlName);
+       DataLoader( TString thedlName="default");
 
       // default destructor
       virtual ~DataLoader();
 
-      virtual const char*  GetName() const { return fName.Data(); }
 
       // add events to training and testing trees
       void AddSignalTrainingEvent    ( const std::vector<Double_t>& event, Double_t weight = 1.0 );
@@ -84,6 +79,8 @@ namespace TMVA {
 
       DataSetInfo& AddDataSet( DataSetInfo& );
       DataSetInfo& AddDataSet( const TString&  );
+      DataSetInfo& GetDataSetInfo();
+      DataLoader* VarTransform(TString trafoDefinition);
 
       // special case: signal/background
 
@@ -141,7 +138,7 @@ namespace TMVA {
          AddTarget( expression, title, unit, min, max );
       }
       void AddSpectator         ( const TString& expression, const TString& title = "", const TString& unit = "",
-                                Double_t min = 0, Double_t max = 0 );
+                                  Double_t min = 0, Double_t max = 0 );
 
       // set weight for class
       void SetWeightExpression( const TString& variable, const TString& className = "" );
@@ -163,12 +160,23 @@ namespace TMVA {
       void PrepareTrainingAndTestTree( const TCut& cut, Int_t NsigTrain, Int_t NbkgTrain, Int_t NsigTest, Int_t NbkgTest, 
                                        const TString& otherOpt="SplitMode=Random:!V" );
 
+      // Cross validation
+      void MakeKFoldDataSet(CvSplit & s);
+      void PrepareFoldDataSet(CvSplit & s, UInt_t foldNumber, Types::ETreeType tt = Types::kTraining);
+      void RecombineKFoldDataSet(CvSplit & s, Types::ETreeType tt = Types::kTraining);
+
+      const DataSetInfo& GetDefaultDataSetInfo(){ return DefaultDataSetInfo(); }
+
+      TH2* GetCorrelationMatrix(const TString& className);
  
+      //Copy method use in VI and CV DEPRECATED: you can just call Clone  DataLoader *dl2=(DataLoader *)dl1->Clone("dl2")
+      DataLoader* MakeCopy(TString name);
+      friend void DataLoaderCopy(TMVA::DataLoader* des, TMVA::DataLoader* src);      
+      DataInputHandler&        DataInput() { return *fDataInputHandler; }
  
    private:
 
  
-      DataInputHandler&        DataInput() { return *fDataInputHandler; }
       DataSetInfo&             DefaultDataSetInfo();
       void                     SetInputTreesFromEventAssignTrees();
 
@@ -181,36 +189,34 @@ namespace TMVA {
       DataSetManager* fDataSetManager; // DSMTEST
 
  
-      DataInputHandler*                         fDataInputHandler;
+      DataInputHandler*                         fDataInputHandler;//->
 
-      std::vector<TMVA::VariableTransformBase*> fDefaultTrfs;     //! list of transformations on default DataSet
+      std::vector<TMVA::VariableTransformBase*> fDefaultTrfs;     // list of transformations on default DataSet
 
       // cd to local directory
-      TString                                   fOptions;         //! option string given by construction (presently only "V")
-      TString                                   fTransformations; //! List of transformations to test
-      Bool_t                                    fVerbose;         //! verbose mode
-
-      TString                                   fName;         //! name, used as directory in output
+      TString                                   fOptions;         // option string given by construction (presently only "V")
+      TString                                   fTransformations; // List of transformations to test
+      Bool_t                                    fVerbose;         // verbose mode
 
       // flag determining the way training and test data are assigned to DataLoader
       enum DataAssignType { kUndefined = 0, 
                             kAssignTrees,
                             kAssignEvents };
-      DataAssignType                            fDataAssignType;  //! flags for data assigning
-      std::vector<TTree*>                       fTrainAssignTree; //! for each class: tmp tree if user wants to assign the events directly
-      std::vector<TTree*>                       fTestAssignTree;  //! for each class: tmp tree if user wants to assign the events directly
+      DataAssignType                            fDataAssignType;  // flags for data assigning
+      std::vector<TTree*>                       fTrainAssignTree; // for each class: tmp tree if user wants to assign the events directly
+      std::vector<TTree*>                       fTestAssignTree;  // for each class: tmp tree if user wants to assign the events directly
 
-      Int_t                                     fATreeType;          // type of event (=classIndex)
-      Float_t                                   fATreeWeight;        // weight of the event
-      Float_t*                                  fATreeEvent;         // event variables
+      Int_t                                     fATreeType = 0;          // type of event (=classIndex)
+      Float_t                                   fATreeWeight = 0.0;        // weight of the event
+      std::vector<Float_t>                      fATreeEvent;         // event variables
       
-      Types::EAnalysisType                      fAnalysisType;    //! the training type
+      Types::EAnalysisType                      fAnalysisType;    // the training type
 
    protected:
 
-      ClassDef(DataLoader,0)
+      ClassDef(DataLoader,4);
    };
-
+   void DataLoaderCopy(TMVA::DataLoader* des, TMVA::DataLoader* src);
 } // namespace TMVA
 
 #endif

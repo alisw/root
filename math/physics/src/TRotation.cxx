@@ -184,9 +184,8 @@ TVector3 class:
 #include "TRotation.h"
 #include "TMath.h"
 #include "TQuaternion.h"
-#include "TError.h"
 
-ClassImp(TRotation)
+ClassImp(TRotation);
 
 #define TOLERANCE (1.0E-6)
 

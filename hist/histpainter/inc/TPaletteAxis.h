@@ -21,12 +21,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TPave
 #include "TPave.h"
-#endif
-#ifndef ROOT_TGaxis
 #include "TGaxis.h"
-#endif
 
 class TH1;
 
@@ -39,7 +35,7 @@ protected:
 
 public:
    // TPaletteAxis status bits
-   enum { kHasView   = BIT(11)};
+   enum EStatusBits { kHasView = BIT(11) };
 
    TPaletteAxis();
    TPaletteAxis(Double_t x1, Double_t y1,Double_t x2 ,Double_t y2, TH1 *h);

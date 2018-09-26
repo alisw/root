@@ -37,7 +37,7 @@
 
 #include "TROOT.h"
 
-ClassImp(TParallelCoordEditor)
+ClassImp(TParallelCoordEditor);
 
 
 /** \class TParallelCoordEditor
@@ -578,9 +578,9 @@ void TParallelCoordEditor::DoDeleteVar()
 {
    if (fAvoidSignal) return;
 
-   TParallelCoordVar* var = fParallel->RemoveVariable(((TGTextLBEntry*)fVariables->GetSelectedEntry())->GetTitle());
+   Bool_t hasDeleted = fParallel->RemoveVariable(((TGTextLBEntry*)fVariables->GetSelectedEntry())->GetTitle());
    CleanUpVariables();
-   if (var) Update();
+   if (hasDeleted) Update();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -673,8 +673,10 @@ void TParallelCoordEditor::DoGlobalLineColor(Pixel_t a)
    if (TColor *color = gROOT->GetColor(fParallel->GetLineColor())) {
       color->SetAlpha(1);
       color = gROOT->GetColor(TColor::GetColor(a));
-      color->SetAlpha((Float_t)fAlphaField->GetNumber());
-      fParallel->SetLineColor(color->GetNumber());
+      if (color) {
+         color->SetAlpha((Float_t)fAlphaField->GetNumber());
+         fParallel->SetLineColor(color->GetNumber());
+      }
    }
    Update();
 }

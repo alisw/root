@@ -14,13 +14,9 @@
 
 #include <memory>
 
-#ifndef ROOT_TGedFrame
 #include "TGedFrame.h"
-#endif
 
-#ifndef ROOT_TGLUtil
 #include "TGLUtil.h"
-#endif
  
 class TGCheckButton;
 class TGNumberEntry;
@@ -109,7 +105,7 @@ private:
 
    // Model
    TGLViewer        *fViewer;
-   Bool_t	     fIsInPad;
+   Bool_t            fIsInPad;
 
    void ConnectSignals2Slots();
 

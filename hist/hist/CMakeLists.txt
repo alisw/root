@@ -4,14 +4,29 @@
 
 set(libname Hist)
 
-include_directories(${CMAKE_SOURCE_DIR}/graf3d/g3d/inc)   # This is to avoid a circular dependency g3d <--> hist
-
-ROOT_GENERATE_DICTIONARY(G__${libname} *.h Math/*.h v5/*.h MODULE ${libname} LINKDEF LinkDef.h OPTIONS "-writeEmptyRootPCM")
-
 if(root7)
-    ROOT_GLOB_SOURCES(root7src RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} v7/src/*.cxx)
+    set(root7src v7/src/RAxis.cxx)
+    set(Hist_v7_dict_headers
+            v7/inc/ROOT/RAxis.hxx
+            v7/inc/ROOT/RHist.hxx
+            v7/inc/ROOT/RHistBinIter.hxx
+            v7/inc/ROOT/RHistBufferedFill.hxx
+            v7/inc/ROOT/RHistConcurrentFill.hxx
+            v7/inc/ROOT/RHistData.hxx
+            v7/inc/ROOT/RHistImpl.hxx
+            v7/inc/ROOT/RHistUtils.hxx
+            v7/inc/ROOT/RHistView.hxx
+       )
 endif()
 
-ROOT_LINKER_LIBRARY(${libname} *.cxx ${root7src} G__${libname}.cxx DEPENDENCIES Matrix MathCore)
-ROOT_INSTALL_HEADERS()
+ROOT_STANDARD_LIBRARY_PACKAGE(Hist
+                              HEADERS *.h Math/*.h v5/*.h ${Hist_v7_dict_headers}
+                              SOURCES *.cxx ${root7src}
+                              DICTIONARY_OPTIONS "-writeEmptyRootPCM"
+                              DEPENDENCIES Matrix MathCore RIO)
 
+ROOT_ADD_TEST_SUBDIRECTORY(test)
+
+if(root7)
+    ROOT_ADD_TEST_SUBDIRECTORY(v7/test)
+endif()

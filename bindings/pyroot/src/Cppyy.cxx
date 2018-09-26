@@ -29,7 +29,12 @@
 
 // temp
 #include <iostream>
-typedef PyROOT::TParameter TParameter;
+// FIXME: Should refer to PyROOT::TParameter in the code.
+#ifdef R__CXXMODULES
+  #define TParameter PyROOT::TParameter
+#else
+  typedef PyROOT::TParameter TParameter;
+#endif
 // --temp
 
 
@@ -125,7 +130,7 @@ Cppyy::TCppIndex_t Cppyy::GetNumScopes( TCppScope_t scope )
    return gClassTable->Classes();
 }
 
-std::string Cppyy::GetScopeName( TCppScope_t parent, TCppIndex_t iscope ) 
+std::string Cppyy::GetScopeName( TCppScope_t parent, TCppIndex_t iscope )
 {
 // Retrieve the scope name of the scope indexed with iscope in parent.
    TClassRef& cr = type_from_handle( parent );
@@ -135,6 +140,27 @@ std::string Cppyy::GetScopeName( TCppScope_t parent, TCppIndex_t iscope )
    if ( name.find("::") == std::string::npos )
        return name;
    return "";
+}
+
+std::string Cppyy::GetName( const std::string& name )
+{
+   if( name.size() == 0) return name; 
+   // need to deal with template paremeters that can have scopes themselves
+   Int_t tpl_open = 0;
+   for ( std::string::size_type pos = name.size() - 1; pos > 0; pos-- ) {
+      std::string::value_type c = name[pos];
+      // count '<' and '>' to be able to skip template contents
+      if ( c == '>' )
+         ++tpl_open;
+      else if ( c == '<' )
+         --tpl_open;
+      // by only checking for "::" the last part (class name) is dropped
+      else if ( tpl_open == 0 && c == ':'&& name[ pos - 1 ] == ':' ) {
+      // found a new scope part
+         return name.substr( pos+1 );
+      }
+   }
+   return name;
 }
 
 std::string Cppyy::ResolveName( const std::string& cppitem_name )
@@ -204,10 +230,10 @@ Bool_t Cppyy::IsBuiltin( const std::string& type_name )
 }
 
 Bool_t Cppyy::IsComplete( const std::string& type_name )
-{  
+{
 // verify whether the dictionary of this class is fully available
    Bool_t b = kFALSE;
-   
+
    Int_t oldEIL = gErrorIgnoreLevel;
    gErrorIgnoreLevel = 3000;
    TClass* klass = TClass::GetClass( TClassEdit::ShortType( type_name.c_str(), 1 ).c_str() );
@@ -221,8 +247,8 @@ Bool_t Cppyy::IsComplete( const std::string& type_name )
       }
    }
    gErrorIgnoreLevel = oldEIL;
-   return b;    
-}  
+   return b;
+}
 
 // memory management ---------------------------------------------------------
 Cppyy::TCppObject_t Cppyy::Allocate( TCppType_t type )
@@ -276,7 +302,7 @@ static CallFunc_t* GetCallFunc( Cppyy::TCppMethod_t method )
 
       TCollection* method_args = func->GetListOfMethodArgs();
       TIter iarg( method_args );
-   
+
       TMethodArg* method_arg = 0;
       while ((method_arg = (TMethodArg*)iarg.Next())) {
          std::string fullType = method_arg->GetTypeNormalizedName();
@@ -473,7 +499,8 @@ Cppyy::TCppObject_t Cppyy::CallO( TCppMethod_t method,
       TCppObject_t self, void* args, TCppType_t result_type )
 {
    TClassRef& cr = type_from_handle( result_type );
-   void* obj = malloc( cr->Size() );
+   size_t s = gInterpreter->ClassInfo_Size(cr->GetClassInfo());
+   void* obj = malloc( s );
    if ( FastCall( method, args, self, obj ) )
       return (TCppObject_t)obj;
    return (TCppObject_t)0;
@@ -528,8 +555,8 @@ Bool_t Cppyy::IsAbstract( TCppType_t klass ) {
 Bool_t Cppyy::IsEnum( const std::string& type_name ) {
    return gInterpreter->ClassInfo_IsEnum( type_name.c_str() );
 }
-    
-    
+
+
 // class reflection information ----------------------------------------------
 std::string Cppyy::GetFinalName( TCppType_t klass )
 {
@@ -545,7 +572,7 @@ std::string Cppyy::GetScopedFinalName( TCppType_t klass )
    // TODO: either this or GetFinalName is wrong
    TClassRef& cr = type_from_handle( klass );
    return cr->GetName();
-}   
+}
 
 Bool_t Cppyy::HasComplexHierarchy( TCppType_t /* handle */ )
 {
@@ -853,7 +880,7 @@ Cppyy::TCppIndex_t Cppyy::GetNumDatamembers( TCppScope_t scope )
       return cr->GetListOfDataMembers()->GetSize();
    else if ( scope == (TCppScope_t)GLOBAL_HANDLE ) {
       std::cerr << " global data should be retrieved lazily " << std::endl;
-      TCollection* vars = gROOT->GetListOfGlobals( kTRUE ); 
+      TCollection* vars = gROOT->GetListOfGlobals( kTRUE );
       if ( g_globalvars.size() != (GlobalVars_t::size_type)vars->GetSize() ) {
          g_globalvars.clear();
          g_globalvars.reserve(vars->GetSize());

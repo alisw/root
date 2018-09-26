@@ -18,7 +18,7 @@ use the classes using OpenGL.
 #include "TGlobal.h"
 
 
-ClassImp(TGLManager)
+ClassImp(TGLManager);
 
 TGLManager * (*gPtr2GLManager)() = 0;
 
@@ -28,7 +28,7 @@ AddPseudoGlobals() {
   // User "gCling" as synonym for "libCore static initialization has happened".
    // This code here must not trigger it.
    TGlobalMappedFunction::Add(new TGlobalMappedFunction("gGLManager", "TVirtualGL*",
-                                 (TGlobalMappedFunction::GlobalFunc_t)&gGLManager));
+                                 (TGlobalMappedFunction::GlobalFunc_t) &TGLManager::Instance));
 }
 } gAddPseudoGlobals;
 }
@@ -53,9 +53,9 @@ TGLManager *&TGLManager::Instance()
    return instance;
 }
 
-ClassImp(TVirtualGLPainter)
+ClassImp(TVirtualGLPainter);
 
 
-ClassImp(TVirtualGLManip)
+ClassImp(TVirtualGLManip);
 
-ClassImp(TGLPaintDevice)
+ClassImp(TGLPaintDevice);

@@ -11,16 +11,6 @@
  *************************************************************************/
 
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TGWin32InterpreterProxy                                              //
-//                                                                      //
-// This class defines thread-safe interface to a command line           //
-// interpreter (CINT).                                                  //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-
 #include "TGWin32ProxyDefs.h"
 #include "TGWin32InterpreterProxy.h"
 #include "TROOT.h"
@@ -28,7 +18,6 @@
 
 #if ROOT_VERSION_CODE < ROOT_VERSION(6,00,00)
 
-////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 /// returns TCint object
 
@@ -75,8 +64,8 @@ void TGWin32InterpreterProxy::InspectMembers(TMemberInspector& insp, void* obj, 
 }
 
 RETURN_METHOD_ARG3(Interpreter,TClass*,GenerateTClass,const char *,classname,Bool_t,emulation,Bool_t,silent);
-RETURN_METHOD_ARG2(Interpreter,TClass*,GenerateTClass,ClassInfo_t *,classinfo,Bool_t,silent); 
-RETURN_METHOD_ARG3(Interpreter,Int_t,GenerateDictionary,const char*,classes,const char*,headers,const char*,options); 
+RETURN_METHOD_ARG2(Interpreter,TClass*,GenerateTClass,ClassInfo_t *,classinfo,Bool_t,silent);
+RETURN_METHOD_ARG3(Interpreter,Int_t,GenerateDictionary,const char*,classes,const char*,headers,const char*,options);
 RETURN_METHOD_ARG0(Interpreter,char*,GetPrompt)
 RETURN_METHOD_ARG0(Interpreter,const char*,GetSharedLibs)
 RETURN_METHOD_ARG0(Interpreter,const char*,GetIncludePath)
@@ -108,7 +97,8 @@ VOID_METHOD_ARG0_LOCK(Interpreter,UpdateListOfGlobals)
 VOID_METHOD_ARG0_LOCK(Interpreter,UpdateListOfGlobalFunctions)
 VOID_METHOD_ARG0_LOCK(Interpreter,UpdateListOfTypes)
 VOID_METHOD_ARG2_LOCK(Interpreter,SetClassInfo,TClass*,cl,Bool_t,reload)
-RETURN_METHOD_ARG3(Interpreter,Bool_t,CheckClassInfo,const char*,name,Bool_t,autoload,Bool_t,isClassOrNamespaceOnly)
+RETURN_METHOD_ARG3(Interpreter, TInterpreter::ECheckClassInfo, CheckClassInfo, const char *, name, Bool_t, autoload,
+                   Bool_t, isClassOrNamespaceOnly)
 RETURN_METHOD_ARG1(Interpreter,Bool_t,CheckClassTemplate,const char*,name)
 RETURN_METHOD_ARG2(Interpreter,Long_t,Calc,const char*,line,TInterpreter::EErrorCode*,error)
 VOID_METHOD_ARG1_LOCK(Interpreter,CreateListOfBaseClasses,TClass*,cl)
@@ -130,6 +120,7 @@ RETURN_METHOD_ARG2(Interpreter,Long_t,ExecuteMacro,const char*,filename,TInterpr
 RETURN_METHOD_ARG1(Interpreter,Bool_t,SetErrorMessages,Bool_t,enable)
 VOID_METHOD_ARG1(Interpreter,SetProcessLineLock,Bool_t,lock,1)
 RETURN_METHOD_ARG1(Interpreter,const char*,TypeName,const char*,s)
-//Bool_t TGWin32InterpreterProxy::CheckClassInfo(const char* name) { return RealObject()->CheckClassInfo(name); }
+// TInterpreter::ECheckClassInfo TGWin32InterpreterProxy::CheckClassInfo(const char* name) { return
+// RealObject()->CheckClassInfo(name); }
 
 #endif

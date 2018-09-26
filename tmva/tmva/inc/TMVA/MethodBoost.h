@@ -43,21 +43,22 @@
 #include <iosfwd>
 #include <vector>
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
 
-#ifndef ROOT_TMVA_MethodCompositeBase
 #include "TMVA/MethodCompositeBase.h"
-#endif
 
 namespace TMVA {
 
    class Factory;  // DSMTEST
    class Reader;   // DSMTEST
    class DataSetManager;  // DSMTEST
-
+   namespace Experimental {
+   class Classification;
+   }
    class MethodBoost : public MethodCompositeBase {
+      friend class Factory; // DSMTEST
+      friend class Reader;  // DSMTEST
+      friend class Experimental::Classification;
 
    public :
 
@@ -65,12 +66,10 @@ namespace TMVA {
       MethodBoost( const TString& jobName,
                    const TString& methodTitle,
                    DataSetInfo& theData,
-                   const TString& theOption = "",
-                   TDirectory* theTargetDir = NULL );
+                   const TString& theOption = "" );
 
       MethodBoost( DataSetInfo& dsi,
-                   const TString& theWeightFile,
-                   TDirectory* theTargetDir = NULL );
+                   const TString& theWeightFile );
 
       virtual ~MethodBoost( void );
 
@@ -176,13 +175,13 @@ namespace TMVA {
       // MVA output from each classifier over the testing hist
       std::vector< TH1* >   fTestSigMVAHist;
       std::vector
-< TH1* >   fTestBgdMVAHist;
+         < TH1* >   fTestBgdMVAHist;
       
       //monitoring tree/ntuple and it's variables
       TTree*                fMonitorTree;     // tree  to monitor values during the boosting      
       Double_t              fBoostWeight;        // the weight used to boost the next classifier      
       Double_t              fMethodError;     // estimation of the level error of the classifier 
-                                                  // analysing the train dataset      
+      // analysing the train dataset      
       Double_t           fROC_training;       // roc integral of last trained method (on training sample)
 
       // overlap integral of mva distributions for signal and
@@ -192,9 +191,6 @@ namespace TMVA {
       std::vector<Float_t> *fMVAvalues;       // mva values for the last trained method
 
       DataSetManager*    fDataSetManager;     // DSMTEST
-      friend class Factory;                   // DSMTEST
-      friend class Reader;                    // DSMTEST      
-
       TString fHistoricOption;    //historic variable, only needed for "CompatibilityOptions" 
       Bool_t fHistoricBoolOption; //historic variable, only needed for "CompatibilityOptions" 
 
@@ -203,7 +199,7 @@ namespace TMVA {
       // get help message text
       void GetHelpMessage() const;
 
-      ClassDef(MethodBoost,0)
+      ClassDef(MethodBoost,0);
    };
 }
 

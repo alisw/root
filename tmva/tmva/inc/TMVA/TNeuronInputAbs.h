@@ -41,29 +41,19 @@
 // things from the ROOT version of TMVA
 
 // #if ROOT_VERSION_CODE >= 364802
-#ifndef ROOT_TMathBase
 #include "TMathBase.h"
-#endif
 // #else
 // #ifndef ROOT_TMath
 // #include "TMath.h"
 // #endif
 // #endif
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
-#ifndef ROOT_TMVA_TNeuronInput
 #include "TMVA/TNeuronInput.h"
-#endif
 
-#ifndef ROOT_TMVA_TNeuron
 #include "TMVA/TNeuron.h"
-#endif
 
 namespace TMVA {
   
@@ -86,7 +76,7 @@ namespace TMVA {
       // name of the class
       TString GetName() { return "Sum of weighted activations (absolute value)"; }
 
-      ClassDef(TNeuronInputAbs,0) // Calculates the sum of the absolute values of the weighted inputs
+      ClassDef(TNeuronInputAbs,0); // Calculates the sum of the absolute values of the weighted inputs
    };
 
 } // namespace TMVA

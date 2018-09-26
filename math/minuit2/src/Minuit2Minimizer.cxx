@@ -108,6 +108,7 @@ Minuit2Minimizer::Minuit2Minimizer(const char *  type ) :
    if (algoname == "minimize" ) algoType = kCombined;
    if (algoname == "scan" )     algoType = kScan;
    if (algoname == "fumili" )   algoType = kFumili;
+   if (algoname == "bfgs" )     algoType = kMigradBFGS;
 
    SetMinimizerType(algoType);
 }
@@ -119,6 +120,10 @@ void Minuit2Minimizer::SetMinimizerType(ROOT::Minuit2::EMinimizerType type) {
    case ROOT::Minuit2::kMigrad:
       //std::cout << "Minuit2Minimizer: minimize using MIGRAD " << std::endl;
       SetMinimizer( new ROOT::Minuit2::VariableMetricMinimizer() );
+      return;
+   case ROOT::Minuit2::kMigradBFGS:
+      //std::cout << "Minuit2Minimizer: minimize using MIGRAD " << std::endl;
+      SetMinimizer( new ROOT::Minuit2::VariableMetricMinimizer(VariableMetricMinimizer::BFGSType()) );
       return;
    case ROOT::Minuit2::kSimplex:
       //std::cout << "Minuit2Minimizer: minimize using SIMPLEX " << std::endl;
@@ -332,9 +337,15 @@ bool Minuit2Minimizer::GetVariableSettings(unsigned int ivar, ROOT::Fit::Paramet
    }
    const MinuitParameter & par = fState.Parameter(ivar);
    varObj.Set( par.Name(), par.Value(), par.Error() );
-   if (par.HasLowerLimit() ) varObj.SetLowerLimit(par.LowerLimit() );
-   else if (par.HasUpperLimit() ) varObj.SetUpperLimit(par.UpperLimit() );
-   else if (par.HasLimits() ) varObj.SetLimits(par.LowerLimit(), par.UpperLimit() );
+   if (par.HasLowerLimit() ) {
+     if (par.HasUpperLimit() ) {
+       varObj.SetLimits(par.LowerLimit(), par.UpperLimit() );
+     } else {
+       varObj.SetLowerLimit(par.LowerLimit() );
+     }
+   } else if (par.HasUpperLimit() ) {
+     varObj.SetUpperLimit(par.UpperLimit() );
+   }
    if (par.IsConst() || par.IsFixed() ) varObj.Fix();
    return true;
 }
@@ -553,6 +564,12 @@ bool  Minuit2Minimizer::ExamineMinimum(const ROOT::Minuit2::FunctionMinimum & mi
 
    fStatus = 0;
    std::string txt;
+   if (!min.HasPosDefCovar() ) {
+      // this happens normally when Hesse failed
+      // it can happen in case MnSeed failed (see ROOT-9522)
+      txt = "Covar is not pos def";
+      fStatus = 5;
+   }
    if (min.HasMadePosDefCovar() ) {
       txt = "Covar was made pos def";
       fStatus = 1;
@@ -581,7 +598,7 @@ bool  Minuit2Minimizer::ExamineMinimum(const ROOT::Minuit2::FunctionMinimum & mi
       if (fStatus == 0) {
          // this should not happen
          txt = "unknown failure";
-         fStatus = 5;
+         fStatus = 6;
       }
       std::string msg = "Minimization did NOT converge, " + txt;
       MN_INFO_MSG2("Minuit2Minimizer::Minimize",msg);
@@ -660,7 +677,7 @@ const double * Minuit2Minimizer::Errors() const {
 
 double Minuit2Minimizer::CovMatrix(unsigned int i, unsigned int j) const {
    // get value of covariance matrices (transform from external to internal indices)
-   if ( i >= fDim || i >= fDim) return 0;
+   if ( i >= fDim || j >= fDim) return 0;
    if (  !fState.HasCovariance()    ) return 0; // no info available when minimization has failed
    if (fState.Parameter(i).IsFixed() || fState.Parameter(i).IsConst() ) return 0;
    if (fState.Parameter(j).IsFixed() || fState.Parameter(j).IsConst() ) return 0;
@@ -727,7 +744,7 @@ bool Minuit2Minimizer::GetHessianMatrix(double * hess) const {
 
 double Minuit2Minimizer::Correlation(unsigned int i, unsigned int j) const {
    // get correlation between parameter i and j
-   if ( i >= fDim || i >= fDim) return 0;
+   if ( i >= fDim || j >= fDim) return 0;
    if (  !fState.HasCovariance()    ) return 0; // no info available when minimization has failed
    if (fState.Parameter(i).IsFixed() || fState.Parameter(i).IsConst() ) return 0;
    if (fState.Parameter(j).IsFixed() || fState.Parameter(j).IsConst() ) return 0;
@@ -744,7 +761,7 @@ double Minuit2Minimizer::GlobalCC(unsigned int i) const {
    // the correlation between the i-th parameter  and that linear combination of all other parameters which
    // is most strongly correlated with i.
 
-   if ( i >= fDim || i >= fDim) return 0;
+   if ( i >= fDim ) return 0;
     // no info available when minimization has failed or has some problems
    if ( !fState.HasGlobalCC()    ) return 0;
    if (fState.Parameter(i).IsFixed() || fState.Parameter(i).IsConst() ) return 0;

@@ -13,7 +13,9 @@
 #include "TStyle.h"
 #include "TError.h"
 #include "Getline.h"
-//#include "TVirtualX.h"
+#ifdef R__WIN32
+#include "TVirtualX.h"
+#endif
 
 // Standard
 #include <string.h>
@@ -41,7 +43,7 @@
 
 
 //- data ---------------------------------------------------------------------
-ClassImp(PyROOT::TPyROOTApplication)
+ClassImp(PyROOT::TPyROOTApplication);
 
 
 //- constructors/destructor --------------------------------------------------
@@ -96,7 +98,7 @@ Bool_t PyROOT::TPyROOTApplication::CreatePyROOTApplication( Bool_t bLoadLibs )
       if ( argl && 0 < PyList_Size( argl ) ) argc = (int)PyList_GET_SIZE( argl );
       char** argv = new char*[ argc ];
       for ( int i = 1; i < argc; ++i ) {
-         char* argi = PyROOT_PyUnicode_AsString( PyList_GET_ITEM( argl, i ) );
+         char* argi = const_cast< char* >( PyROOT_PyUnicode_AsString( PyList_GET_ITEM( argl, i ) ) );
          if ( strcmp( argi, "-" ) == 0 || strcmp( argi, "--" ) == 0 ) {
          // stop collecting options, the remaining are for the python script
             argc = i;    // includes program name

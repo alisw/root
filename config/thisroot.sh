@@ -15,20 +15,25 @@ drop_from_path()
       return 1
    fi
 
-   p=$1
-   drop=$2
+   local p=$1
+   local drop=$2
 
    newpath=`echo $p | sed -e "s;:${drop}:;:;g" \
-                          -e "s;:${drop};;g"   \
-                          -e "s;${drop}:;;g"   \
-                          -e "s;${drop};;g"`
+                          -e "s;:${drop}\$;;g"   \
+                          -e "s;^${drop}:;;g"   \
+                          -e "s;^${drop}\$;;g"`
 }
 
 if [ -n "${ROOTSYS}" ] ; then
    old_rootsys=${ROOTSYS}
 fi
 
-if [ "x${BASH_ARGV[0]}" = "x" ]; then
+SOURCE=${BASH_ARGV[0]}
+if [ "x$SOURCE" = "x" ]; then
+    SOURCE=${(%):-%N} # for zsh
+fi
+
+if [ "x${SOURCE}" = "x" ]; then
     if [ -f bin/thisroot.sh ]; then
         ROOTSYS="$PWD"; export ROOTSYS
     elif [ -f ./thisroot.sh ]; then
@@ -40,43 +45,48 @@ if [ "x${BASH_ARGV[0]}" = "x" ]; then
     fi
 else
     # get param to "."
-    thisroot=$(dirname ${BASH_ARGV[0]})
+    thisroot=$(dirname ${SOURCE})
     ROOTSYS=$(cd ${thisroot}/.. > /dev/null;pwd); export ROOTSYS
 fi
 
 if [ -n "${old_rootsys}" ] ; then
    if [ -n "${PATH}" ]; then
-      drop_from_path "$PATH" ${old_rootsys}/bin
+      drop_from_path "$PATH" "${old_rootsys}/bin"
       PATH=$newpath
    fi
    if [ -n "${LD_LIBRARY_PATH}" ]; then
-      drop_from_path $LD_LIBRARY_PATH ${old_rootsys}/lib
+      drop_from_path "$LD_LIBRARY_PATH" "${old_rootsys}/lib"
       LD_LIBRARY_PATH=$newpath
    fi
    if [ -n "${DYLD_LIBRARY_PATH}" ]; then
-      drop_from_path $DYLD_LIBRARY_PATH ${old_rootsys}/lib
+      drop_from_path "$DYLD_LIBRARY_PATH" "${old_rootsys}/lib"
       DYLD_LIBRARY_PATH=$newpath
    fi
    if [ -n "${SHLIB_PATH}" ]; then
-      drop_from_path $SHLIB_PATH ${old_rootsys}/lib
+      drop_from_path "$SHLIB_PATH" "${old_rootsys}/lib"
       SHLIB_PATH=$newpath
    fi
    if [ -n "${LIBPATH}" ]; then
-      drop_from_path $LIBPATH ${old_rootsys}/lib
+      drop_from_path "$LIBPATH" "${old_rootsys}/lib"
       LIBPATH=$newpath
    fi
    if [ -n "${PYTHONPATH}" ]; then
-      drop_from_path $PYTHONPATH ${old_rootsys}/lib
+      drop_from_path "$PYTHONPATH" "${old_rootsys}/lib"
       PYTHONPATH=$newpath
    fi
    if [ -n "${MANPATH}" ]; then
-      drop_from_path $MANPATH ${old_rootsys}/man
+      drop_from_path "$MANPATH" "${old_rootsys}/man"
       MANPATH=$newpath
    fi
    if [ -n "${CMAKE_PREFIX_PATH}" ]; then
-      drop_from_path $CMAKE_PREFIX_PATH ${old_rootsys}
+      drop_from_path "$CMAKE_PREFIX_PATH" "${old_rootsys}"
       CMAKE_PREFIX_PATH=$newpath
    fi
+   if [ -n "${JUPYTER_PATH}" ]; then
+      drop_from_path "$JUPYTER_PATH" "${old_rootsys}/etc/notebook"
+      JUPYTER_PATH=$newpath
+   fi
+
 fi
 
 if [ -z "${MANPATH}" ]; then
@@ -136,6 +146,11 @@ else
    CMAKE_PREFIX_PATH=$ROOTSYS:$CMAKE_PREFIX_PATH; export CMAKE_PREFIX_PATH
 fi
 
+if [ -z "${JUPYTER_PATH}" ]; then
+   JUPYTER_PATH=$ROOTSYS/etc/notebook; export JUPYTER_PATH       # Linux, ELF HP-UX
+else
+   JUPYTER_PATH=$ROOTSYS/etc/notebook:$JUPYTER_PATH; export JUPYTER_PATH
+fi
 
 if [ "x`root-config --arch | grep -v win32gcc | grep -i win32`" != "x" ]; then
   ROOTSYS="`cygpath -w $ROOTSYS`"
@@ -143,4 +158,4 @@ fi
 
 unset old_rootsys
 unset thisroot
-
+unset -f drop_from_path

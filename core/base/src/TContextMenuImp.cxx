@@ -10,9 +10,12 @@
  *************************************************************************/
 
 /** \class TContextMenuImp
+\ingroup Base
+
 This class provides an interface to GUI independent context sensitive popup menus.
 */
 
 #include "TContextMenuImp.h"
 
-ClassImp(TContextMenuImp)
+ClassImp(TContextMenuImp);
+TContextMenuImp::~TContextMenuImp() {}

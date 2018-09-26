@@ -3,7 +3,7 @@
 ///
 /// Example to write & read a Tree built with a complex class inheritance tree.
 /// It demonstrates usage of inheritance and TClonesArrays
-/// This is simplied / stripped extract of an event structure which was used 
+/// This is simplified / stripped extract of an event structure which was used
 /// within the Marabou project.
 ///
 /// To run this example, do:
@@ -11,14 +11,14 @@
 ///  root > .x clonesA_Event.C
 /// ~~~
 /// \macro_code
+///
 /// \author The ROOT Team
-
-
 
 #ifndef CLONESA_EVENT_SECOND_RUN
 
 void clonesA_Event() {
-   TString dir = gSystem->DirName(__FILE__);
+   std::string s1(__FILE__);
+   TString dir = gSystem->UnixPathName(s1.substr(0, s1.find_last_of("\\/")).c_str());
    gROOT->ProcessLine(TString(".L ")+dir+"/clonesA_Event.cxx+");
 #define CLONESA_EVENT_SECOND_RUN yes
    gROOT->ProcessLine("#include \"" __FILE__ "\"");

@@ -95,7 +95,7 @@ public:
 
   virtual Double_t weight() const { 
     // Return weight of current bin
-    return _curWeight ; 
+    return get_curWeight();
   }
   Double_t weightSquared() const ;
   Double_t weight(const RooArgSet& bin, Int_t intOrder=1, Bool_t correctForBinSize=kFALSE, Bool_t cdfBoundaries=kFALSE, Bool_t oneSafe=kFALSE) ;   
@@ -129,7 +129,7 @@ public:
   Int_t getIndex(const RooArgSet& coord, Bool_t fast=kFALSE) ;
 
   void removeSelfFromDir() { removeFromDir(this) ; }
-  
+
 protected:
 
   friend class RooAbsCachedPdf ;
@@ -151,13 +151,24 @@ protected:
   void calculatePartialBinVolume(const RooArgSet& dimSet) const ;
   void checkBinBounds() const;
 
-  void adjustBinning(const RooArgList& vars, TH1& href, Int_t* offset=0) ;
-  void importTH1(const RooArgList& vars, TH1& histo, Double_t initWgt, Bool_t doDensityCorrection) ;
+  void adjustBinning(const RooArgList& vars, const TH1& href, Int_t* offset=0) ;
+  void importTH1(const RooArgList& vars, const TH1& histo, Double_t initWgt, Bool_t doDensityCorrection) ;
   void importTH1Set(const RooArgList& vars, RooCategory& indexCat, std::map<std::string,TH1*> hmap, Double_t initWgt, Bool_t doDensityCorrection) ;
   void importDHistSet(const RooArgList& vars, RooCategory& indexCat, std::map<std::string,RooDataHist*> dmap, Double_t initWgt) ;
 
   virtual RooAbsData* cacheClone(const RooAbsArg* newCacheOwner, const RooArgSet* newCacheVars, const char* newName=0) ;
 
+  virtual Double_t get_wgt(const Int_t &idx) const { return _wgt[idx]; }
+  virtual Double_t get_errLo(const Int_t &idx) const { return _errLo[idx]; }
+  virtual Double_t get_errHi(const Int_t &idx) const { return _errHi[idx]; }
+  virtual Double_t get_sumw2(const Int_t &idx) const { return _sumw2[idx]; }
+
+  virtual Double_t get_curWeight() const { return _curWeight; }
+  virtual Double_t get_curWgtErrLo() const { return _curWgtErrLo; }
+  virtual Double_t get_curWgtErrHi() const { return _curWgtErrHi; }
+  virtual Double_t get_curSumW2() const { return _curSumW2; }
+
+  virtual Int_t get_curIndex() const { return _curIndex; }
 
   Int_t       _arrSize ; //  Size of the weight array
   std::vector<Int_t> _idxMult ; // Multiplier jump table for index calculation

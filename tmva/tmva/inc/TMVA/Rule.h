@@ -1,4 +1,4 @@
-// @(#)root/tmva $Id$    
+// @(#)root/tmva $Id$
 // Author: Andreas Hoecker, Joerg Stelzer, Fredrik Tegenfeldt, Helge Voss
 
 /**********************************************************************************
@@ -7,9 +7,9 @@
  * Class  : Rule                                                                  *
  *                                                                                *
  * Description:                                                                   *
- *      A class describung a 'rule'                                               * 
+ *      A class describing a 'rule'                                               *
  *      Each internal node of a tree defines a rule from all the parental nodes.  *
- *      A rule consists of atleast 2 nodes.                                       *
+ *      A rule consists of at least 2 nodes.                                      *
  *      Input: a decision tree (in the constructor)                               *
  *             its coefficient                                                    *
  *                                                                                *
@@ -19,9 +19,9 @@
  *      Helge Voss         <Helge.Voss@cern.ch>         - MPI-KP Heidelberg, Ger. *
  *                                                                                *
  * Copyright (c) 2005:                                                            *
- *      CERN, Switzerland                                                         * 
+ *      CERN, Switzerland                                                         *
  *      Iowa State U.                                                             *
- *      MPI-K Heidelberg, Germany                                                 * 
+ *      MPI-K Heidelberg, Germany                                                 *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
@@ -31,19 +31,11 @@
 #ifndef ROOT_TMVA_Rule
 #define ROOT_TMVA_Rule
 
-#ifndef ROOT_TMath
 #include "TMath.h"
-#endif
 
-#ifndef ROOT_TMVA_DecisionTree
 #include "TMVA/DecisionTree.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
-#ifndef ROOT_TMVA_RuleCut
 #include "TMVA/RuleCut.h"
-#endif
 
 namespace TMVA {
 
@@ -55,7 +47,7 @@ namespace TMVA {
 
    class Rule {
 
-      // ouput operator for a Rule
+      // output operator for a Rule
       friend std::ostream& operator<< ( std::ostream& os, const Rule & rule );
 
    public:
@@ -110,7 +102,7 @@ namespace TMVA {
       // evaluate the Rule for the given Event using the coefficient
       //      inline Double_t EvalEvent( const Event& e, Bool_t norm ) const;
 
-      // evaluate the Rule for the given Event, not using normalization or the coefficent
+      // evaluate the Rule for the given Event, not using normalization or the coefficient
       inline Bool_t EvalEvent( const Event& e ) const;
 
       // test if two rules are equal
@@ -187,7 +179,7 @@ namespace TMVA {
       Double_t             fSSBNeve;       // N(events) reaching the last node in reevaluation
 
       mutable MsgLogger*   fLogger;        //! message logger
-      MsgLogger& Log() const { return *fLogger; }                       
+      MsgLogger& Log() const { return *fLogger; }
 
    };
 

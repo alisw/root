@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TRegexp
+\ingroup Base
 
 Regular expression class.
 
@@ -39,7 +40,7 @@ only [a-zA-Z], [^ntf] and so on.
 const unsigned TRegexp::fgMaxpat = 2048;
 
 
-ClassImp(TRegexp)
+ClassImp(TRegexp);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a regular expression from the input string. If wildcard is
@@ -313,7 +314,7 @@ Bool_t TString::Tokenize(TString &tok, Ssiz_t &from, const char *delim) const
 
    // Ensure backward compatibility to allow one or more times the delimiting character
    TString rdelim(delim);
-   if(rdelim.Length() == 1) {    
+   if(rdelim.Length() == 1) {
       rdelim = "[" + rdelim + "]+";
    }
    TRegexp rg(rdelim);

@@ -27,20 +27,13 @@
 #ifndef ROOT_TMVA_RuleFit
 #define ROOT_TMVA_RuleFit
 
-#include <algorithm>
-
-#ifndef ROOT_TMVA_DecisionTree
 #include "TMVA/DecisionTree.h"
-#endif
-#ifndef ROOT_TMVA_RuleEnsemble
 #include "TMVA/RuleEnsemble.h"
-#endif
-#ifndef ROOT_TMVA_RuleFitParams
 #include "TMVA/RuleFitParams.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
+
+#include <algorithm>
+#include <random>
 
 namespace TMVA {
 
@@ -69,7 +62,10 @@ namespace TMVA {
 
       void SetTrainingEvents( const std::vector<const TMVA::Event *> & el );
 
-      void ReshuffleEvents() { std::random_shuffle(fTrainingEventsRndm.begin(),fTrainingEventsRndm.end()); }
+      void ReshuffleEvents()
+      {
+         std::shuffle(fTrainingEventsRndm.begin(), fTrainingEventsRndm.end(), fRNGEngine);
+      }
 
       void SetMethodBase( const MethodBase *rfbase );
 
@@ -146,9 +142,9 @@ namespace TMVA {
       //
       const std::vector< const TMVA::DecisionTree *> & GetForest()     const { return fForest; }
       const RuleEnsemble                       & GetRuleEnsemble()     const { return fRuleEnsemble; }
-            RuleEnsemble                       * GetRuleEnsemblePtr()        { return &fRuleEnsemble; }
+      RuleEnsemble                       * GetRuleEnsemblePtr()        { return &fRuleEnsemble; }
       const RuleFitParams                      & GetRuleFitParams()    const { return fRuleFitParams; }
-            RuleFitParams                      * GetRuleFitParamsPtr()       { return &fRuleFitParams; }
+      RuleFitParams                      * GetRuleFitParamsPtr()       { return &fRuleFitParams; }
       const MethodRuleFit                      * GetMethodRuleFit()    const { return fMethodRuleFit; }
       const MethodBase                         * GetMethodBase()       const { return fMethodBase; }
 
@@ -177,8 +173,9 @@ namespace TMVA {
       MsgLogger& Log() const { return *fLogger; }    
 
       static const Int_t randSEED = 0; // set to 1 for debugging purposes or to zero for random seeds
+      std::default_random_engine fRNGEngine;
 
-      ClassDef(RuleFit,0)  // Calculations for Friedman's RuleFit method
+      ClassDef(RuleFit,0);  // Calculations for Friedman's RuleFit method
    };
 }
 

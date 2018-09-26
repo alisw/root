@@ -1,41 +1,22 @@
 #ifndef mvaeffs__HH
 #define mvaeffs__HH
-#include <iostream>
-#include <iomanip>
-using std::cout;
-using std::endl;
-
-#include "tmvaglob.h"
 
 #include "RQ_OBJECT.h"
-
-#include "TH1.h"
-#include "TROOT.h"
-#include "TList.h"
-#include "TIterator.h"
-#include "TStyle.h"
-#include "TPad.h"
 #include "TCanvas.h"
-#include "TLatex.h"
-#include "TLegend.h"
-#include "TLine.h"
-#include "TH2.h"
-#include "TFormula.h"
 #include "TFile.h"
-#include "TApplication.h"
-#include "TKey.h"
-#include "TClass.h"
-#include "TGaxis.h"
-
-#include "TGWindow.h"
-#include "TGButton.h"
 #include "TGLabel.h"
 #include "TGNumberEntry.h"
+#include "TGWindow.h"
+#include "TGaxis.h"
+#include "TH1.h"
+#include "TIterator.h"
+#include "TLatex.h"
+#include "TList.h"
 
 namespace TMVA{
 
    void mvaeffs(TString dataset, TString fin = "TMVA.root", 
-                 Bool_t useTMVAStyle = kTRUE, TString formula="S/sqrt(S+B)" );
+                Bool_t useTMVAStyle = kTRUE, TString formula="S/sqrt(S+B)" );
 
    // this macro plots the signal and background efficiencies
    // as a function of the MVA cut.
@@ -61,7 +42,7 @@ namespace TMVA{
          rightAxis(0),
          maxSignificance(0),
          maxSignificanceErr(0)
-         {}
+            {}
       virtual ~MethodInfo();
 
       TString  methodName;
@@ -87,11 +68,11 @@ namespace TMVA{
       ClassDef(MethodInfo,0);
    };
 
-  class StatDialogMVAEffs {  
+   class StatDialogMVAEffs {  
 
       RQ_OBJECT("StatDialogMVAEffs")
       
-   public:
+         public:
 
       StatDialogMVAEffs(TString ds,const TGWindow* p, Float_t ns, Float_t nb);
       virtual ~StatDialogMVAEffs();

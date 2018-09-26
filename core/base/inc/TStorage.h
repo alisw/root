@@ -21,9 +21,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_Rtypes
+#include "RConfigure.h"
 #include "Rtypes.h"
-#endif
 
 typedef void (*FreeHookFun_t)(void*, void *addr, size_t);
 typedef void *(*ReAllocFun_t)(void*, size_t);
@@ -40,6 +39,7 @@ private:
    static ReAllocFun_t   fgReAllocHook;        // custom ReAlloc
    static ReAllocCFun_t  fgReAllocCHook;       // custom ReAlloc with length check
    static Bool_t         fgHasCustomNewDelete; // true if using ROOT's new/delete
+public:
    static const UInt_t   kObjectAllocMemValue = 0x99999999;
                                                // magic number for ObjectAlloc
 
@@ -61,6 +61,9 @@ public:
    static void          *ObjectAllocArray(size_t size);
    static void          *ObjectAlloc(size_t size, void *vp);
    static void           ObjectDealloc(void *vp);
+#ifdef R__SIZEDDELETE
+   static void           ObjectDealloc(void *vp, size_t size);
+#endif
    static void           ObjectDealloc(void *vp, void *ptr);
 
    static void EnterStat(size_t size, void *p);
@@ -78,13 +81,12 @@ public:
    static void   AddToHeap(ULong_t begin, ULong_t end);
    static Bool_t IsOnHeap(void *p);
 
-   static Bool_t FilledByObjectAlloc(UInt_t* member);
+   static Bool_t FilledByObjectAlloc(volatile UInt_t* member);
 
    ClassDef(TStorage,0)  //Storage manager class
 };
 
-#ifndef WIN32
-inline Bool_t TStorage::FilledByObjectAlloc(UInt_t *member) {
+inline Bool_t TStorage::FilledByObjectAlloc(volatile UInt_t *member) {
    //called by TObject's constructor to determine if object was created by call to new
 
    // This technique is necessary as there is one stack per thread
@@ -106,7 +108,9 @@ inline Bool_t TStorage::FilledByObjectAlloc(UInt_t *member) {
 
    // This will be reported by valgrind as uninitialized memory reads for
    // object created on the stack, use $ROOTSYS/etc/valgrind-root.supp
+R__INTENTIONALLY_UNINIT_BEGIN
    return *member == kObjectAllocMemValue;
+R__INTENTIONALLY_UNINIT_END
 }
 
 inline size_t TStorage::GetMaxBlockSize() { return fgMaxBlockSize; }
@@ -114,6 +118,13 @@ inline size_t TStorage::GetMaxBlockSize() { return fgMaxBlockSize; }
 inline void TStorage::SetMaxBlockSize(size_t size) { fgMaxBlockSize = size; }
 
 inline FreeHookFun_t TStorage::GetFreeHook() { return fgFreeHook; }
-#endif
+
+namespace ROOT {
+namespace Internal {
+using FreeIfTMapFile_t = bool(void*);
+R__EXTERN FreeIfTMapFile_t *gFreeIfTMapFile;
+R__EXTERN void *gMmallocDesc;
+}
+}
 
 #endif

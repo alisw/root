@@ -30,9 +30,7 @@
 #ifndef ROOT_TMVA_PDEFoamDiscriminant
 #define ROOT_TMVA_PDEFoamDiscriminant
 
-#ifndef ROOT_TMVA_PDEFoam
 #include "TMVA/PDEFoam.h"
-#endif
 
 namespace TMVA
 {
@@ -62,7 +60,7 @@ namespace TMVA
 
       // ---------- ROOT class definition
       ClassDef(PDEFoamDiscriminant, 1) // Tree of PDEFoamCells
-   }; // end of PDEFoamDiscriminant
+         }; // end of PDEFoamDiscriminant
 
 }  // namespace TMVA
 

@@ -132,6 +132,11 @@ TNetXNGFile::TNetXNGFile(const char *url,
 {
    using namespace XrdCl;
 
+   // Set the log level
+   TString val = gSystem->Getenv("XRD_LOGLEVEL");
+   if (val.IsNull()) val = gEnv->GetValue("NetXNG.Debug",     "");
+   if (!val.IsNull()) XrdCl::DefaultEnv::SetLogLevel(val.Data());
+
    // Remove any anchor from the url. It may have been used by the base TFile
    // constructor to setup a TArchiveFile but we should not pass it to the xroot
    // client as a part of the filename
@@ -343,11 +348,15 @@ Int_t TNetXNGFile::ReOpen(Option_t *modestr)
       return 1;
    }
 
-   fFile->Close();
+   XRootDStatus st = fFile->Close();
+   if (!st.IsOK()) {
+      Error("ReOpen", "%s", st.ToStr().c_str());
+      return 1;
+   }
    fOption = newOpt;
    fMode = mode;
 
-   XRootDStatus st = fFile->Open(fUrl->GetURL(), fMode);
+   st = fFile->Open(fUrl->GetURL(), fMode);
    if (!st.IsOK()) {
       Error("ReOpen", "%s", st.ToStr().c_str());
       return 1;

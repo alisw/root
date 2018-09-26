@@ -37,6 +37,7 @@ class TLorentzVector;
 class TGeoHMatrix;
 class TArrayI;
 class TArrayD;
+class TVirtualMCSensitiveDetector;
 
 class TVirtualMC : public TNamed {
 
@@ -437,6 +438,26 @@ public:
 
    //
    // ------------------------------------------------
+   // methods for sensitive detectors
+   // ------------------------------------------------
+   //
+
+   /// Set a sensitive detector to a volume
+   /// - volName - the volume name
+   /// - sd - the user sensitive detector
+   virtual void SetSensitiveDetector(const TString &volName, TVirtualMCSensitiveDetector *sd);
+
+   /// Get a sensitive detector of a volume
+   /// - volName - the volume name
+   virtual TVirtualMCSensitiveDetector *GetSensitiveDetector(const TString &volName) const;
+
+   /// The scoring option:
+   /// if true, scoring is performed only via user defined sensitive detectors and
+   /// MCApplication::Stepping is not called
+   virtual void SetExclusiveSDScoring(Bool_t exclusiveSDScoring);
+
+   //
+   // ------------------------------------------------
    // methods for physics management
    // ------------------------------------------------
    //
@@ -690,16 +711,24 @@ public:
    virtual void     TrackPosition(TLorentzVector& position) const =0;
 
    /// Return the current position in the master reference frame of the
-   /// track being transported
+   /// track being transported (as double)
    virtual void     TrackPosition(Double_t &x, Double_t &y, Double_t &z) const =0;
+
+   /// Return the current position in the master reference frame of the
+   /// track being transported (as float)
+   virtual void TrackPosition(Float_t &x, Float_t &y, Float_t &z) const =0;
 
    /// Return the direction and the momentum (GeV/c) of the track
    /// currently being transported
    virtual void     TrackMomentum(TLorentzVector& momentum) const =0;
 
    /// Return the direction and the momentum (GeV/c) of the track
-   /// currently being transported
+   /// currently being transported (as double)
    virtual void     TrackMomentum(Double_t &px, Double_t &py, Double_t &pz, Double_t &etot) const =0;
+
+   /// Return the direction and the momentum (GeV/c) of the track
+   /// currently being transported (as float)
+   virtual void TrackMomentum(Float_t &px, Float_t &py, Float_t &pz, Float_t &etot) const =0;
 
    /// Return the length in centimeters of the current step (in cm)
    virtual Double_t TrackStep() const =0;
@@ -712,6 +741,9 @@ public:
 
    /// Return the energy lost in the current step
    virtual Double_t Edep() const =0;
+
+   /// Return the non-ionising energy lost (NIEL) in the current step
+   virtual Double_t NIELEdep() const;
 
    //
    // get methods
@@ -846,16 +878,16 @@ public:
     //
 
     /// Return the particle stack
-    virtual TVirtualMCStack*   GetStack() const   { return fStack; }
+    TVirtualMCStack*   GetStack() const   { return fStack; }
 
     /// Return the external decayer
-    virtual TVirtualMCDecayer* GetDecayer() const { return fDecayer; }
+    TVirtualMCDecayer* GetDecayer() const { return fDecayer; }
 
     /// Return the random number generator
-    virtual TRandom*           GetRandom() const  { return fRandom; }
+    TRandom*           GetRandom() const  { return fRandom; }
 
     /// Return the magnetic field
-    virtual TVirtualMagField*  GetMagField() const  { return fMagField; }
+    TVirtualMagField*  GetMagField() const  { return fMagField; }
 
 protected:
    TVirtualMCApplication* fApplication; //!< User MC application
@@ -877,6 +909,45 @@ private:
 
    ClassDef(TVirtualMC,1)  //Interface to Monte Carlo
 };
+
+// inline functions (with temorary implementation)
+
+inline void TVirtualMC::SetSensitiveDetector(const TString &/*volName*/, TVirtualMCSensitiveDetector */*sd*/)
+{
+   /// Set a sensitive detector to a volume
+   /// - volName - the volume name
+   /// - sd - the user sensitive detector
+
+   Warning("SetSensitiveDetector(...)", "New function - not yet implemented.");
+}
+
+inline TVirtualMCSensitiveDetector *TVirtualMC::GetSensitiveDetector(const TString &/*volName*/) const
+{
+   /// Get a sensitive detector of a volume
+   /// - volName - the volume name
+
+   Warning("GetSensitiveDetector()", "New function - not yet implemented.");
+
+   return 0;
+}
+
+inline void TVirtualMC::SetExclusiveSDScoring(Bool_t /*exclusiveSDScoring*/)
+{
+   /// The scoring option:
+   /// if true, scoring is performed only via user defined sensitive detectors and
+   /// MCApplication::Stepping is not called
+
+   Warning("SetExclusiveSDScoring(...)", "New function - not yet implemented.");
+}
+
+inline Double_t TVirtualMC::NIELEdep() const
+{
+   /// Return the non-ionising energy lost (NIEL) in the current step
+
+   Warning("NIELEdep()", "New function - not yet implemented.");
+
+   return 0.;
+}
 
 #define gMC (TVirtualMC::GetMC())
 

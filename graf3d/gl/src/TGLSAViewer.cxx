@@ -119,11 +119,12 @@ CAMERA\n\
 \n\
    In each case the floor plane (defined by two axes) is kept level.\n\
 \n\
-   There are also three orthographic cameras:\n\
+   There are also four orthographic cameras:\n\
 \n\
    \tOrthographic (XOY)\n\
    \tOrthographic (XOZ)\n\
    \tOrthographic (ZOY)\n\
+   \tOrthographic (ZOX)\n\
 \n\
    In each case the first axis is placed horizontal, the second vertical e.g.\n\
    XOY means X horizontal, Y vertical.\n\n";
@@ -401,9 +402,11 @@ void TGLSAViewer::CreateMenus()
    fCameraMenu->AddEntry("Orthographic (XOY)", kGLXOY);
    fCameraMenu->AddEntry("Orthographic (XOZ)", kGLXOZ);
    fCameraMenu->AddEntry("Orthographic (ZOY)", kGLZOY);
+   fCameraMenu->AddEntry("Orthographic (ZOX)", kGLZOX);
    fCameraMenu->AddEntry("Orthographic (XnOY)", kGLXnOY);
    fCameraMenu->AddEntry("Orthographic (XnOZ)", kGLXnOZ);
    fCameraMenu->AddEntry("Orthographic (ZnOY)", kGLZnOY);
+   fCameraMenu->AddEntry("Orthographic (ZnOX)", kGLZnOX);
    fCameraMenu->AddSeparator();
    fCameraMenu->AddEntry("Ortho allow rotate", kGLOrthoRotate);
    fCameraMenu->AddEntry("Ortho allow dolly",  kGLOrthoDolly);
@@ -669,14 +672,7 @@ Bool_t TGLSAViewer::ProcessFrameMessage(Long_t msg, Long_t parm1, Long_t)
          switch (parm1) {
          case kGLHelpAbout: {
 #ifdef R__UNIX
-            TString rootx;
-#ifdef ROOTBINDIR
-            rootx = ROOTBINDIR;
-#else
-            rootx = gSystem->Getenv("ROOTSYS");
-            if (!rootx.IsNull()) rootx += "/bin";
-#endif
-            rootx += "/root -a &";
+            TString rootx = TROOT::GetBinDir() + "/root -a &";
             gSystem->Exec(rootx);
 #else
 #ifdef WIN32
@@ -716,6 +712,9 @@ Bool_t TGLSAViewer::ProcessFrameMessage(Long_t msg, Long_t parm1, Long_t)
          case kGLZOY:
             SetCurrentCamera(TGLViewer::kCameraOrthoZOY);
             break;
+         case kGLZOX:
+            SetCurrentCamera(TGLViewer::kCameraOrthoZOX);
+            break;
          case kGLXnOY:
             SetCurrentCamera(TGLViewer::kCameraOrthoXnOY);
             break;
@@ -724,6 +723,9 @@ Bool_t TGLSAViewer::ProcessFrameMessage(Long_t msg, Long_t parm1, Long_t)
             break;
          case kGLZnOY:
             SetCurrentCamera(TGLViewer::kCameraOrthoZnOY);
+            break;
+         case kGLZnOX:
+            SetCurrentCamera(TGLViewer::kCameraOrthoZnOX);
             break;
          case kGLOrthoRotate:
             ToggleOrthoRotate();

@@ -41,58 +41,26 @@
 //                                                                          //
 //////////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_MethodBase
 #include "TMVA/MethodBase.h"
-#endif
 
-#ifndef ROOT_TMVA_PDEFoam
 #include "TMVA/PDEFoam.h"
-#endif
 
-#ifndef ROOT_TMVA_PDEFoamDecisionTree
 #include "TMVA/PDEFoamDecisionTree.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamEvent
 #include "TMVA/PDEFoamEvent.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamDiscriminant
 #include "TMVA/PDEFoamDiscriminant.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamTarget
 #include "TMVA/PDEFoamTarget.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamMultiTarget
 #include "TMVA/PDEFoamMultiTarget.h"
-#endif
 
-#ifndef ROOT_TMVA_PDEFoamDensityBase
 #include "TMVA/PDEFoamDensityBase.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamTargetDensity
 #include "TMVA/PDEFoamTargetDensity.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamEventDensity
 #include "TMVA/PDEFoamEventDensity.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamDiscriminantDensity
 #include "TMVA/PDEFoamDiscriminantDensity.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamDecisionTreeDensity
 #include "TMVA/PDEFoamDecisionTreeDensity.h"
-#endif
 
-#ifndef ROOT_TMVA_PDEFoamKernelBase
 #include "TMVA/PDEFoamKernelBase.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamKernelTrivial
 #include "TMVA/PDEFoamKernelTrivial.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamKernelLinN
 #include "TMVA/PDEFoamKernelLinN.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamKernelGauss
 #include "TMVA/PDEFoamKernelGauss.h"
-#endif
 
 namespace TMVA {
 
@@ -106,12 +74,10 @@ namespace TMVA {
       MethodPDEFoam( const TString& jobName,
                      const TString& methodTitle,
                      DataSetInfo& dsi,
-                     const TString& theOption = "PDEFoam",
-                     TDirectory* theTargetDir = 0 );
+                     const TString& theOption = "PDEFoam");
 
       MethodPDEFoam( DataSetInfo& dsi,
-                     const TString& theWeightFile,
-                     TDirectory* theTargetDir = NULL );
+                     const TString& theWeightFile);
 
       virtual ~MethodPDEFoam( void );
 
@@ -209,16 +175,16 @@ namespace TMVA {
       // options to be used
       Bool_t        fSigBgSeparated;  // Separate Sig and Bg, or not
       Float_t       fFrac;            // Fraction used for calc of Xmin, Xmax
-      Float_t       fDiscrErrCut;     // cut on discrimant error
+      Float_t       fDiscrErrCut;     // cut on discriminant error
       Float_t       fVolFrac;         // volume fraction (used for density calculation during buildup)
       Int_t         fnCells;          // Number of Cells  (1000)
       Int_t         fnActiveCells;    // Number of active cells
       Int_t         fnSampl;          // Number of MC events per cell in build-up (1000)
       Int_t         fnBin;            // Number of bins in build-up (100)
-      Int_t         fEvPerBin;        // Maximum events (equiv.) per bin in buid-up (1000)
+      Int_t         fEvPerBin;        // Maximum events (equiv.) per bin in build-up (1000)
 
       Bool_t        fCompress;        // compress foam output file
-      Bool_t        fMultiTargetRegression; // do regression on multible targets
+      Bool_t        fMultiTargetRegression; // do regression on multiple targets
       UInt_t        fNmin;            // minimal number of events in cell necessary to split cell"
       Bool_t        fCutNmin;         // Keep for bw compatibility: Grabbing cell with maximal RMS to split next (TFoam default)
       UInt_t        fMaxDepth;        // maximum depth of cell tree
@@ -241,7 +207,7 @@ namespace TMVA {
       // default initialisation called by all constructors
       void Init( void );
 
-      ClassDef(MethodPDEFoam,0) // Multi-dimensional probability density estimator using TFoam (PDE-Foam)
+      ClassDef(MethodPDEFoam,0); // Multi-dimensional probability density estimator using TFoam (PDE-Foam)
    };
 
 } // namespace TMVA

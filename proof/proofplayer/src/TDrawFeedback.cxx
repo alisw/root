@@ -32,7 +32,7 @@ own version following this example. See also TStatsFeedback.
 #include "TVirtualPad.h"
 #include "TProofDebug.h"
 
-ClassImp(TDrawFeedback)
+ClassImp(TDrawFeedback);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -54,8 +54,8 @@ TDrawFeedback::TDrawFeedback(TProof *proof, TSeqCollection *names)
    fProof = p;
    fName = fProof->GetSessionTag();
 
-   Bool_t ok = proof->Connect("Feedback(TList *objs)", "TDrawFeedback",
-                  this, "Feedback(TList *objs)");
+   Bool_t ok = proof->Connect("Feedback(TList*)", "TDrawFeedback",
+                  this, "Feedback(TList*)");
 
    if ( !ok ) {
       Error("TDrawFeedback","Connect() failed");
@@ -80,6 +80,10 @@ TDrawFeedback::TDrawFeedback(TProof *proof, TSeqCollection *names)
 TDrawFeedback::~TDrawFeedback()
 {
    delete fNames;
+
+   // Required since we overload TObject::Hash.
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
+
    fProof->Disconnect("Feedback(TList*)", this, "Feedback(TList*");
 }
 

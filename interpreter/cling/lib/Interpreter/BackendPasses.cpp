@@ -10,160 +10,237 @@
 #include "BackendPasses.h"
 
 #include "llvm/Analysis/InlineCost.h"
-#include "llvm/IR/DataLayout.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO.h"
-#include "llvm/Transforms/IPO/InlinerPass.h"
+#include "llvm/Transforms/IPO/AlwaysInliner.h"
+#include "llvm/Transforms/IPO/Inliner.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/PassManager.h"
+#include "llvm/Transforms/Scalar.h"
 
-#include "clang/Basic/LangOptions.h"
-#include "clang/Basic/TargetOptions.h"
+//#include "clang/Basic/LangOptions.h"
+//#include "clang/Basic/TargetOptions.h"
 #include "clang/Frontend/CodeGenOptions.h"
+#include "clang/Basic/CharInfo.h"
 
 using namespace cling;
 using namespace clang;
 using namespace llvm;
+using namespace llvm::legacy;
+
+namespace {
+  class KeepLocalGVPass: public ModulePass {
+    static char ID;
+
+    bool runOnGlobal(GlobalValue& GV) {
+      if (GV.isDeclaration())
+        return false; // no change.
+
+      // GV is a definition.
+
+      llvm::GlobalValue::LinkageTypes LT = GV.getLinkage();
+      if (!GV.isDiscardableIfUnused(LT))
+        return false;
+
+      if (LT == llvm::GlobalValue::InternalLinkage
+          || LT == llvm::GlobalValue::PrivateLinkage) {
+        GV.setLinkage(llvm::GlobalValue::ExternalLinkage);
+        return true; // a change!
+      }
+      return false;
+    }
+
+  public:
+    KeepLocalGVPass() : ModulePass(ID) {}
+
+    bool runOnModule(Module &M) override {
+      bool ret = false;
+      for (auto &&F: M)
+        ret |= runOnGlobal(F);
+      for (auto &&G: M.globals())
+        ret |= runOnGlobal(G);
+      return ret;
+    }
+  };
+}
+
+char KeepLocalGVPass::ID = 0;
 
 namespace {
 
-  class InlinerKeepDeadFunc: public Inliner {
-    Inliner* m_Inliner; // the actual inliner
-    static char ID; // Pass identification, replacement for typeid
-  public:
-    InlinerKeepDeadFunc():
-    Inliner(ID), m_Inliner(0) { }
-    InlinerKeepDeadFunc(Pass* I):
-    Inliner(ID), m_Inliner((Inliner*)I) { }
+  // Add a suffix to the CUDA module ctor/dtor to generate a unique name.
+  // This is necessary for lazy compilation. Without suffix, cling cannot
+  // distinguish ctor/dtor of subsequent modules.
+  class UniqueCUDAStructorName : public ModulePass {
+    static char ID;
 
-    using llvm::Pass::doInitialization;
-    bool doInitialization(CallGraph &CG) override {
-      // Forward out Resolver now that we are registered.
-      if (!m_Inliner->getResolver())
-        m_Inliner->setResolver(getResolver());
-      return m_Inliner->doInitialization(CG); // no Module modification
-    }
+    bool runOnFunction(Function& F, const StringRef ModuleName){
+      if(F.hasName() && (F.getName() == "__cuda_module_ctor"
+          || F.getName() == "__cuda_module_dtor") ){
+        llvm::SmallString<128> NewFunctionName;
+        NewFunctionName.append(F.getName());
+        NewFunctionName.append("_");
+        NewFunctionName.append(ModuleName);
 
-    InlineCost getInlineCost(CallSite CS) override {
-      return m_Inliner->getInlineCost(CS);
-    }
-    void getAnalysisUsage(AnalysisUsage &AU) const override {
-      m_Inliner->getAnalysisUsage(AU);
-    }
-    bool runOnSCC(CallGraphSCC &SCC) override {
-      return m_Inliner->runOnSCC(SCC);
-    }
+        for (size_t i = 0; i < NewFunctionName.size(); ++i) {
+          // Replace everything that is not [a-zA-Z0-9._] with a _. This set
+          // happens to be the set of C preprocessing numbers.
+          if (!isPreprocessingNumberBody(NewFunctionName[i]))
+            NewFunctionName[i] = '_';
+        }
 
-    using llvm::Pass::doFinalization;
-    // No-op: we need to keep the inlined functions for later use.
-    bool doFinalization(CallGraph& /*CG*/) override {
-      // Module is unchanged
+        F.setName(NewFunctionName);
+
+        return true;
+      }
+
       return false;
     }
+
+  public:
+    UniqueCUDAStructorName() : ModulePass(ID) {}
+
+    bool runOnModule(Module &M) override {
+      bool ret = false;
+      const StringRef ModuleName = M.getName();
+      for (auto &&F: M)
+        ret |= runOnFunction(F, ModuleName);
+      return ret;
+    }
   };
-} // end anonymous namespace
-
-// Pass registration. Luckily all known inliners depend on the same set
-// of passes.
-char InlinerKeepDeadFunc::ID = 0;
-
-
-BackendPasses::BackendPasses(const CodeGenOptions &CGOpts,
-                             const TargetOptions &TOpts,
-                             const LangOptions &LOpts):
-  m_CodeGenOptsVerifyModule(CGOpts.VerifyModule)
-{
-  CreatePasses(CGOpts, TOpts, LOpts);
 }
 
+char UniqueCUDAStructorName::ID = 0;
 
 BackendPasses::~BackendPasses() {
-  delete m_PMBuilder->Inliner;
+  //delete m_PMBuilder->Inliner;
 }
 
-void BackendPasses::CreatePasses(const CodeGenOptions &CGOpts,
-                                 const TargetOptions &TOpts,
-                                 const LangOptions &LOpts)
+void BackendPasses::CreatePasses(llvm::Module& M, int OptLevel)
 {
   // From BackEndUtil's clang::EmitAssemblyHelper::CreatePasses().
 
-  unsigned OptLevel = CGOpts.OptimizationLevel;
-  CodeGenOptions::InliningMethod Inlining = CGOpts.getInlining();
+#if 0
+  CodeGenOptions::InliningMethod Inlining = m_CGOpts.getInlining();
+  CodeGenOptions& CGOpts_ = const_cast<CodeGenOptions&>(m_CGOpts);
+  // DON'T: we will not find our symbols...
+  //CGOpts_.CXXCtorDtorAliases = 1;
+
+  // Default clang -O2 on Linux 64bit also has the following, but see
+  // CIFactory.cpp.
+  CGOpts_.DisableFPElim = 0;
+  CGOpts_.DiscardValueNames = 1;
+  CGOpts_.OmitLeafFramePointer = 1;
+  CGOpts_.OptimizationLevel = 2;
+  CGOpts_.RelaxAll = 0;
+  CGOpts_.UnrollLoops = 1;
+  CGOpts_.VectorizeLoop = 1;
+  CGOpts_.VectorizeSLP = 1;
+#endif
+
+#if 0 // def __GNUC__
+  // Better inlining is pending https://bugs.llvm.org//show_bug.cgi?id=19668
+  // and its consequence https://sft.its.cern.ch/jira/browse/ROOT-7111
+  // shown e.g. by roottest/cling/stl/map/badstringMap
+  if (Inlining > CodeGenOptions::NormalInlining)
+    Inlining = CodeGenOptions::NormalInlining;
+#endif
 
   // Handle disabling of LLVM optimization, where we want to preserve the
   // internal module before any optimization.
-  if (CGOpts.DisableLLVMOpts) {
+  if (m_CGOpts.DisableLLVMPasses) {
     OptLevel = 0;
     // Always keep at least ForceInline - NoInlining is deadly for libc++.
     // Inlining = CGOpts.NoInlining;
   }
 
-  m_PMBuilder.reset(new PassManagerBuilder());
-  m_PMBuilder->OptLevel = OptLevel;
-  m_PMBuilder->SizeLevel = CGOpts.OptimizeSize;
-  m_PMBuilder->BBVectorize = CGOpts.VectorizeBB;
-  m_PMBuilder->SLPVectorize = CGOpts.VectorizeSLP;
-  m_PMBuilder->LoopVectorize = CGOpts.VectorizeLoop;
+  llvm::PassManagerBuilder PMBuilder;
+  PMBuilder.OptLevel = OptLevel;
+  PMBuilder.SizeLevel = m_CGOpts.OptimizeSize;
+  PMBuilder.SLPVectorize = OptLevel > 1 ? 1 : 0; // m_CGOpts.VectorizeSLP
+  PMBuilder.LoopVectorize = OptLevel > 1 ? 1 : 0; // m_CGOpts.VectorizeLoop
 
-  m_PMBuilder->DisableTailCalls = CGOpts.DisableTailCalls;
-  m_PMBuilder->DisableUnitAtATime = !CGOpts.UnitAtATime;
-  m_PMBuilder->DisableUnrollLoops = !CGOpts.UnrollLoops;
-  m_PMBuilder->MergeFunctions = CGOpts.MergeFunctions;
-  m_PMBuilder->RerollLoops = CGOpts.RerollLoops;
+  PMBuilder.DisableTailCalls = m_CGOpts.DisableTailCalls;
+  PMBuilder.DisableUnrollLoops = !m_CGOpts.UnrollLoops;
+  PMBuilder.MergeFunctions = m_CGOpts.MergeFunctions;
+  PMBuilder.RerollLoops = m_CGOpts.RerollLoops;
 
+  PMBuilder.LibraryInfo = new TargetLibraryInfoImpl(m_TM.getTargetTriple());
 
-  switch (Inlining) {
-    case CodeGenOptions::NoInlining: {
-      assert(0 && "libc++ requires at least OnlyAlwaysInlining!");
-      break;
-    }
-    case CodeGenOptions::NormalInlining: {
-      m_PMBuilder->Inliner =
-        new InlinerKeepDeadFunc(createFunctionInliningPass(OptLevel,
-                                                          CGOpts.OptimizeSize));
-      break;
-    }
-    case CodeGenOptions::OnlyAlwaysInlining:
-      // Respect always_inline.
-      if (OptLevel == 0)
-        // Do not insert lifetime intrinsics at -O0.
-        m_PMBuilder->Inliner
-          = new InlinerKeepDeadFunc(createAlwaysInlinerPass(false));
-      else
-        m_PMBuilder->Inliner
-          = new InlinerKeepDeadFunc(createAlwaysInlinerPass());
-      break;
+  // At O0 and O1 we only run the always inliner which is more efficient. At
+  // higher optimization levels we run the normal inliner.
+  // See also call to `CGOpts.setInlining()` in CIFactory!
+  if (m_CGOpts.OptimizationLevel <= 1) {
+    bool InsertLifetimeIntrinsics = m_CGOpts.OptimizationLevel != 0;
+    PMBuilder.Inliner = createAlwaysInlinerLegacyPass(InsertLifetimeIntrinsics);
+  } else {
+    PMBuilder.Inliner = createFunctionInliningPass(m_CGOpts.OptimizationLevel,
+                                                   m_CGOpts.OptimizeSize,
+            (!m_CGOpts.SampleProfileFile.empty() && m_CGOpts.EmitSummaryIndex));
   }
 
   // Set up the per-module pass manager.
-  m_MPM.reset(new PassManager());
-  m_MPM->add(new DataLayoutPass());
-  //m_MPM->add(createTargetTransformInfoWrapperPass(getTargetIRAnalysis()));
+  m_MPM[OptLevel].reset(new legacy::PassManager());
+
+  m_MPM[OptLevel]->add(new KeepLocalGVPass());
+  // The function __cuda_module_ctor and __cuda_module_dtor will just generated,
+  // if a CUDA fatbinary file exist. Without file path there is no need for the
+  // function pass.
+  if(!m_CGOpts.CudaGpuBinaryFileNames.empty())
+    m_MPM[OptLevel]->add(new UniqueCUDAStructorName());
+  m_MPM[OptLevel]->add(createTargetTransformInfoWrapperPass(
+                                                   m_TM.getTargetIRAnalysis()));
+
+  m_TM.adjustPassManager(PMBuilder);
+
+  PMBuilder.addExtension(PassManagerBuilder::EP_EarlyAsPossible,
+                         [&](const PassManagerBuilder &,
+                             legacy::PassManagerBase &PM) {
+                              PM.add(createAddDiscriminatorsPass());
+                            });
+
   //if (!CGOpts.RewriteMapFiles.empty())
   //  addSymbolRewriterPass(CGOpts, m_MPM);
-  if (CGOpts.VerifyModule)
-    m_MPM->add(createDebugInfoVerifierPass());
 
-  m_PMBuilder->populateModulePassManager(*m_MPM);
+  PMBuilder.populateModulePassManager(*m_MPM[OptLevel]);
+
+  m_FPM[OptLevel].reset(new legacy::FunctionPassManager(&M));
+  m_FPM[OptLevel]->add(createTargetTransformInfoWrapperPass(
+                                                   m_TM.getTargetIRAnalysis()));
+  if (m_CGOpts.VerifyModule)
+      m_FPM[OptLevel]->add(createVerifierPass());
+  PMBuilder.populateFunctionPassManager(*m_FPM[OptLevel]);
 }
 
-void BackendPasses::runOnModule(Module& M) {
+void BackendPasses::runOnModule(Module& M, int OptLevel) {
 
-  // Set up the per-function pass manager.
-  FunctionPassManager FPM(&M);
-  FPM.add(new DataLayoutPass());
-  //FPM.add(createTargetTransformInfoWrapperPass(getTargetIRAnalysis()));
-  if (m_CodeGenOptsVerifyModule)
-      FPM.add(createVerifierPass());
-  m_PMBuilder->populateFunctionPassManager(FPM);
+  if (OptLevel < 0)
+    OptLevel = 0;
+  if (OptLevel > 3)
+    OptLevel = 3;
+
+  if (!m_MPM[OptLevel])
+    CreatePasses(M, OptLevel);
+
+  static constexpr std::array<llvm::CodeGenOpt::Level, 4> CGOptLevel {{
+    llvm::CodeGenOpt::None,
+    llvm::CodeGenOpt::Less,
+    llvm::CodeGenOpt::Default,
+    llvm::CodeGenOpt::Aggressive
+  }};
+  // TM's OptLevel is used to build orc::SimpleCompiler passes for every Module.
+  m_TM.setOptLevel(CGOptLevel[OptLevel]);
 
   // Run the per-function passes on the module.
-  FPM.doInitialization();
+  m_FPM[OptLevel]->doInitialization();
   for (auto&& I: M.functions())
     if (!I.isDeclaration())
-      FPM.run(I);
-  FPM.doFinalization();
+      m_FPM[OptLevel]->run(I);
+  m_FPM[OptLevel]->doFinalization();
 
-  m_MPM->run(M);
+  m_MPM[OptLevel]->run(M);
 }

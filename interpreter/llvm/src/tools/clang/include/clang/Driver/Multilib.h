@@ -11,7 +11,7 @@
 #define LLVM_CLANG_DRIVER_MULTILIB_H
 
 #include "clang/Basic/LLVM.h"
-#include "llvm/ADT/Triple.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Option/Option.h"
 #include <functional>
 #include <string>
@@ -70,13 +70,21 @@ public:
   /// All elements begin with either '+' or '-'
   const flags_list &flags() const { return Flags; }
   flags_list &flags() { return Flags; }
+
   /// Add a flag to the flags list
+  /// \p Flag must be a flag accepted by the driver with its leading '-' removed,
+  ///     and replaced with either:
+  ///       '-' which contraindicates using this multilib with that flag
+  ///     or:
+  ///       '+' which promotes using this multilib in the presence of that flag
+  ///     otherwise '-print-multi-lib' will not emit them correctly.
   Multilib &flag(StringRef F) {
     assert(F.front() == '+' || F.front() == '-');
     Flags.push_back(F);
     return *this;
   }
 
+  LLVM_DUMP_METHOD void dump() const;
   /// \brief print summary of the Multilib
   void print(raw_ostream &OS) const;
 
@@ -98,19 +106,15 @@ public:
   typedef multilib_list::iterator iterator;
   typedef multilib_list::const_iterator const_iterator;
 
-  typedef std::function<std::vector<std::string>(
-      StringRef InstallDir, StringRef Triple, const Multilib &M)>
-  IncludeDirsFunc;
+  typedef std::function<std::vector<std::string>(const Multilib &M)>
+      IncludeDirsFunc;
 
-  struct FilterCallback {
-    virtual ~FilterCallback() {};
-    /// \return true iff the filter should remove the Multilib from the set
-    virtual bool operator()(const Multilib &M) const = 0;
-  };
+  typedef llvm::function_ref<bool(const Multilib &)> FilterCallback;
 
 private:
   multilib_list Multilibs;
   IncludeDirsFunc IncludeCallback;
+  IncludeDirsFunc FilePathsCallback;
 
 public:
   MultilibSet() {}
@@ -127,12 +131,12 @@ public:
   MultilibSet &Either(const Multilib &M1, const Multilib &M2,
                       const Multilib &M3, const Multilib &M4,
                       const Multilib &M5);
-  MultilibSet &Either(const std::vector<Multilib> &Ms);
+  MultilibSet &Either(ArrayRef<Multilib> Ms);
 
   /// Filter out some subset of the Multilibs using a user defined callback
-  MultilibSet &FilterOut(const FilterCallback &F);
+  MultilibSet &FilterOut(FilterCallback F);
   /// Filter out those Multilibs whose gccSuffix matches the given expression
-  MultilibSet &FilterOut(std::string Regex);
+  MultilibSet &FilterOut(const char *Regex);
 
   /// Add a completed Multilib to the set
   void push_back(const Multilib &M);
@@ -154,21 +158,27 @@ public:
 
   unsigned size() const { return Multilibs.size(); }
 
+  LLVM_DUMP_METHOD void dump() const;
   void print(raw_ostream &OS) const;
 
   MultilibSet &setIncludeDirsCallback(IncludeDirsFunc F) {
-    IncludeCallback = F;
+    IncludeCallback = std::move(F);
     return *this;
   }
-  IncludeDirsFunc includeDirsCallback() const { return IncludeCallback; }
+  const IncludeDirsFunc &includeDirsCallback() const { return IncludeCallback; }
+
+  MultilibSet &setFilePathsCallback(IncludeDirsFunc F) {
+    FilePathsCallback = std::move(F);
+    return *this;
+  }
+  const IncludeDirsFunc &filePathsCallback() const { return FilePathsCallback; }
 
 private:
   /// Apply the filter to Multilibs and return the subset that remains
-  static multilib_list filterCopy(const FilterCallback &F,
-                                  const multilib_list &Ms);
+  static multilib_list filterCopy(FilterCallback F, const multilib_list &Ms);
 
   /// Apply the filter to the multilib_list, removing those that don't match
-  static void filterInPlace(const FilterCallback &F, multilib_list &Ms);
+  static void filterInPlace(FilterCallback F, multilib_list &Ms);
 };
 
 raw_ostream &operator<<(raw_ostream &OS, const MultilibSet &MS);

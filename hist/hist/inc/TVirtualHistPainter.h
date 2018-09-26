@@ -20,9 +20,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
 class TClass;
 class TH1;
@@ -48,6 +46,7 @@ public:
    virtual void       Paint(Option_t *option="") = 0;
    virtual void       PaintStat(Int_t dostat, TF1 *fit) = 0;
    virtual void       ProcessMessage(const char *mess, const TObject *obj) = 0;
+   virtual void       SetHighlight() = 0;
    virtual void       SetHistogram(TH1 *h) = 0;
    virtual void       SetStack(TList *stack) = 0;
    virtual Int_t      MakeCuts(char *cutsopt) = 0;

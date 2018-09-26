@@ -11,13 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "BPF.h"
 #include "BPFRegisterInfo.h"
+#include "BPF.h"
 #include "BPFSubtarget.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetInstrInfo.h"
@@ -41,6 +42,18 @@ BitVector BPFRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
+static void WarnSize(int Offset, MachineFunction &MF, DebugLoc& DL)
+{
+  if (Offset <= -512) {
+      auto F = MF.getFunction();
+      DiagnosticInfoUnsupported DiagStackSize(*F,
+          "Looks like the BPF stack limit of 512 bytes is exceeded. "
+          "Please move large on stack variables into BPF per-cpu array map.\n",
+          DL);
+      F->getContext().diagnose(DiagStackSize);
+  }
+}
+
 void BPFRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                           int SPAdj, unsigned FIOperandNum,
                                           RegScavenger *RS) const {
@@ -48,8 +61,17 @@ void BPFRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   unsigned i = 0;
   MachineInstr &MI = *II;
-  MachineFunction &MF = *MI.getParent()->getParent();
+  MachineBasicBlock &MBB = *MI.getParent();
+  MachineFunction &MF = *MBB.getParent();
   DebugLoc DL = MI.getDebugLoc();
+
+  if (!DL)
+    /* try harder to get some debug loc */
+    for (auto &I : MBB)
+      if (I.getDebugLoc()) {
+        DL = I.getDebugLoc();
+        break;
+      }
 
   while (!MI.getOperand(i).isFI()) {
     ++i;
@@ -58,14 +80,13 @@ void BPFRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   unsigned FrameReg = getFrameRegister(MF);
   int FrameIndex = MI.getOperand(i).getIndex();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
   if (MI.getOpcode() == BPF::MOV_rr) {
-    const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-    int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex);
+    int Offset = MF.getFrameInfo().getObjectOffset(FrameIndex);
 
+    WarnSize(Offset, MF, DL);
     MI.getOperand(i).ChangeToRegister(FrameReg, false);
-
-    MachineBasicBlock &MBB = *MI.getParent();
     unsigned reg = MI.getOperand(i - 1).getReg();
     BuildMI(MBB, ++II, DL, TII.get(BPF::ADD_ri), reg)
         .addReg(reg)
@@ -73,14 +94,32 @@ void BPFRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     return;
   }
 
-  int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex) +
+  int Offset = MF.getFrameInfo().getObjectOffset(FrameIndex) +
                MI.getOperand(i + 1).getImm();
 
   if (!isInt<32>(Offset))
     llvm_unreachable("bug in frame offset");
 
-  MI.getOperand(i).ChangeToRegister(FrameReg, false);
-  MI.getOperand(i + 1).ChangeToImmediate(Offset);
+  WarnSize(Offset, MF, DL);
+
+  if (MI.getOpcode() == BPF::FI_ri) {
+    // architecture does not really support FI_ri, replace it with
+    //    MOV_rr <target_reg>, frame_reg
+    //    ADD_ri <target_reg>, imm
+    unsigned reg = MI.getOperand(i - 1).getReg();
+
+    BuildMI(MBB, ++II, DL, TII.get(BPF::MOV_rr), reg)
+        .addReg(FrameReg);
+    BuildMI(MBB, II, DL, TII.get(BPF::ADD_ri), reg)
+        .addReg(reg)
+        .addImm(Offset);
+
+    // Remove FI_ri instruction
+    MI.eraseFromParent();
+  } else {
+    MI.getOperand(i).ChangeToRegister(FrameReg, false);
+    MI.getOperand(i + 1).ChangeToImmediate(Offset);
+  }
 }
 
 unsigned BPFRegisterInfo::getFrameRegister(const MachineFunction &MF) const {

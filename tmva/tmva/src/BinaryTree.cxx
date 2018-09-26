@@ -28,16 +28,17 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// BinaryTree                                                           //
-//                                                                      //
-// Base class for BinarySearch and Decision Trees                       //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
+/*! \class TMVA::BinaryTree
+\ingroup TMVA
+
+Base class for BinarySearch and Decision Trees.
+
+*/
 
 #include <string>
 #include <stdexcept>
+
+#include "ThreadLocalStorage.h"
 
 #include "TMVA/BinaryTree.h"
 #include "TMVA/MsgLogger.h"
@@ -46,15 +47,15 @@
 #include "TMVA/Tools.h"
 #include "TMVA/Types.h"
 
-ClassImp(TMVA::BinaryTree)
+ClassImp(TMVA::BinaryTree);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor for a yet "empty" tree. Needs to be filled afterwards
 
 TMVA::BinaryTree::BinaryTree( void )
-   : fRoot  ( NULL ),
-     fNNodes( 0 ),
-     fDepth ( 0 )
+: fRoot  ( NULL ),
+   fNNodes( 0 ),
+   fDepth ( 0 )
 {
 }
 
@@ -152,7 +153,7 @@ void TMVA::BinaryTree::ReadXML(void* node, UInt_t tmva_Version_Code ) {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// print the tree recursinvely using the << operator
+/// print the tree recursively using the << operator
 
 std::ostream& TMVA::operator<< (std::ostream& os, const TMVA::BinaryTree& tree)
 {
@@ -232,6 +233,6 @@ void TMVA::BinaryTree::SetTotalTreeDepth( Node *n)
 ////////////////////////////////////////////////////////////////////////////////
 
 TMVA::MsgLogger& TMVA::BinaryTree::Log() const {
-  TTHREAD_TLS_DECL_ARG(MsgLogger,logger,"BinaryTree");
-  return logger;
+   TTHREAD_TLS_DECL_ARG(MsgLogger,logger,"BinaryTree");
+   return logger;
 }

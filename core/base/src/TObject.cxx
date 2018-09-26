@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TObject
+\ingroup Base
 
 Mother of all ROOT objects.
 
@@ -51,70 +52,8 @@ class hierarchies (watch out for overlaps).
 Long_t TObject::fgDtorOnly = 0;
 Bool_t TObject::fgObjectStat = kTRUE;
 
-ClassImp(TObject)
+ClassImp(TObject);
 
-////////////////////////////////////////////////////////////////////////////////
-/// TObject constructor. It sets the two data words of TObject to their
-/// initial values. The unique ID is set to 0 and the status word is
-/// set depending if the object is created on the stack or allocated
-/// on the heap. Depending on the ROOT environment variable "Root.MemStat"
-/// (see TEnv) the object is added to the global TObjectTable for
-/// bookkeeping.
-
-TObject::TObject() : fBits(kNotDeleted) //Need to leave FUniqueID unset
-{
-   // This will be reported by valgrind as uninitialized memory reads for
-   // object created on the stack, use $ROOTSYS/etc/valgrind-root.supp
-   if (TStorage::FilledByObjectAlloc(&fUniqueID))
-      fBits |= kIsOnHeap;
-
-   fUniqueID = 0;
-
-   if (fgObjectStat) TObjectTable::AddObj(this);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// TObject copy ctor.
-
-TObject::TObject(const TObject &obj)
-{
-   fBits = obj.fBits;
-
-   // This will be reported by valgrind as uninitialized memory reads for
-   // object created on the stack, use $ROOTSYS/etc/valgrind-root.supp
-   if (TStorage::FilledByObjectAlloc(&fUniqueID))
-      fBits |= kIsOnHeap;
-   else
-      fBits &= ~kIsOnHeap;
-
-   fBits &= ~kIsReferenced;
-   fBits &= ~kCanDelete;
-
-   //Set only after used in above call
-   fUniqueID = obj.fUniqueID;  // when really unique don't copy
-
-   if (fgObjectStat) TObjectTable::AddObj(this);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// TObject assignment operator.
-
-TObject& TObject::operator=(const TObject &rhs)
-{
-   if (this != &rhs) {
-      fUniqueID = rhs.fUniqueID;  // when really unique don't copy
-      if (IsOnHeap()) {           // test uses fBits so don't move next line
-         fBits  = rhs.fBits;
-         fBits |= kIsOnHeap;
-      } else {
-         fBits  = rhs.fBits;
-         fBits &= ~kIsOnHeap;
-      }
-      fBits &= ~kIsReferenced;
-      fBits &= ~kCanDelete;
-   }
-   return *this;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy this to obj.
@@ -142,19 +81,21 @@ TObject::~TObject()
    // if (!TestBit(kNotDeleted))
    //    Fatal("~TObject", "object deleted twice");
 
-   TROOT *root = ROOT::Internal::gROOTLocal;
-   if (root) {
-      if (root->MustClean()) {
-         if (root == this) return;
-         if (TestBit(kMustCleanup)) {
-            root->GetListOfCleanups()->RecursiveRemove(this);
-         }
-      }
-   }
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
 
    fBits &= ~kNotDeleted;
 
    if (fgObjectStat && gObjectTable) gObjectTable->RemoveQuietly(this);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Private helper function which will dispatch to
+/// TObjectTable::AddObj.
+/// Included here to avoid circular dependency between header files.
+
+void TObject::AddToTObjectTable(TObject *op)
+{
+   TObjectTable::AddObj(op);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -272,7 +213,8 @@ void TObject::DrawClass() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Draw a clone of this object in the current pad
+/// Draw a clone of this object in the current selected pad for instance with:
+/// `gROOT->SetSelectedPad(gPad)`.
 
 TObject *TObject::DrawClone(Option_t *option) const
 {
@@ -473,6 +415,20 @@ Bool_t TObject::HandleTimer(TTimer *)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Return hash value for this object.
+///
+/// Note: If this routine is overloaded in a derived class, this derived class
+/// should also add
+/// ~~~ {.cpp}
+///    ROOT::CallRecursiveRemoveIfNeeded(*this)
+/// ~~~
+/// Otherwise, when RecursiveRemove is called (by ~TObject or example) for this
+/// type of object, the transversal of THashList and THashTable containers will
+/// will have to be done without call Hash (and hence be linear rather than
+/// logarithmic complexity).  You will also see warnings like
+/// ~~~
+/// Error in <ROOT::Internal::TCheckHashRecursiveRemoveConsistency::CheckRecursiveRemove>: The class SomeName overrides TObject::Hash but does not call TROOT::RecursiveRemove in its destructor.
+/// ~~~
+///
 
 ULong_t TObject::Hash() const
 {
@@ -651,6 +607,12 @@ void TObject::SaveAs(const char *filename, Option_t *option) const
    //==============Save object as a XML file====================================
    if (filename && strstr(filename,".xml")) {
       if (gDirectory) gDirectory->SaveObjectAs(this,filename,"");
+      return;
+   }
+
+   //==============Save object as a JSON file================================
+   if (filename && strstr(filename,".json")) {
+      if (gDirectory) gDirectory->SaveObjectAs(this,filename,option);
       return;
    }
 
@@ -1038,6 +1000,30 @@ void TObject::operator delete[](void *ptr)
    else
       fgDtorOnly = 0;
 }
+
+#ifdef R__SIZEDDELETE
+////////////////////////////////////////////////////////////////////////////////
+/// Operator delete for sized deallocation.
+
+void TObject::operator delete(void *ptr, size_t size)
+{
+   if ((Long_t) ptr != fgDtorOnly)
+      TStorage::ObjectDealloc(ptr, size);
+   else
+      fgDtorOnly = 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Operator delete [] for sized deallocation.
+
+void TObject::operator delete[](void *ptr, size_t size)
+{
+   if ((Long_t) ptr != fgDtorOnly)
+      TStorage::ObjectDealloc(ptr, size);
+   else
+      fgDtorOnly = 0;
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Print value overload

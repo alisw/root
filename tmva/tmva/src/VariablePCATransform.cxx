@@ -27,6 +27,11 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::VariablePCATransform
+\ingroup TMVA
+Linear interpolation class
+*/
+
 #include "TMVA/VariablePCATransform.h"
 
 #include "TMVA/DataSet.h"
@@ -46,7 +51,7 @@
 #include <stdexcept>
 #include <algorithm>
 
-ClassImp(TMVA::VariablePCATransform)
+ClassImp(TMVA::VariablePCATransform);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
@@ -99,7 +104,7 @@ Bool_t TMVA::VariablePCATransform::PrepareTransformation (const std::vector<Even
       return kFALSE;
    }
 
-   if (inputSize > 200) { 
+   if (inputSize > 200) {
       Log() << kINFO << "----------------------------------------------------------------------------"
             << Endl;
       Log() << kINFO
@@ -123,15 +128,15 @@ const TMVA::Event* TMVA::VariablePCATransform::Transform( const Event* const ev,
 {
    if (!IsCreated()) return 0;
 
-//   const Int_t inputSize = fGet.size();
-//   const UInt_t nCls = GetNClasses();
+   //   const Int_t inputSize = fGet.size();
+   //   const UInt_t nCls = GetNClasses();
 
    // if we have more than one class, take the last PCA analysis where all classes are combined if
    // the cls parameter is outside the defined classes
    // If there is only one class, then no extra class for all events of all classes has to be created
 
    //if (cls < 0 || cls > GetNClasses()) cls = (fMeanValues.size()==1?0:2);//( GetNClasses() == 1 ? 0 : 1 );  ;
-   // EVT this is a workaround to address the reader problem with transforma and EvaluateMVA(std::vector<float/double> ,...) 
+   // EVT this is a workaround to address the reader problem with transforma and EvaluateMVA(std::vector<float/double> ,...)
    if (cls < 0 || cls >= (int) fMeanValues.size()) cls = fMeanValues.size()-1;
    // EVT workaround end
 
@@ -151,7 +156,7 @@ const TMVA::Event* TMVA::VariablePCATransform::Transform( const Event* const ev,
       UInt_t numMasked = std::count(mask.begin(), mask.end(), (Char_t)kTRUE);
       UInt_t numOK     = std::count(mask.begin(), mask.end(), (Char_t)kFALSE);
       if( numMasked>0 && numOK>0 ){
-	 Log() << kFATAL << "You mixed variables and targets in the decorrelation transformation. This is not possible." << Endl;
+         Log() << kFATAL << "You mixed variables and targets in the decorrelation transformation. This is not possible." << Endl;
       }
       SetOutput( fTransformedEvent, input, mask, ev );
       return fTransformedEvent;
@@ -171,7 +176,7 @@ const TMVA::Event* TMVA::VariablePCATransform::Transform( const Event* const ev,
 const TMVA::Event* TMVA::VariablePCATransform::InverseTransform( const Event* const ev, Int_t cls ) const
 {
    if (!IsCreated()) return 0;
-//   const Int_t inputSize = fGet.size();
+   //   const Int_t inputSize = fGet.size();
    const UInt_t nCls = GetNClasses();
    //UInt_t evCls = ev->GetClass();
 
@@ -229,18 +234,20 @@ void TMVA::VariablePCATransform::CalculatePrincipalComponents( const std::vector
 
       Bool_t hasMaskedEntries = GetInput( ev, input, mask );
       if (hasMaskedEntries){
-	 Log() << kWARNING << "Print event which triggers an error" << Endl;
-	 ev->Print(Log());
-	 Log() << kFATAL << "Masked entries found in event read in when calculating the principal components for the PCA transformation." << Endl;
+         Log() << kWARNING << "Print event which triggers an error" << Endl;
+         std::ostringstream oss;
+         ev->Print(oss);
+         Log() << oss.str();
+         Log() << kFATAL << "Masked entries found in event read in when calculating the principal components for the PCA transformation." << Endl;
       }
 
       UInt_t iinp = 0;
       for( std::vector<Float_t>::iterator itInp = input.begin(), itInpEnd = input.end(); itInp != itInpEnd; ++itInp )
-      {
-	 Float_t value = (*itInp);
-	 dvec[iinp] = (Double_t)value;
-	 ++iinp;
-      }
+         {
+            Float_t value = (*itInp);
+            dvec[iinp] = (Double_t)value;
+            ++iinp;
+         }
 
       pca.at(cls)->AddRow( dvec );
       if (nCls > 1) pca.at(maxPCA-1)->AddRow( dvec );
@@ -285,7 +292,7 @@ void TMVA::VariablePCATransform::X2P( std::vector<Float_t>& pc, const std::vecto
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Perform the back-transformation from the principal components
-/// pc, and return x 
+/// pc, and return x
 /// It's the users responsibility to make sure that both x and pc are
 /// of the right size (i.e., memory must be allocated for p)
 
@@ -384,7 +391,7 @@ void TMVA::VariablePCATransform::ReadFromXML( void* trfnode )
    Bool_t newFormat = kFALSE;
 
    void* inpnode = NULL;
-   
+
    inpnode = gTools().GetChild(trfnode, "Selection"); // new xml format
    if( inpnode!=NULL )
       newFormat = kTRUE; // new xml format

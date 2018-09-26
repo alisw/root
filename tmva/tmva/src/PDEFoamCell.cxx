@@ -9,7 +9,7 @@
  *                                                                                *
  * Description:                                                                   *
  *      Objects of this class are hyperrectangular cells organized in             *
- *      the binary tree. Special algoritm for encoding relalive                   *
+ *      the binary tree. Special algoritm for encoding relative                   *
  *      positioning of the cells saves total memory allocation needed             *
  *      for the system of cells.                                                  *
  *                                                                                *
@@ -28,6 +28,10 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::PDEFoamCell
+\ingroup TMVA
+
+*/
 #include "TMVA/PDEFoamCell.h"
 
 #include "TMVA/PDEFoamVect.h"
@@ -41,25 +45,25 @@
 
 using namespace std;
 
-ClassImp(TMVA::PDEFoamCell)
+ClassImp(TMVA::PDEFoamCell);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for streamer
 
 TMVA::PDEFoamCell::PDEFoamCell()
-   : TObject(),
-     fDim(0),
-     fSerial(0),
-     fStatus(1),
-     fParent(0),
-     fDaught0(0),
-     fDaught1(0),
-     fXdiv(0.0),
-     fBest(0),
-     fVolume(0.0),
-     fIntegral(0.0),
-     fDrive(0.0),
-     fElement(0)
+: TObject(),
+   fDim(0),
+   fSerial(0),
+   fStatus(1),
+   fParent(0),
+   fDaught0(0),
+   fDaught1(0),
+   fXdiv(0.0),
+   fBest(0),
+   fVolume(0.0),
+   fIntegral(0.0),
+   fDrive(0.0),
+   fElement(0)
 {
 }
 
@@ -205,7 +209,7 @@ void TMVA::PDEFoamCell::CalcVolume(void)
 
 UInt_t TMVA::PDEFoamCell::GetDepth()
 {
-   // check wheter we are in the root cell
+   // check whether we are in the root cell
    if (fParent == 0)
       return 1;
 

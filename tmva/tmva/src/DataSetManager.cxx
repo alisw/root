@@ -24,44 +24,47 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::DataSetManager
+\ingroup TMVA
+
+Class that contains all the data information.
+
+*/
+
 #include <vector>
 #include <iostream>
 using std::endl;
 
-#ifndef ROOT_TMVA_DataSetManager
 #include "TMVA/DataSetManager.h"
-#endif
-#ifndef ROOT_TMVA_DataSetFactory
 #include "TMVA/DataSetFactory.h"
-#endif
-#ifndef ROOT_TMVA_DataSet
 #include "TMVA/DataSet.h"
-#endif
-#ifndef ROOT_TMVA_DataSetInfo
 #include "TMVA/DataSetInfo.h"
-#endif
-#ifndef ROOT_TMVA_MsgLogger
 #include "TMVA/MsgLogger.h"
-#endif
 
 #include "TMVA/Types.h"
-
-//TMVA::DataSetManager* TMVA::DataSetManager::fgDSManager = 0; // DSMTEST removed
-//TMVA::DataSetManager& TMVA::DataSetManager::Instance() { return *fgDSManager; }      // DSMTEST removed
-// void TMVA::DataSetManager::CreateInstance( DataInputHandler& dataInput ) { fgDSManager = new DataSetManager(dataInput); } // DSMTEST removed
-
-// void TMVA::DataSetManager::DestroyInstance() { if (fgDSManager) { delete fgDSManager; fgDSManager=0; } } // DSMTEST removed
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
 
 TMVA::DataSetManager::DataSetManager( DataInputHandler& dataInput )
    : fDatasetFactory(0),
-     fDataInput(dataInput),
+     fDataInput(&dataInput),
      fDataSetInfoCollection(),
      fLogger( new MsgLogger("DataSetManager", kINFO) )
 {
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// constructor
+
+TMVA::DataSetManager::DataSetManager( )
+: fDatasetFactory(0),
+fDataInput(0),
+fDataSetInfoCollection(),
+fLogger( new MsgLogger("DataSetManager", kINFO) )
+{
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// destructor
@@ -69,7 +72,7 @@ TMVA::DataSetManager::DataSetManager( DataInputHandler& dataInput )
 
 TMVA::DataSetManager::~DataSetManager()
 {
-   DataSetFactory::destroyNewInstance(fDatasetFactory);
+   if(fDatasetFactory) delete fDatasetFactory;
 
    delete fLogger;
 }
@@ -81,10 +84,11 @@ TMVA::DataSet* TMVA::DataSetManager::CreateDataSet( const TString& dsiName )
 {
    DataSetInfo* dsi = GetDataSetInfo( dsiName );
    if (!dsi) Log() << kFATAL << "DataSetInfo object '" << dsiName << "' not found" << Endl;
+   if (!fDataInput ) Log() << kFATAL << "DataInputHandler object 'fDataInput' not found" << Endl;
 
    // factory to create dataset from datasetinfo and datainput
-   if(!fDatasetFactory) { fDatasetFactory = DataSetFactory::NewInstance(); }
-   return fDatasetFactory->CreateDataSet( *dsi, fDataInput );
+   if(!fDatasetFactory) { fDatasetFactory =new  DataSetFactory(); }
+   return fDatasetFactory->CreateDataSet( *dsi, *fDataInput );
 }
 
 ////////////////////////////////////////////////////////////////////////////////

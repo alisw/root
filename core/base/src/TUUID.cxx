@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TUUID
+\ingroup Base
 
 This class defines a UUID (Universally Unique IDentifier), also
 known as GUIDs (Globally Unique IDentifier). A UUID is 128 bits
@@ -118,6 +119,10 @@ system clock catches up.
 #ifdef R__WIN32
 #include "Windows4Root.h"
 #include <Iphlpapi.h>
+#include <process.h>
+#define getpid() _getpid()
+#define srandom(seed) srand(seed)
+#define random() rand()
 #else
 #include <unistd.h>
 #include <sys/time.h>
@@ -127,7 +132,7 @@ system clock catches up.
 #endif
 #include <chrono>
 
-ClassImp(TUUID)
+ClassImp(TUUID);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a UUID.
@@ -140,7 +145,7 @@ TUUID::TUUID()
    uuid_time_t *time_last_ptr = TTHREAD_TLS_PTR(time_last);
 
    if (firstTime) {
-      R__LOCKGUARD2(gROOTMutex); // rand and random are not thread safe.
+      R__LOCKGUARD(gROOTMutex); // rand and random are not thread safe.
 
       UInt_t seed;
       if (gSystem) {
@@ -151,17 +156,9 @@ TUUID::TUUID()
          system_clock::time_point today = system_clock::now();
          seed = (UInt_t)(system_clock::to_time_t ( today )) + ::getpid();
       }
-#ifdef R__WIN32
-      srand(seed);
-#else
       srandom(seed);
-#endif
       GetCurrentTime(time_last_ptr);
-#ifdef R__WIN32
-      clockseq = 1+(UShort_t)(65536*rand()/(RAND_MAX+1.0));
-#else
       clockseq = 1+(UShort_t)(65536*random()/(RAND_MAX+1.0));
-#endif
       firstTime = kFALSE;
    }
 

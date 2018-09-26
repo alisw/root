@@ -24,52 +24,22 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TProofMgr
 #include "TProofMgr.h"
-#endif
-#ifndef ROOT_TProofDebug
 #include "TProofDebug.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TMacro
 #include "TMacro.h"
-#endif
-#ifndef ROOT_MessageTypes
 #include "MessageTypes.h"
-#endif
-#ifndef ROOT_TMD5
 #include "TMD5.h"
-#endif
-#ifndef ROOT_TRegexp
 #include "TRegexp.h"
-#endif
-#ifndef ROOT_TSysEvtHandler
 #include "TSysEvtHandler.h"
-#endif
-#ifndef ROOT_TUrl
 #include "TUrl.h"
-#endif
-#ifndef ROOT_TProofOutputList
 #include "TProofOutputList.h"
-#endif
-#ifndef ROOT_TStopwatch
 #include "TStopwatch.h"
-#endif
-#ifndef ROOT_TVirtualMutex
 #include "TVirtualMutex.h"
-#endif
-#ifndef ROOT_TPackMgr
 #include "TPackMgr.h"
-#endif
 
 #include <map>
 #include <mutex>
-
-#ifdef R__GLOBALSTL
-namespace std { using ::map; }
-#endif
 
 #define CANNOTUSE(x) Info(x,"Not manager: cannot use this method")
 
@@ -788,6 +758,8 @@ protected:
 
    static Int_t AssertDataSet(TDSet *dset, TList *input,
                               TDataSetManager *mgr, TString &emsg);
+   static void AssertMacroPath(const char *macro);
+
    // Input data handling
    static Int_t GetInputData(TList *input, const char *cachedir, TString &emsg);
    static Int_t SaveInputData(TQueryResult *qr, const char *cachedir, TString &emsg);

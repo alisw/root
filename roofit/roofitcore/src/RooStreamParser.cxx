@@ -18,7 +18,7 @@
 //
 // RooStreamParser is a utility class to parse istreams into tokens and optionally
 // convert them into basic types (double,int,string)
-// 
+//
 // The general tokenizing philosophy is that there are two kinds of tokens: value
 // and punctuation. The former are variable length, the latter always
 // one character. A token is terminated if one of the following conditions
@@ -39,7 +39,6 @@
 #include "Riostream.h"
 #include "Riostream.h"
 #include <stdlib.h>
-#include <ctype.h>
 
 #ifndef _WIN32
 #include <strings.h>
@@ -52,23 +51,23 @@
 
 using namespace std;
 
-ClassImp(RooStreamParser)
+ClassImp(RooStreamParser);
 
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Construct parser on given input stream
 
-RooStreamParser::RooStreamParser(istream& is) : 
+RooStreamParser::RooStreamParser(istream& is) :
   _is(&is), _atEOL(kFALSE), _atEOF(kFALSE), _prefix(""), _punct("()[]<>|/\\:?.,=+-&^%$#@!`~")
 {
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Construct parser on given input stream. Use given errorPrefix to 
+/// Construct parser on given input stream. Use given errorPrefix to
 /// prefix any parsing error messages
 
-RooStreamParser::RooStreamParser(istream& is, const TString& errorPrefix) : 
+RooStreamParser::RooStreamParser(istream& is, const TString& errorPrefix) :
   _is(&is), _atEOL(kFALSE), _atEOF(kFALSE), _prefix(errorPrefix), _punct("()[]<>|/\\:?.,=+-&^%$#@!`~")
 {
 }
@@ -87,10 +86,10 @@ RooStreamParser::~RooStreamParser()
 ////////////////////////////////////////////////////////////////////////////////
 /// If true, parser is at end of line in stream
 
-Bool_t RooStreamParser::atEOL() 
-{ 
-  Int_t nc(_is->peek()) ; 
-  return (nc=='\n'||nc==-1) ; 
+Bool_t RooStreamParser::atEOL()
+{
+  Int_t nc(_is->peek()) ;
+  return (nc=='\n'||nc==-1) ;
 }
 
 
@@ -98,7 +97,7 @@ Bool_t RooStreamParser::atEOL()
 ////////////////////////////////////////////////////////////////////////////////
 /// Change list of characters interpreted as punctuation
 
-void RooStreamParser::setPunctuation(const TString& punct) 
+void RooStreamParser::setPunctuation(const TString& punct)
 {
   _punct = punct ;
 }
@@ -108,7 +107,7 @@ void RooStreamParser::setPunctuation(const TString& punct)
 ////////////////////////////////////////////////////////////////////////////////
 /// Check if given char is considered punctuation
 
-Bool_t RooStreamParser::isPunctChar(char c) const 
+Bool_t RooStreamParser::isPunctChar(char c) const
 {
   const char* punct = _punct.Data() ;
   for (int i=0 ; i<_punct.Length() ; i++)
@@ -128,15 +127,15 @@ Bool_t RooStreamParser::isPunctChar(char c) const
 /// from being interpreted as a token separator in case '+-.' are defined as
 /// token separators.
 
-TString RooStreamParser::readToken() 
+TString RooStreamParser::readToken()
 {
   // Smart tokenizer. Absorb white space and token must be either punctuation or alphanum
   Bool_t first(kTRUE), quotedString(kFALSE), lineCont(kFALSE) ;
-  char buffer[10240], c(0), cnext='\0', cprev=' ' ;
+  char buffer[64000], c(0), cnext = '\0', cprev = ' ';
   Bool_t haveINF(kFALSE) ;
   Int_t bufptr(0) ;
 
-  // Check for end of file 
+  // Check for end of file
    if (_is->eof() || _is->fail()) {
      _atEOF = kTRUE ;
      return TString("") ;
@@ -146,7 +145,7 @@ TString RooStreamParser::readToken()
   if (_is->peek()=='\n') {
     _is->get(c) ;
 
-    // If new line starts with #, zap it    
+    // If new line starts with #, zap it
     while (_is->peek()=='#') {
       zapToEnd(kFALSE) ;
       _is->get(c) ; // absorb newline
@@ -155,9 +154,10 @@ TString RooStreamParser::readToken()
 
   while(1) {
     // Buffer overflow protection
-    if (bufptr>=10239) {
-      oocoutW((TObject*)0,InputArguments) << "RooStreamParser::readToken: token length exceeds buffer capacity, terminating token early" << endl ;
-      break ;
+    if (bufptr >= 63999) {
+       oocoutW((TObject *)0, InputArguments)
+          << "RooStreamParser::readToken: token length exceeds buffer capacity, terminating token early" << endl;
+       break;
     }
 
     // Read next char
@@ -170,9 +170,9 @@ TString RooStreamParser::readToken()
 
     // Terminate as SPACE, unless we haven't seen any non-SPACE yet
     if (isspace(c)) {
-      if (first) 
-	continue ; 
-      else 
+      if (first)
+	continue ;
+      else
 	if (!quotedString) {
 	  break ;
 	}
@@ -216,7 +216,7 @@ TString RooStreamParser::readToken()
     // Special handling of quoted strings
     if (c=='"') {
       if (first) {
-	quotedString=kTRUE ;		
+	quotedString=kTRUE ;
       } else if (!quotedString) {
 	// Terminate current token. Next token will be quoted string
 	_is->putback('"') ;
@@ -226,8 +226,9 @@ TString RooStreamParser::readToken()
 
     if (!quotedString) {
       // Decide if next char is punctuation (exempt - and . that are part of floating point numbers, or +/- preceding INF)
-      if (isPunctChar(c) && !(c=='.' && (isdigit(cnext)||isdigit(cprev))) 
-	  && (!first || !((c=='-'||c=='+') && (isdigit(cnext)||cnext=='.'||haveINF)))) {
+      if (isPunctChar(c) && !(c=='.' && (isdigit(cnext)||isdigit(cprev)))
+       && !((c=='-'||c=='+') && isdigit(cnext) && cprev=='e')
+	     && (!first || !((c=='-'||c=='+') && (isdigit(cnext)||cnext=='.'||haveINF)))) {
 
 	if (first) {
 	  // Make this a one-char punctuation token
@@ -237,14 +238,14 @@ TString RooStreamParser::readToken()
 	  // Put back punct. char and terminate current alphanum token
 	  _is->putback(c) ;
 	  break ;
-	} 
-      }       
+	}
+      }
     } else {
       // Inside quoted string conventional tokenizing rules do not apply
 
       // Terminate token on closing quote
       if (c=='"' && !first) {
-	buffer[bufptr++]=c ;	
+	buffer[bufptr++]=c ;
 	quotedString=kFALSE ;
 	break ;
       }
@@ -277,7 +278,7 @@ TString RooStreamParser::readToken()
       if (c=='/') {
 	_is->get(c) ;
 	if (_is->peek()=='/') {
-	  zapToEnd(kFALSE) ;	
+	  zapToEnd(kFALSE) ;
 	} else {
 	  _is->putback('/') ;
 	}
@@ -293,7 +294,7 @@ TString RooStreamParser::readToken()
   if (bufptr==0 && lineCont) {
     return readToken() ;
   }
-  
+
   // Zero terminate buffer and convert to TString
   buffer[bufptr]=0 ;
   return TString(buffer) ;
@@ -303,29 +304,32 @@ TString RooStreamParser::readToken()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Read an entire line from the stream and return as TString
-/// This method recognizes the use of '\\' in the istream 
+/// This method recognizes the use of '\\' in the istream
 /// as line continuation token.
 
-TString RooStreamParser::readLine() 
+TString RooStreamParser::readLine()
 {
-  char c,buffer[10240] ;
-  Int_t nfree(10239) ; 
-  
-  if (_is->peek()=='\n') _is->get(c) ;
+   char c, buffer[64000];
+   Int_t nfree(63999);
 
-  // Read till end of line
-  _is->getline(buffer,nfree,'\n') ;
+   if (_is->peek() == '\n')
+      _is->get(c);
 
-  // Look for eventual continuation line sequence  
-  char *pcontseq = strstr(buffer,"\\\\") ;
-  if (pcontseq) nfree -= (pcontseq-buffer) ;
-  while(pcontseq) {
-    _is->getline(pcontseq,nfree,'\n') ;
+   // Read till end of line
+   _is->getline(buffer, nfree, '\n');
 
-    char* nextpcontseq = strstr(pcontseq,"\\\\") ;
-    if (nextpcontseq) nfree -= (nextpcontseq-pcontseq) ;
-    pcontseq = nextpcontseq ;
-  }    
+   // Look for eventual continuation line sequence
+   char *pcontseq = strstr(buffer, "\\\\");
+   if (pcontseq)
+      nfree -= (pcontseq - buffer);
+   while (pcontseq) {
+      _is->getline(pcontseq, nfree, '\n');
+
+      char *nextpcontseq = strstr(pcontseq, "\\\\");
+      if (nextpcontseq)
+         nfree -= (nextpcontseq - pcontseq);
+      pcontseq = nextpcontseq;
+  }
 
   // Chop eventual comments
   char *pcomment = strstr(buffer,"//") ;
@@ -355,28 +359,30 @@ TString RooStreamParser::readLine()
 /// current line. If inclContLines is kTRUE, all continuation lines
 /// marked by the '\\' token are zapped as well
 
-void RooStreamParser::zapToEnd(Bool_t inclContLines) 
+void RooStreamParser::zapToEnd(Bool_t inclContLines)
 {
   // Skip over everything until the end of the current line
   if (_is->peek()!='\n') {
 
-    char buffer[10240] ;
-    Int_t nfree(10239) ; 
+     char buffer[64000];
+     Int_t nfree(63999);
 
-    // Read till end of line
-    _is->getline(buffer,nfree,'\n') ;
+     // Read till end of line
+     _is->getline(buffer, nfree, '\n');
 
-    if (inclContLines) {
-      // Look for eventual continuation line sequence  
-      char *pcontseq = strstr(buffer,"\\\\") ;
-      if (pcontseq) nfree -= (pcontseq-buffer) ;
-      while(pcontseq) {
-	_is->getline(pcontseq,nfree,'\n') ;
-	
-	char* nextpcontseq = strstr(pcontseq,"\\\\") ;
-	if (nextpcontseq) nfree -= (nextpcontseq-pcontseq) ;
-	pcontseq = nextpcontseq ;
-      }    
+     if (inclContLines) {
+        // Look for eventual continuation line sequence
+        char *pcontseq = strstr(buffer, "\\\\");
+        if (pcontseq)
+           nfree -= (pcontseq - buffer);
+        while (pcontseq) {
+           _is->getline(pcontseq, nfree, '\n');
+
+           char *nextpcontseq = strstr(pcontseq, "\\\\");
+           if (nextpcontseq)
+              nfree -= (nextpcontseq - pcontseq);
+           pcontseq = nextpcontseq;
+        }
     }
 
     // Put back newline character in stream buffer
@@ -389,13 +395,13 @@ void RooStreamParser::zapToEnd(Bool_t inclContLines)
 ////////////////////////////////////////////////////////////////////////////////
 /// Read the next token and return kTRUE if it is identical to the given 'expected' token.
 
-Bool_t RooStreamParser::expectToken(const TString& expected, Bool_t zapOnError) 
+Bool_t RooStreamParser::expectToken(const TString& expected, Bool_t zapOnError)
 {
   TString token(readToken()) ;
 
   Bool_t error=token.CompareTo(expected) ;
   if (error && !_prefix.IsNull()) {
-    oocoutW((TObject*)0,InputArguments) << _prefix << ": parse error, expected '" 
+    oocoutW((TObject*)0,InputArguments) << _prefix << ": parse error, expected '"
 					<< expected << "'" << ", got '" << token << "'" << endl ;
     if (zapOnError) zapToEnd(kTRUE) ;
   }
@@ -408,12 +414,12 @@ Bool_t RooStreamParser::expectToken(const TString& expected, Bool_t zapOnError)
 /// Read the next token and convert it to a Double_t. Returns true
 /// if an error occurred in reading or conversion
 
-Bool_t RooStreamParser::readDouble(Double_t& value, Bool_t /*zapOnError*/) 
+Bool_t RooStreamParser::readDouble(Double_t& value, Bool_t /*zapOnError*/)
 {
   TString token(readToken()) ;
   if (token.IsNull()) return kTRUE ;
   return convertToDouble(token,value) ;
-  
+
 }
 
 
@@ -421,7 +427,7 @@ Bool_t RooStreamParser::readDouble(Double_t& value, Bool_t /*zapOnError*/)
 ////////////////////////////////////////////////////////////////////////////////
 /// Convert given string to a double. Return true if the conversion fails.
 
-Bool_t RooStreamParser::convertToDouble(const TString& token, Double_t& value) 
+Bool_t RooStreamParser::convertToDouble(const TString& token, Double_t& value)
 {
   char* endptr = 0;
   const char* data=token.Data() ;
@@ -436,7 +442,7 @@ Bool_t RooStreamParser::convertToDouble(const TString& token, Double_t& value)
   Bool_t error = (endptr-data!=token.Length()) ;
 
   if (error && !_prefix.IsNull()) {
-    oocoutE((TObject*)0,InputArguments) << _prefix << ": parse error, cannot convert '" 
+    oocoutE((TObject*)0,InputArguments) << _prefix << ": parse error, cannot convert '"
 					<< token << "'" << " to double precision" <<  endl ;
   }
   return error ;
@@ -448,7 +454,7 @@ Bool_t RooStreamParser::convertToDouble(const TString& token, Double_t& value)
 /// Read a token and convert it to an Int_t. Returns true
 /// if an error occurred in reading or conversion
 
-Bool_t RooStreamParser::readInteger(Int_t& value, Bool_t /*zapOnError*/) 
+Bool_t RooStreamParser::readInteger(Int_t& value, Bool_t /*zapOnError*/)
 {
   TString token(readToken()) ;
   if (token.IsNull()) return kTRUE ;
@@ -461,7 +467,7 @@ Bool_t RooStreamParser::readInteger(Int_t& value, Bool_t /*zapOnError*/)
 /// Convert given string to an Int_t. Returns true if an error
 /// occurred in conversion
 
-Bool_t RooStreamParser::convertToInteger(const TString& token, Int_t& value) 
+Bool_t RooStreamParser::convertToInteger(const TString& token, Int_t& value)
 {
   char* endptr = 0;
   const char* data=token.Data() ;
@@ -469,7 +475,7 @@ Bool_t RooStreamParser::convertToInteger(const TString& token, Int_t& value)
   Bool_t error = (endptr-data!=token.Length()) ;
 
   if (error && !_prefix.IsNull()) {
-    oocoutE((TObject*)0,InputArguments)<< _prefix << ": parse error, cannot convert '" 
+    oocoutE((TObject*)0,InputArguments)<< _prefix << ": parse error, cannot convert '"
 				       << token << "'" << " to integer" <<  endl ;
   }
   return error ;
@@ -482,7 +488,7 @@ Bool_t RooStreamParser::convertToInteger(const TString& token, Int_t& value)
 /// or conversion.  If a the read token is enclosed in quotation
 /// marks those are stripped in the returned value
 
-Bool_t RooStreamParser::readString(TString& value, Bool_t /*zapOnError*/) 
+Bool_t RooStreamParser::readString(TString& value, Bool_t /*zapOnError*/)
 {
   TString token(readToken()) ;
   if (token.IsNull()) return kTRUE ;
@@ -494,14 +500,15 @@ Bool_t RooStreamParser::readString(TString& value, Bool_t /*zapOnError*/)
 ////////////////////////////////////////////////////////////////////////////////
 /// Convert given token to a string (i.e. remove eventual quotation marks)
 
-Bool_t RooStreamParser::convertToString(const TString& token, TString& string) 
+Bool_t RooStreamParser::convertToString(const TString& token, TString& string)
 {
-  // Transport to buffer 
-  char buffer[10240],*ptr ;
-  strncpy(buffer,token.Data(),10239) ;
-  if (token.Length()>=10239) {
-    oocoutW((TObject*)0,InputArguments) << "RooStreamParser::convertToString: token length exceeds 1023, truncated" << endl ;
-    buffer[10239]=0 ;
+   // Transport to buffer
+   char buffer[64000], *ptr;
+   strncpy(buffer, token.Data(), 63999);
+   if (token.Length() >= 63999) {
+      oocoutW((TObject *)0, InputArguments) << "RooStreamParser::convertToString: token length exceeds 63999, truncated"
+                                            << endl;
+      buffer[63999] = 0;
   }
   int len = strlen(buffer) ;
 

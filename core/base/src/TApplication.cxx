@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TApplication
+\ingroup Base
+
 This class creates the ROOT Application Environment that interfaces
 to the windowing system eventloop and eventhandlers.
 This class must be instantiated exactly once in any given
@@ -42,6 +44,8 @@ TApplication (see TRint).
 #include "TUrl.h"
 #include "TVirtualMutex.h"
 
+#include "CommandLineOptionsHelp.h"
+
 #include <stdlib.h>
 
 #if defined(R__MACOSX) && (TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR)
@@ -73,13 +77,21 @@ Bool_t TIdleTimer::Notify()
 }
 
 
-ClassImp(TApplication)
+ClassImp(TApplication);
 
 static void CallEndOfProcessCleanups()
 {
    // Insure that the files, canvases and sockets are closed.
 
-   gROOT->EndOfProcessCleanups();
+   // If we get here, the tear down has started.  We have no way to know what
+   // has or has not yet been done.  In particular on Ubuntu, this was called
+   // after the function static in TSystem.cxx has been destructed.  So we
+   // set gROOT in its end-of-life mode which prevents executing code, like
+   // autoloading libraries (!) that is pointless ...
+   if (gROOT) {
+      gROOT->SetBit(kInvalidObject);
+      gROOT->EndOfProcessCleanups();
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,7 +127,7 @@ TApplication::TApplication(const char *appClassName, Int_t *argc, char **argv,
    fFiles(0), fIdleTimer(0), fSigHandler(0), fExitOnException(kDontExit),
    fAppRemote(0)
 {
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
    // Create the list of applications the first time
    if (!fgApplications)
@@ -268,11 +280,7 @@ void TApplication::InitializeGraphics()
    // mode and Root.UseTTFonts is true and Root.TTFontPath exists. Abort silently
    // if libttf or libGX11TTF are not found in $ROOTSYS/lib or $ROOTSYS/ttf/lib.
    const char *ttpath = gEnv->GetValue("Root.TTFontPath",
-#ifdef TTFFONTDIR
-                                       TTFFONTDIR);
-#else
-                                       "$(ROOTSYS)/fonts");
-#endif
+                                       TROOT::GetTTFFontDir());
    char *ttfont = gSystem->Which(ttpath, "arialbd.ttf", kReadPermission);
    // Check for use of DFSG - fonts
    if (!ttfont)
@@ -355,41 +363,7 @@ char *TApplication::Argv(Int_t index) const
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Get and handle command line options. Arguments handled are removed
-/// from the argument array. The following arguments are handled:
-///
-///  - b : run in batch mode without graphics
-///  - x : exit on exception
-///  - e expression: request execution of the given C++ expression.
-///  - n : do not execute logon and logoff macros as specified in .rootrc
-///  - q : exit after processing command line macro files
-///  - l : do not show splash screen
-///
-/// The last three options are only relevant in conjunction with TRint.
-/// The following help and info arguments are supported:
-///
-///  - ?       : print usage
-///  - h       : print usage
-///  - -help   : print usage
-///  - config  : print ./configure options
-///  - memstat : run with memory usage monitoring
-///
-/// In addition to the above options the arguments that are not options,
-/// i.e. they don't start with - or + are treated as follows (and also removed
-/// from the argument array):
-///
-///  - `<dir>`       is considered the desired working directory and available
-///                  via WorkingDirectory(), if more than one dir is specified the
-///                  first one will prevail
-///  - `<file>`      if the file exists its added to the InputFiles() list
-///  - `<file>.root` are considered ROOT files and added to the InputFiles() list,
-///                  the file may be a remote file url
-///  - `<macro>.C`   are considered ROOT macros and also added to the InputFiles() list
-///
-/// In TRint we set the working directory to the `<dir>`, the ROOT files are
-/// connected, and the macros are executed. If your main TApplication is not
-/// TRint you have to decide yourself what to do with these options.
-/// All specified arguments (also the ones removed) can always be retrieved
-/// via the TApplication::Argv() method.
+/// from the argument array. See CommandLineOptionsHelp.h for options.
 
 void TApplication::GetOptions(Int_t *argc, char **argv)
 {
@@ -408,22 +382,18 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
    for (i = 1; i < *argc; i++) {
       if (!strcmp(argv[i], "-?") || !strncmp(argv[i], "-h", 2) ||
           !strncmp(argv[i], "--help", 6)) {
-         fprintf(stderr, "Usage: %s [-l] [-b] [-n] [-q] [dir] [[file:]data.root] [file1.C ... fileN.C]\n", argv[0]);
-         fprintf(stderr, "Options:\n");
-         fprintf(stderr, "  -b : run in batch mode without graphics\n");
-         fprintf(stderr, "  -x : exit on exception\n");
-         fprintf(stderr, "  -e expression: request execution of the given C++ expression\n");
-         fprintf(stderr, "  -n : do not execute logon and logoff macros as specified in .rootrc\n");
-         fprintf(stderr, "  -q : exit after processing command line macro files\n");
-         fprintf(stderr, "  -l : do not show splash screen\n");
-         fprintf(stderr, " dir : if dir is a valid directory cd to it before executing\n");
-         fprintf(stderr, "\n");
-         fprintf(stderr, "  -?      : print usage\n");
-         fprintf(stderr, "  -h      : print usage\n");
-         fprintf(stderr, "  --help  : print usage\n");
-         fprintf(stderr, "  -config : print ./configure options\n");
-         fprintf(stderr, "  -memstat : run with memory usage monitoring\n");
-         fprintf(stderr, "\n");
+         fprintf(stderr, kCommandLineOptionsHelp, argv[0]);
+         Terminate(0);
+      } else if (!strncmp(argv[i], "--version", 9)) {
+         fprintf(stderr, "ROOT Version: %s\n", gROOT->GetVersion());
+         fprintf(stderr, "Built for %s on %s\n",
+                 gSystem->GetBuildArch(),
+                 gROOT->GetGitDate());
+    
+         fprintf(stderr, "From %s@%s\n",
+                gROOT->GetGitBranch(),
+                gROOT->GetGitCommit());
+
          Terminate(0);
       } else if (!strcmp(argv[i], "-config")) {
          fprintf(stderr, "ROOT ./configure options:\n%s\n", gROOT->GetConfigOptions());
@@ -436,6 +406,12 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
          argv[i] = null;
       } else if (!strcmp(argv[i], "-n")) {
          fNoLog = kTRUE;
+         argv[i] = null;
+      } else if (!strcmp(argv[i], "-t")) {
+         ROOT::EnableImplicitMT();
+         // EnableImplicitMT() only enables thread safety if IMT was configured;
+         // enable thread safety even with IMT off:
+         ROOT::EnableThreadSafety();
          argv[i] = null;
       } else if (!strcmp(argv[i], "-q")) {
          fQuit = kTRUE;
@@ -451,6 +427,20 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
          // used when started by front-end program to signal that
          // splash screen can be popped down (TRint::PrintLogo())
          argv[i] = null;
+      } else if (!strcmp(argv[i], "--web")) {
+         // the web mode is requested.
+         argv[i] = null;
+         ++i;
+         TString opt;
+         opt = argv[i];
+         if (opt.BeginsWith("-")) {
+            if (gROOT->IsBatch()) gROOT->SetWebDisplay("batch");
+            else                  gROOT->SetWebDisplay("");
+         } else {
+            argv[i] = null;
+            if (gROOT->IsBatch()) opt.Prepend("batch");
+            gROOT->SetWebDisplay(opt.Data());
+         }
       } else if (!strcmp(argv[i], "-e")) {
          argv[i] = null;
          ++i;
@@ -464,7 +454,54 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
          } else {
             Warning("GetOptions", "-e must be followed by an expression.");
          }
+      } else if (!strcmp(argv[i], "--")) {
+         TObjString* macro = nullptr;
+         bool warnShown = false;
 
+         if (fFiles) {
+            for (auto f: *fFiles) {
+               TObjString* file = dynamic_cast<TObjString*>(f);
+               if (!file) {
+                  if (!dynamic_cast<TNamed*>(f)) {
+                     Error("GetOptions()", "Inconsistent file entry (not a TObjString)!");
+                     f->Dump();
+                  } // else we did not find the file.
+                  continue;
+               }
+
+               if (file->TestBit(kExpression))
+                  continue;
+               if (file->String().EndsWith(".root"))
+                  continue;
+               if (file->String().Contains('('))
+                  continue;
+
+               if (macro && !warnShown && (warnShown = true))
+                  Warning("GetOptions", "-- is used with several macros. "
+                                        "The arguments will be passed to the last one.");
+
+               macro = file;
+            }
+         }
+
+         if (macro) {
+            argv[i] = null;
+            ++i;
+            TString& str = macro->String();
+
+            str += '(';
+            for (; i < *argc; i++) {
+               str += argv[i];
+               str += ',';
+               argv[i] = null;
+            }
+            str.EndsWith(",") ? str[str.Length() - 1] = ')' : str += ')';
+         } else {
+            Warning("GetOptions", "no macro to pass arguments to was provided. "
+                                  "Everything after the -- will be ignored.");
+            for (; i < *argc; i++)
+               argv[i] = null;
+         }
       } else if (argv[i][0] != '-' && argv[i][0] != '+') {
          Long64_t size;
          Long_t id, flags, modtime;
@@ -472,8 +509,18 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
          if (arg) *arg = '\0';
          char *dir = gSystem->ExpandPathName(argv[i]);
          TUrl udir(dir, kTRUE);
+         // remove options and anchor to check the path
+         TString sfx = udir.GetFileAndOptions();
+         TString fln = udir.GetFile();
+         sfx.Replace(sfx.Index(fln), fln.Length(), "");
+         TString path = udir.GetFile();
+         if (strcmp(udir.GetProtocol(), "file")) {
+            path = udir.GetUrl();
+            path.Replace(path.Index(sfx), sfx.Length(), "");
+         }
+         // 'path' is the full URL without suffices (options and/or anchor)
          if (arg) *arg = '(';
-         if (!gSystem->GetPathInfo(dir, &id, &size, &flags, &modtime)) {
+         if (!arg && !gSystem->GetPathInfo(path.Data(), &id, &size, &flags, &modtime)) {
             if ((flags & 2)) {
                // if directory set it in fWorkDir
                if (pwd == "") {
@@ -487,7 +534,7 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
             } else if (size > 0) {
                // if file add to list of files to be processed
                if (!fFiles) fFiles = new TObjArray;
-               fFiles->Add(new TObjString(argv[i]));
+               fFiles->Add(new TObjString(path.Data()));
                argv[i] = null;
             } else {
                Warning("GetOptions", "file %s has size 0, skipping", dir);
@@ -509,14 +556,16 @@ void TApplication::GetOptions(Int_t *argc, char **argv)
                TString mode,fargs,io;
                TString fname = gSystem->SplitAclicMode(dir,mode,fargs,io);
                char *mac;
+               if (!fFiles) fFiles = new TObjArray;
                if ((mac = gSystem->Which(TROOT::GetMacroPath(), fname,
                                          kReadPermission))) {
                   // if file add to list of files to be processed
-                  if (!fFiles) fFiles = new TObjArray;
                   fFiles->Add(new TObjString(argv[i]));
                   argv[i] = null;
                   delete [] mac;
                } else {
+                  // if file add an invalid entry to list of files to be processed
+                  fFiles->Add(new TNamed("NOT FOUND!", argv[i]));
                   // only warn if we're plain root,
                   // other progs might have their own params
                   if (!strcmp(gROOT->GetName(), "Rint"))
@@ -880,29 +929,19 @@ Long_t TApplication::ProcessLine(const char *line, Bool_t sync, Int_t *err)
          Error("ProcessLine", "Cannot show demos in batch mode!");
          return 1;
       }
-#ifdef ROOTTUTDIR
-      ProcessLine(".x " ROOTTUTDIR "/demos.C");
-#else
-      ProcessLine(".x $(ROOTSYS)/tutorials/demos.C");
-#endif
+      ProcessLine(".x " + TROOT::GetTutorialDir() + "/demos.C");
       return 0;
    }
 
    if (!strncmp(line, ".license", 8)) {
-#ifdef ROOTDOCDIR
-      return PrintFile(ROOTDOCDIR "/LICENSE");
-#else
-      return PrintFile("$(ROOTSYS)/LICENSE");
-#endif
+      return PrintFile(TROOT::GetDocDir() + "/LICENSE");
    }
 
    if (!strncmp(line, ".credits", 8)) {
-#ifdef ROOTDOCDIR
-      return PrintFile(ROOTDOCDIR "/CREDITS");
-#else
-      return PrintFile("$(ROOTSYS)/README/CREDITS");
-#endif
-
+      TString credits = TROOT::GetDocDir() + "/CREDITS";
+      if (gSystem->AccessPathName(credits, kReadPermission))
+         credits = TROOT::GetDocDir() + "/README/CREDITS";
+      return PrintFile(credits);
    }
 
    if (!strncmp(line, ".pwd", 4)) {
@@ -1025,12 +1064,16 @@ Long_t TApplication::ExecuteFile(const char *file, Int_t *error, Bool_t keep)
       ::Error("TApplication::ExecuteFile", "macro %s not found in path %s", fname.Data(),
               TROOT::GetMacroPath());
       delete [] exnam;
+      if (error)
+         *error = (Int_t)TInterpreter::kRecoverable;
       return 0;
    }
 
    ::std::ifstream macro(exnam, std::ios::in);
    if (!macro.good()) {
       ::Error("TApplication::ExecuteFile", "%s no such file", exnam);
+      if (error)
+         *error = (Int_t)TInterpreter::kRecoverable;
       delete [] exnam;
       return 0;
    }
@@ -1259,23 +1302,21 @@ void TApplication::SetEchoMode(Bool_t)
 
 void TApplication::CreateApplication()
 {
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
+   // gApplication is set at the end of 'new TApplication.
    if (!gApplication) {
-      // gApplication is set at the end of 'new TApplication.
-      if (!gApplication) {
-         char *a = StrDup("RootApp");
-         char *b = StrDup("-b");
-         char *argv[2];
-         Int_t argc = 2;
-         argv[0] = a;
-         argv[1] = b;
-         new TApplication("RootApp", &argc, argv, 0, 0);
-         if (gDebug > 0)
-            Printf("<TApplication::CreateApplication>: "
-                   "created default TApplication");
-         delete [] a; delete [] b;
-         gApplication->SetBit(kDefaultApplication);
-      }
+      char *a = StrDup("RootApp");
+      char *b = StrDup("-b");
+      char *argv[2];
+      Int_t argc = 2;
+      argv[0] = a;
+      argv[1] = b;
+      new TApplication("RootApp", &argc, argv, 0, 0);
+      if (gDebug > 0)
+         Printf("<TApplication::CreateApplication>: "
+                "created default TApplication");
+      delete [] a; delete [] b;
+      gApplication->SetBit(kDefaultApplication);
    }
 }
 

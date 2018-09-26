@@ -17,7 +17,6 @@ def sub_eq : SubRegIndex<1, 2>;
 def sub_un : SubRegIndex<1, 3>;
 def sub_32 : SubRegIndex<32>;
 def sub_64 : SubRegIndex<64>;
-def sub_128 : SubRegIndex<128>;
 }
 
 
@@ -49,6 +48,13 @@ class FPR<bits<5> num, string n> : PPCReg<n> {
   let HWEncoding{4-0} = num;
 }
 
+// QFPR - One of the 32 256-bit floating-point vector registers (used for QPX)
+class QFPR<FPR SubReg, string n> : PPCReg<n> {
+  let HWEncoding = SubReg.HWEncoding;
+  let SubRegs = [SubReg];
+  let SubRegIndices = [sub_64];
+}
+
 // VF - One of the 32 64-bit floating-point subregisters of the vector
 // registers (used by VSX).
 class VF<bits<5> num, string n> : PPCReg<n> {
@@ -70,15 +76,6 @@ class VSRL<FPR SubReg, string n> : PPCReg<n> {
   let HWEncoding = SubReg.HWEncoding;
   let SubRegs = [SubReg];
   let SubRegIndices = [sub_64];
-}
-
-// VSRH - One of the 32 128-bit VSX registers that overlap with the vector
-// registers.
-class VSRH<VR SubReg, string n> : PPCReg<n> {
-  let HWEncoding{4-0} = SubReg.HWEncoding{4-0};
-  let HWEncoding{5} = 1;
-  let SubRegs = [SubReg];
-  let SubRegIndices = [sub_128];
 }
 
 // CR - One of the 8 4-bit condition registers
@@ -109,9 +106,18 @@ foreach Index = 0-31 in {
                 DwarfRegNum<[!add(Index, 32), !add(Index, 32)]>;
 }
 
-// Floating-point vector subregisters (for VSX)
+// 64-bit Floating-point subregisters of Altivec registers
+// Note: the register names are v0-v31 or vs32-vs63 depending on the use.
+//       Custom C++ code is used to produce the correct name and encoding.
 foreach Index = 0-31 in {
-  def VF#Index : VF<Index, "vs" # !add(Index, 32)>;
+  def VF#Index : VF<Index, "v" #Index>,
+                 DwarfRegNum<[!add(Index, 77), !add(Index, 77)]>;
+}
+
+// QPX Floating-point registers
+foreach Index = 0-31 in {
+  def QF#Index : QFPR<!cast<FPR>("F"#Index), "q"#Index>,
+                 DwarfRegNum<[!add(Index, 32), !add(Index, 32)]>;
 }
 
 // Vector registers
@@ -125,9 +131,11 @@ foreach Index = 0-31 in {
   def VSL#Index : VSRL<!cast<FPR>("F"#Index), "vs"#Index>,
                   DwarfRegAlias<!cast<FPR>("F"#Index)>;
 }
-foreach Index = 0-31 in {
-  def VSH#Index : VSRH<!cast<VR>("V"#Index), "vs" # !add(Index, 32)>,
-                  DwarfRegAlias<!cast<VR>("V"#Index)>;
+
+// Dummy VSX registers, this defines string: "vs32"-"vs63", and is only used for
+// asm printing.
+foreach Index = 32-63 in {
+  def VSX#Index : PPCReg<"vs"#Index>;
 }
 
 // The reprsentation of r0 when treated as the constant 0.
@@ -224,7 +232,7 @@ def GPRC : RegisterClass<"PPC", [i32], 32, (add (sequence "R%u", 2, 12),
   // put it at the end of the list.
   let AltOrders = [(add (sub GPRC, R2), R2)];
   let AltOrderSelect = [{
-    const PPCSubtarget &S = MF.getTarget().getSubtarget<PPCSubtarget>();
+    const PPCSubtarget &S = MF.getSubtarget<PPCSubtarget>();
     return S.isPPC64() && S.isSVR4ABI();
   }];
 }
@@ -236,7 +244,7 @@ def G8RC : RegisterClass<"PPC", [i64], 64, (add (sequence "X%u", 2, 12),
   // put it at the end of the list.
   let AltOrders = [(add (sub G8RC, X2), X2)];
   let AltOrderSelect = [{
-    const PPCSubtarget &S = MF.getTarget().getSubtarget<PPCSubtarget>();
+    const PPCSubtarget &S = MF.getSubtarget<PPCSubtarget>();
     return S.isPPC64() && S.isSVR4ABI();
   }];
 }
@@ -249,7 +257,7 @@ def GPRC_NOR0 : RegisterClass<"PPC", [i32], 32, (add (sub GPRC, R0), ZERO)> {
   // put it at the end of the list.
   let AltOrders = [(add (sub GPRC_NOR0, R2), R2)];
   let AltOrderSelect = [{
-    const PPCSubtarget &S = MF.getTarget().getSubtarget<PPCSubtarget>();
+    const PPCSubtarget &S = MF.getSubtarget<PPCSubtarget>();
     return S.isPPC64() && S.isSVR4ABI();
   }];
 }
@@ -259,7 +267,7 @@ def G8RC_NOX0 : RegisterClass<"PPC", [i64], 64, (add (sub G8RC, X0), ZERO8)> {
   // put it at the end of the list.
   let AltOrders = [(add (sub G8RC_NOX0, X2), X2)];
   let AltOrderSelect = [{
-    const PPCSubtarget &S = MF.getTarget().getSubtarget<PPCSubtarget>();
+    const PPCSubtarget &S = MF.getSubtarget<PPCSubtarget>();
     return S.isPPC64() && S.isSVR4ABI();
   }];
 }
@@ -275,7 +283,7 @@ def F8RC : RegisterClass<"PPC", [f64], 64, (add (sequence "F%u", 0, 13),
                                                 (sequence "F%u", 31, 14))>;
 def F4RC : RegisterClass<"PPC", [f32], 32, (add F8RC)>;
 
-def VRRC : RegisterClass<"PPC", [v16i8,v8i16,v4i32,v4f32], 128,
+def VRRC : RegisterClass<"PPC", [v16i8,v8i16,v4i32,v2i64,v1i128,v4f32,v2f64], 128,
                          (add V2, V3, V4, V5, V0, V1, V6, V7, V8, V9, V10, V11,
                              V12, V13, V14, V15, V16, V17, V18, V19, V31, V30,
                              V29, V28, V27, V26, V25, V24, V23, V22, V21, V20)>;
@@ -285,14 +293,8 @@ def VRRC : RegisterClass<"PPC", [v16i8,v8i16,v4i32,v4f32], 128,
 def VSLRC : RegisterClass<"PPC", [v4i32,v4f32,v2f64,v2i64], 128,
                           (add (sequence "VSL%u", 0, 13),
                                (sequence "VSL%u", 31, 14))>;
-def VSHRC : RegisterClass<"PPC", [v4i32,v4f32,v2f64,v2i64], 128,
-                          (add VSH2, VSH3, VSH4, VSH5, VSH0, VSH1, VSH6, VSH7,
-			       VSH8, VSH9, VSH10, VSH11, VSH12, VSH13, VSH14,
-                               VSH15, VSH16, VSH17, VSH18, VSH19, VSH31, VSH30,
-                               VSH29, VSH28, VSH27, VSH26, VSH25, VSH24, VSH23,
-                               VSH22, VSH21, VSH20)>;
 def VSRC  : RegisterClass<"PPC", [v4i32,v4f32,v2f64,v2i64], 128,
-                          (add VSLRC, VSHRC)>;
+                          (add VSLRC, VRRC)>;
 
 // Register classes for the 64-bit "scalar" VSX subregisters.
 def VFRC :  RegisterClass<"PPC", [f64], 64,
@@ -302,6 +304,19 @@ def VFRC :  RegisterClass<"PPC", [f64], 64,
                                VF29, VF28, VF27, VF26, VF25, VF24, VF23,
                                VF22, VF21, VF20)>;
 def VSFRC : RegisterClass<"PPC", [f64], 64, (add F8RC, VFRC)>;
+
+// Register class for single precision scalars in VSX registers
+def VSSRC : RegisterClass<"PPC", [f32], 32, (add VSFRC)>;
+
+// For QPX
+def QFRC : RegisterClass<"PPC", [v4f64], 256, (add (sequence "QF%u", 0, 13),
+                                                (sequence "QF%u", 31, 14))>;
+def QSRC : RegisterClass<"PPC", [v4f32], 128, (add QFRC)>;
+def QBRC : RegisterClass<"PPC", [v4i1], 256, (add QFRC)> {
+  // These are actually stored as floating-point values where a positive
+  // number is true and anything else (including NaN) is false.
+  let Size = 256;
+}
 
 def CRBITRC : RegisterClass<"PPC", [i1], 32,
   (add CR2LT, CR2GT, CR2EQ, CR2UN,
@@ -317,6 +332,8 @@ def CRBITRC : RegisterClass<"PPC", [i1], 32,
 
 def CRRC : RegisterClass<"PPC", [i32], 32, (add CR0, CR1, CR5, CR6,
                                                 CR7, CR2, CR3, CR4)>;
+
+def CRRC0 : RegisterClass<"PPC", [i32], 32, (add CR0)>;
 
 // The CTR registers are not allocatable because they're used by the
 // decrement-and-branch instructions, and thus need to stay live across

@@ -1,5 +1,5 @@
-// @(#)root/tmva $Id$    
-// Author: Marcin .... 
+// @(#)root/tmva $Id$
+// Author: Marcin ....
 
 /**********************************************************************************
  * Project: TMVA - a Root-integrated toolkit for multivariate data analysis       *
@@ -25,47 +25,51 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_______________________________________________________________________
-//                                                                      
-// ... description of bayesian classifiers ...
-//_______________________________________________________________________
+/*! \class TMVA::MethodBayesClassifier
+\ingroup TMVA
+
+Description of bayesian classifiers.
+
+*/
+
+#include "TMVA/MethodBayesClassifier.h"
 
 #include "TMVA/ClassifierFactory.h"
+#include "TMVA/IMethod.h"
 #include "TMVA/MethodBase.h"
-#include "TMVA/MethodBayesClassifier.h"
 #include "TMVA/MsgLogger.h"
 #include "TMVA/Tools.h"
 #include "TMVA/Types.h"
+
 #include "Riostream.h"
+#include "TString.h"
 
 REGISTER_METHOD(BayesClassifier)
 
-ClassImp(TMVA::MethodBayesClassifier)
+ClassImp(TMVA::MethodBayesClassifier);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// standard constructor
 
-TMVA::MethodBayesClassifier::MethodBayesClassifier( const TString& jobName,
-                                                    const TString& methodTitle,
-                                                    DataSetInfo& theData, 
-                                                    const TString& theOption,
-                                                    TDirectory* theTargetDir ) :
-   TMVA::MethodBase( jobName, Types::kBayesClassifier, methodTitle, theData, theOption, theTargetDir )
+   TMVA::MethodBayesClassifier::MethodBayesClassifier( const TString& jobName,
+                                                       const TString& methodTitle,
+                                                       DataSetInfo& theData,
+                                                       const TString& theOption ) :
+   TMVA::MethodBase( jobName, Types::kBayesClassifier, methodTitle, theData, theOption)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor from weight file
 
-TMVA::MethodBayesClassifier::MethodBayesClassifier( DataSetInfo& theData, 
-                                                    const TString& theWeightFile,  
-                                                    TDirectory* theTargetDir ) :
-   TMVA::MethodBase( Types::kBayesClassifier, theData, theWeightFile, theTargetDir ) 
+TMVA::MethodBayesClassifier::MethodBayesClassifier( DataSetInfo& theData,
+                                                    const TString& theWeightFile) :
+   TMVA::MethodBase( Types::kBayesClassifier, theData, theWeightFile)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Variable can handle classification with 2 classes 
+/// Variable can handle classification with 2 classes
 
 Bool_t TMVA::MethodBayesClassifier::HasAnalysisType( Types::EAnalysisType type, UInt_t numberClasses, UInt_t /*numberTargets*/ )
 {
@@ -82,16 +86,16 @@ void TMVA::MethodBayesClassifier::Init( void )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// define the options (their key words) that can be set in the option string 
+/// define the options (their key words) that can be set in the option string
 
-void TMVA::MethodBayesClassifier::DeclareOptions() 
+void TMVA::MethodBayesClassifier::DeclareOptions()
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// the option string is decoded, for availabel options see "DeclareOptions"
+/// the option string is decoded, for available options see "DeclareOptions"
 
-void TMVA::MethodBayesClassifier::ProcessOptions() 
+void TMVA::MethodBayesClassifier::ProcessOptions()
 {
 }
 
@@ -103,7 +107,7 @@ TMVA::MethodBayesClassifier::~MethodBayesClassifier( void )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// some training 
+/// some training
 
 void TMVA::MethodBayesClassifier::Train( void )
 {
@@ -114,7 +118,7 @@ void TMVA::MethodBayesClassifier::Train( void )
 void TMVA::MethodBayesClassifier::AddWeightsXMLTo( void* /*parent*/ ) const {
    Log() << kFATAL << "Please implement writing of weights as XML" << Endl;
 }
-  
+
 ////////////////////////////////////////////////////////////////////////////////
 /// read back the training results from a file (stream)
 
@@ -147,7 +151,7 @@ void TMVA::MethodBayesClassifier::MakeClassSpecific( std::ostream& fout, const T
 ////////////////////////////////////////////////////////////////////////////////
 /// get help message text
 ///
-/// typical length of text line: 
+/// typical length of text line:
 ///         "|--------------------------------------------------------------|"
 
 void TMVA::MethodBayesClassifier::GetHelpMessage() const

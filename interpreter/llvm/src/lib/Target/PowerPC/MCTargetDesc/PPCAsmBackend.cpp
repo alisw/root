@@ -7,20 +7,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/PPCMCTargetDesc.h"
 #include "MCTargetDesc/PPCFixupKinds.h"
+#include "MCTargetDesc/PPCMCTargetDesc.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
-#include "llvm/MC/MCELF.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCMachObjectWriter.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSectionMachO.h"
+#include "llvm/MC/MCSymbolELF.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/Support/ELF.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MachO.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
@@ -113,8 +113,9 @@ public:
     return (IsLittleEndian? InfosLE : InfosBE)[Kind - FirstTargetFixupKind];
   }
 
-  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value, bool IsPCRel) const override {
+  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
+                  const MCValue &Target, MutableArrayRef<char> Data,
+                  uint64_t Value, bool IsResolved) const override {
     Value = adjustFixupValue(Fixup.getKind(), Value);
     if (!Value) return;           // Doesn't change encoding.
 
@@ -130,27 +131,27 @@ public:
     }
   }
 
-  void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
-                         const MCFixup &Fixup, const MCFragment *DF,
-                         const MCValue &Target, uint64_t &Value,
-                         bool &IsResolved) override {
+  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
+                             const MCValue &Target) override {
     switch ((PPC::Fixups)Fixup.getKind()) {
-    default: break;
+    default:
+      return false;
     case PPC::fixup_ppc_br24:
     case PPC::fixup_ppc_br24abs:
       // If the target symbol has a local entry point we must not attempt
       // to resolve the fixup directly.  Emit a relocation and leave
       // resolution of the final target address to the linker.
       if (const MCSymbolRefExpr *A = Target.getSymA()) {
-        const MCSymbolData &Data = Asm.getSymbolData(A->getSymbol());
-        // The "other" values are stored in the last 6 bits of the second byte.
-        // The traditional defines for STO values assume the full byte and thus
-        // the shift to pack it.
-        unsigned Other = MCELF::getOther(Data) << 2;
-        if ((Other & ELF::STO_PPC64_LOCAL_MASK) != 0)
-          IsResolved = false;
+        if (const auto *S = dyn_cast<MCSymbolELF>(&A->getSymbol())) {
+          // The "other" values are stored in the last 6 bits of the second
+          // byte. The traditional defines for STO values assume the full byte
+          // and thus the shift to pack it.
+          unsigned Other = S->getOther() << 2;
+          if ((Other & ELF::STO_PPC64_LOCAL_MASK) != 0)
+            return true;
+        }
       }
-      break;
+      return false;
     }
   }
 
@@ -167,8 +168,8 @@ public:
     llvm_unreachable("relaxInstruction() unimplemented");
   }
 
-
-  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {
+  void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
+                        MCInst &Res) const override {
     // FIXME.
     llvm_unreachable("relaxInstruction() unimplemented");
   }
@@ -176,14 +177,9 @@ public:
   bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override {
     uint64_t NumNops = Count / 4;
     for (uint64_t i = 0; i != NumNops; ++i)
-      OW->Write32(0x60000000);
+      OW->write32(0x60000000);
 
-    switch (Count % 4) {
-    default: break; // No leftover bytes to write
-    case 1: OW->Write8(0); break;
-    case 2: OW->Write16(0); break;
-    case 3: OW->Write16(0); OW->Write8(0); break;
-    }
+    OW->WriteZeros(Count % 4);
 
     return true;
   }
@@ -208,7 +204,7 @@ namespace {
   public:
     DarwinPPCAsmBackend(const Target &T) : PPCAsmBackend(T, false) { }
 
-    MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
+    MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
       bool is64 = getPointerSize() == 8;
       return createPPCMachObjectWriter(
           OS,
@@ -224,8 +220,7 @@ namespace {
     ELFPPCAsmBackend(const Target &T, bool IsLittleEndian, uint8_t OSABI) :
       PPCAsmBackend(T, IsLittleEndian), OSABI(OSABI) { }
 
-
-    MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
+    MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
       bool is64 = getPointerSize() == 8;
       return createPPCELFObjectWriter(OS, is64, isLittleEndian(), OSABI);
     }
@@ -235,11 +230,12 @@ namespace {
 
 MCAsmBackend *llvm::createPPCAsmBackend(const Target &T,
                                         const MCRegisterInfo &MRI,
-                                        StringRef TT, StringRef CPU) {
-  if (Triple(TT).isOSDarwin())
+                                        const Triple &TT, StringRef CPU,
+                                        const MCTargetOptions &Options) {
+  if (TT.isOSDarwin())
     return new DarwinPPCAsmBackend(T);
 
-  uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(Triple(TT).getOS());
-  bool IsLittleEndian = Triple(TT).getArch() == Triple::ppc64le;
+  uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TT.getOS());
+  bool IsLittleEndian = TT.getArch() == Triple::ppc64le;
   return new ELFPPCAsmBackend(T, IsLittleEndian, OSABI);
 }

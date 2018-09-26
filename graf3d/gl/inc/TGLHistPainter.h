@@ -12,17 +12,11 @@
 #ifndef ROOT_TGLHistPainter
 #define ROOT_TGLHistPainter
 
-#include <memory>
-
-#ifndef ROOT_TVirtualHistPainter
 #include "TVirtualHistPainter.h"
-#endif
-#ifndef ROOT_TGLPlotPainter
 #include "TGLPlotPainter.h"
-#endif
-#ifndef ROOT_TGLPlotCamera
 #include "TGLPlotCamera.h"
-#endif
+
+#include <memory>
 
 /*
    TGLHistPainter is a proxy class. It inherits TVirtualHistPainter and
@@ -47,9 +41,9 @@ class TGLHistPainter : public TVirtualHistPainter {
 private:
    //Dynamic type is THistPainter, no problems with simultaneous inheritance and membership
    //TGLHistPainter delegates unsupported options/calls to this object
-   std::auto_ptr<TVirtualHistPainter> fDefaultPainter;
+   std::unique_ptr<TVirtualHistPainter> fDefaultPainter;
    //This member can have different dynamic types: TGLLegoPainter, etc.
-   std::auto_ptr<TGLPlotPainter>      fGLPainter;
+   std::unique_ptr<TGLPlotPainter>      fGLPainter;
 
    TGLParametricEquation *fEq;
    TH1                   *fHist;
@@ -77,6 +71,7 @@ public:
    void           Paint(Option_t *option);
    void           PaintStat(Int_t dostat, TF1 *fit);
    void           ProcessMessage(const char *message, const TObject *obj);
+   void           SetHighlight();
    void           SetHistogram(TH1 *hist);
    void           SetStack(TList *stack);
    Int_t          MakeCuts(char *cutsOpt);

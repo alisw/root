@@ -3,8 +3,6 @@
 # @author Pere Mato, CERN
 ############################################################################
 
-include_directories(${CMAKE_SOURCE_DIR}/proof/proofplayer/inc)  # To avoid circular dependencies :-(
-
 ROOT_GLOB_HEADERS(headers RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/inc inc/*.h)
 ROOT_GLOB_SOURCES(sources RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/src src/*.cxx)
 
@@ -16,15 +14,8 @@ else()
   list(REMOVE_ITEM sources TDataSetManagerAliEn.cxx)
 endif()
 
-#--- if gcc 4.5.2 on Linux (Debian) use -O instead of -O2 (compiler bug)
-if(ROOT_PLATFORM MATCHES "linux" AND CMAKE_COMPILER_IS_GNUCXX AND
-   GCC_VERSION VERSION_GREATER 4.5 AND GCC_VERSION VERSION_LESS 4.6)
-  set_source_files_properties(src/TDataSetManager.cxx src/TDSet PROPERTIES COMPILE_FLAGS "-O")
-endif()
-
-ROOT_GENERATE_DICTIONARY(G__Proof ${headers} MODULE Proof LINKDEF LinkDef.h)
-
-ROOT_LINKER_LIBRARY(Proof ${sources} G__Proof.cxx DEPENDENCIES Net Tree Thread RIO MathCore)
-ROOT_INSTALL_HEADERS()
-
+ROOT_STANDARD_LIBRARY_PACKAGE(Proof
+                              HEADERS ${headers}
+                              SOURCES ${sources}
+                              DEPENDENCIES Net Tree Thread RIO MathCore)
 

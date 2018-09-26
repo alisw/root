@@ -3,25 +3,69 @@
 # @author Pere Mato, CERN
 ############################################################################
 
-include(${QT_USE_FILE})
-
-set(headers TGQt.h TQtTimer.h TQtApplication.h TQtBrush.h
-            TQMimeTypes.h TQtClientFilter.h TQtClientWidget.h TQtWidget.h
-            TQtMarker.h TQtTimer.h TQtRootSlot.h TQtPadFont.h)
-
-if(CMAKE_COMPILER_IS_GNUCXX)
-  add_definitions(-Wno-deprecated-register -Wno-uninitialized)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-  add_definitions(-Wno-deprecated -Wno-uninitialized)
+if(fail-on-missing)
+  set(QT_REQUIRED REQUIRED)
 endif()
 
-QT4_WRAP_CPP(mocfiles inc/TQtWidget.h inc/TQtEmitter.h inc/TQtClientFilter.h
-                      inc/TQtClientGuard.h inc/TQtClientWidget.h inc/TQtTimer.h
-                      inc/TQtRootSlot.h)
+find_package(Qt4 4.8 COMPONENTS QtCore QtGui ${QT_REQUIRED})
 
-ROOT_GENERATE_DICTIONARY(G__GQt ${headers} MODULE GQt LINKDEF LinkDef.h OPTIONS -Wno-deprecated)
+if(NOT QT4_FOUND)
+  set(qt OFF CACHE BOOL "" FORCE)
+  return()
+endif()
 
+include(${QT_USE_FILE})
 
-ROOT_LINKER_LIBRARY(GQt *.cxx ${mocfiles} G__GQt.cxx LIBRARIES ${QT_LIBRARIES} DEPENDENCIES Gui Gpad Graf Rint)
+set(headers
+  inc/TGQt.h
+  inc/TQMimeTypes.h
+  inc/TQtApplication.h
+  inc/TQtBrush.h
+  inc/TQtClientFilter.h
+  inc/TQtClientWidget.h
+  inc/TQtMarker.h
+  inc/TQtPadFont.h
+  inc/TQtRootSlot.h
+  inc/TQtTimer.h
+  inc/TQtWidget.h
+  inc/TQtIncludes.h
+)
 
-ROOT_INSTALL_HEADERS()
+set(sources
+  src/GQtGUI.cxx
+  src/TGQt.cxx
+  src/TGQtDummy.cxx
+  src/TQMimeTypes.cxx
+  src/TQtApplication.cxx
+  src/TQtBrush.cxx
+  src/TQtClientFilter.cxx
+  src/TQtClientGuard.cxx
+  src/TQtClientWidget.cxx
+  src/TQtEvent.cxx
+  src/TQtEventQueue.cxx
+  src/TQtMarker.cxx
+  src/TQtPadFont.cxx
+  src/TQtPen.cxx
+  src/TQtRootApplication.cxx
+  src/TQtRootSlot.cxx
+  src/TQtSymbolCodec.cxx
+  src/TQtTimer.cxx
+  src/TQtWidget.cxx
+)
+
+QT4_WRAP_CPP(moc_sources
+  inc/TQtWidget.h
+  inc/TQtEmitter.h
+  inc/TQtClientFilter.h
+  inc/TQtClientGuard.h
+  inc/TQtClientWidget.h
+  inc/TQtTimer.h
+  inc/TQtRootSlot.h
+)
+
+ROOT_STANDARD_LIBRARY_PACKAGE(GQt
+                              HEADERS ${headers}
+                              SOURCES ${sources} ${moc_sources}
+                              DICTIONARY_OPTIONS -Wno-deprecated
+                              LIBRARIES Qt4::QtCore Qt4::QtGui
+                              DEPENDENCIES Gui Gpad Graf Rint)

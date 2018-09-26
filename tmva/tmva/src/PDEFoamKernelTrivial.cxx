@@ -25,31 +25,30 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_____________________________________________________________________
-//
-// PDEFoamKernelTrivial
-//
-// This class is a trivial PDEFoam kernel estimator.  The Estimate()
-// function returns the cell value, given an event 'txvec'.
-// _____________________________________________________________________
+/*! \class TMVA::PDEFoamKernelTrivial
+\ingroup TMVA
+This class is a trivial PDEFoam kernel estimator.  The Estimate()
+function returns the cell value, given an event 'txvec'.
+*/
 
 #include "TMVA/PDEFoamKernelTrivial.h"
 
-#include "TMVA/PDEFoam.h"
 #include "TMVA/MsgLogger.h"
+#include "TMVA/PDEFoam.h"
+#include "TMVA/PDEFoamKernelBase.h"
 #include "TMVA/Types.h"
 
 #include "Rtypes.h"
 
 #include <vector>
 
-ClassImp(TMVA::PDEFoamKernelTrivial)
+ClassImp(TMVA::PDEFoamKernelTrivial);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for streamer
 
 TMVA::PDEFoamKernelTrivial::PDEFoamKernelTrivial()
-   : PDEFoamKernelBase()
+: PDEFoamKernelBase()
 {
 }
 

@@ -37,12 +37,13 @@ Use RooAbsCollection derived objects for public use
 
 #include "Riostream.h"
 #include "TBuffer.h"
+#include "TROOT.h"
 
 #include <algorithm>
 
 using namespace std;
 
-ClassImp(RooLinkedList)
+ClassImp(RooLinkedList);
 ;
 namespace RooLinkedListImplDetails {
   /// a chunk of memory in a pool for quick allocation of RooLinkedListElems
@@ -363,9 +364,12 @@ void RooLinkedList::setHashTableSize(Int_t size)
 
 RooLinkedList::~RooLinkedList() 
 {
-  if (_htableName) {
-    delete _htableName ;
-    _htableName=0 ;
+   // Required since we overload TObject::Hash.
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
+
+   if (_htableName) {
+      delete _htableName;
+      _htableName = 0;
   }
   if (_htableLink) {
     delete _htableLink ;
@@ -467,6 +471,15 @@ Bool_t RooLinkedList::Remove(TObject* arg)
   _size-- ;
   deleteElement(elem) ;	
   return kTRUE ;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// If one of the TObject we have a referenced to is deleted, remove the
+/// reference.
+
+void RooLinkedList::RecursiveRemove(TObject *obj)
+{
+   Remove(obj); // This is a nop if the obj is not in the collection.
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -877,8 +890,8 @@ void RooLinkedList::Streamer(TBuffer &R__b)
       Add(arg) ;      
     }
 
-    if (v>1 ) {
-      R__b >> _name ;
+    if (v > 1 && v < 4) {
+       R__b >> _name;
     }
     
   } else {

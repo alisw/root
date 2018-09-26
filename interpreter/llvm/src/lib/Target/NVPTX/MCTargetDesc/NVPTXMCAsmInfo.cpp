@@ -25,21 +25,25 @@ static cl::opt<bool> CompileForDebugging("debug-compile",
 
 void NVPTXMCAsmInfo::anchor() {}
 
-NVPTXMCAsmInfo::NVPTXMCAsmInfo(StringRef TT) {
-  Triple TheTriple(TT);
+NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple) {
   if (TheTriple.getArch() == Triple::nvptx64) {
-    PointerSize = CalleeSaveStackSlotSize = 8;
+    CodePointerSize = CalleeSaveStackSlotSize = 8;
   }
 
   CommentString = "//";
 
   HasSingleParameterDotFile = false;
 
-  InlineAsmStart = " inline asm";
-  InlineAsmEnd = " inline asm";
+  InlineAsmStart = " begin inline asm";
+  InlineAsmEnd = " end inline asm";
 
   SupportsDebugInformation = CompileForDebugging;
+  // PTX does not allow .align on functions.
+  HasFunctionAlignment = false;
   HasDotTypeDotSizeDirective = false;
+  // PTX does not allow .hidden or .protected
+  HiddenDeclarationVisibilityAttr = HiddenVisibilityAttr = MCSA_Invalid;
+  ProtectedVisibilityAttr = MCSA_Invalid;
 
   Data8bitsDirective = " .b8 ";
   Data16bitsDirective = " .b16 ";

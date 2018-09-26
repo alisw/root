@@ -36,6 +36,7 @@
 #include "Varargs.h"
 #include "ThreadLocalStorage.h"
 #include "TThreadSlots.h"
+#include "TRWMutexImp.h"
 
 TThreadImp     *TThread::fgThreadImp = 0;
 Long_t          TThread::fgMainId = 0;
@@ -193,7 +194,7 @@ Int_t TJoinHelper::Join()
 
 //------------------------------------------------------------------------------
 
-ClassImp(TThread)
+ClassImp(TThread);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -321,6 +322,10 @@ void TThread::Init()
    ::Fatal("Init","_REENTRANT must be #define-d for TThread to work properly.");
 #endif
 
+   // 'Insure' gROOT is created before initializing the Thread safe behavior
+   // (to make sure we do not have two attempting to create it).
+   ROOT::GetROOT();
+
    fgThreadImp = gThreadFactory->CreateThreadImp();
    gMainInternalMutex = new TMutex(kTRUE);
 
@@ -336,13 +341,17 @@ void TThread::Init()
    TInterpreter::Instance()->SetAlloclockfunc(CINT_alloc_lock);
    gCling->SetAllocunlockfunc(CINT_alloc_unlock);
 
-   //To avoid deadlocks, gInterpreterMutex and gROOTMutex need
-   // to point at the same instance
+   // To avoid deadlocks, gInterpreterMutex and gROOTMutex need
+   // to point at the same instance.
+   // Both are now deprecated in favor of ROOT::gCoreMutex
    {
      R__LOCKGUARD(gGlobalMutex);
-     if (!gInterpreterMutex) {
-       gInterpreterMutex = gGlobalMutex->Factory(kTRUE);
+     if (!ROOT::gCoreMutex) {
+        // To avoid dead locks, caused by shared library opening and/or static initialization
+        // taking the same lock as 'tls_get_addr_tail', we can not use UniqueLockRecurseCount.
+        ROOT::gCoreMutex = new ROOT::TRWMutexImp<std::mutex, ROOT::Internal::RecurseCounts>();
      }
+     gInterpreterMutex = ROOT::gCoreMutex;
      gROOTMutex = gInterpreterMutex;
    }
 }
@@ -1092,8 +1101,12 @@ void TThread::XAction()
 
       case kCUPD:
          //((TCanvas *)fgXArr[1])->Update();
-         cmd = Form("((TCanvas *)0x%lx)->Update();",(Long_t)fgXArr[1]);
-         gROOT->ProcessLine(cmd);
+         union CastFromFuncToVoidPtr_t {
+            void (*fFuncPtr)(void*);
+            void* fVoidPtr;
+         } castFromFuncToVoidPtr;
+         castFromFuncToVoidPtr.fVoidPtr = fgXArr[2];
+         (*castFromFuncToVoidPtr.fFuncPtr)(fgXArr[1]); // aka TCanvas::Update()
          break;
 
       case kCANV:

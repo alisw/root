@@ -1488,6 +1488,39 @@ def : InstRW<[WriteVPGATHERQQ256, ReadAfterLd], (instregex "VPGATHERQQYrm")>;
 
 //-- Arithmetic instructions --//
 
+////////////////////////////////////////////////////////////////////////////////
+// Horizontal add/sub  instructions.
+////////////////////////////////////////////////////////////////////////////////
+
+// HADD, HSUB PS/PD
+// x,x / v,v,v.
+def : WriteRes<WriteFHAdd, [HWPort1, HWPort5]> {
+  let Latency = 5;
+  let NumMicroOps = 3;
+  let ResourceCycles = [1, 2];
+}
+
+// x,m / v,v,m.
+def : WriteRes<WriteFHAddLd, [HWPort1, HWPort5, HWPort23]> {
+  let Latency = 9;
+  let NumMicroOps = 4;
+  let ResourceCycles = [1, 2, 1];
+}
+
+// PHADD|PHSUB (S) W/D.
+// v <- v,v.
+def : WriteRes<WritePHAdd, [HWPort1, HWPort5]> {
+  let Latency = 3;
+  let NumMicroOps = 3;
+  let ResourceCycles = [1, 2];
+}
+// v <- v,m.
+def : WriteRes<WritePHAddLd, [HWPort1, HWPort5, HWPort23]> {
+  let Latency = 6;
+  let NumMicroOps = 3;
+  let ResourceCycles = [1, 2, 1];
+}
+
 // PHADD|PHSUB (S) W/D.
 // v <- v,v.
 def WritePHADDSUBr : SchedWriteRes<[HWPort1, HWPort5]> {
@@ -1895,7 +1928,7 @@ def : InstRW<[WriteMULr], (instregex "(V?)MUL(P|S)(S|D)rr")>;
 
 // x,m / v,v,m.
 def WriteMULm : SchedWriteRes<[HWPort01, HWPort23]> {
-  let Latency = 4;
+  let Latency = 9;
   let NumMicroOps = 2;
   let ResourceCycles = [1, 1];
 }
@@ -2014,7 +2047,7 @@ def : InstRW<[WriteFMADDr],
     // 3p forms.
     "VF(N?)M(ADD|SUB|ADDSUB|SUBADD)P(S|D)(r213|r132|r231)r(Y)?",
     // 3s forms.
-    "VF(N?)M(ADD|SUB)S(S|D)(r132|231|213)r",
+    "VF(N?)M(ADD|SUB)S(S|D)(r132|r231|r213)r",
     // 4s/4s_int forms.
     "VF(N?)M(ADD|SUB)S(S|D)4rr(_REV|_Int)?",
     // 4p forms.
@@ -2031,7 +2064,7 @@ def : InstRW<[WriteFMADDm],
     // 3p forms.
     "VF(N?)M(ADD|SUB|ADDSUB|SUBADD)P(S|D)(r213|r132|r231)m(Y)?",
     // 3s forms.
-    "VF(N?)M(ADD|SUB)S(S|D)(r132|231|213)m",
+    "VF(N?)M(ADD|SUB)S(S|D)(r132|r231|r213)m",
     // 4s/4s_int forms.
     "VF(N?)M(ADD|SUB)S(S|D)4(rm|mr)(_Int)?",
     // 4p forms.

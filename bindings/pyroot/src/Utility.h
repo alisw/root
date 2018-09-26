@@ -31,7 +31,7 @@ namespace PyROOT {
 
       Bool_t AddUsingToClass( PyObject* pyclass, const char* method );
 
-   // helpers for dynamically constructing binary operators
+      // helpers for dynamically constructing binary operators
       Bool_t AddBinaryOperator( PyObject* left, PyObject* right,
          const char* op, const char* label, const char* alt_label = NULL );
       Bool_t AddBinaryOperator( PyObject* pyclass,
@@ -74,6 +74,13 @@ namespace PyROOT {
       PyObject* RemoveGUIEventInputHook();
 
    } // namespace Utility
+
+   class PyGILRAII {
+      PyGILState_STATE m_GILState;
+   public:
+      PyGILRAII():m_GILState(PyGILState_Ensure()){}
+      ~PyGILRAII(){PyGILState_Release(m_GILState);}
+   };
 
 } // namespace PyROOT
 

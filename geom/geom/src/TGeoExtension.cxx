@@ -11,7 +11,9 @@
 
 #include "TGeoExtension.h"
 
-ClassImp(TGeoExtension)
+#include "Rtypes.h"
+
+ClassImp(TGeoExtension);
 
 /** \class TGeoExtension
 \ingroup Geometry_classes
@@ -25,7 +27,7 @@ or nodes BEFORE applying misalignment information so that
 these will be available to all copies.
 */
 
-ClassImp(TGeoRCExtension)
+ClassImp(TGeoRCExtension);
 
 /** \class TGeoRCExtension
 \ingroup Geometry_classes

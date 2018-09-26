@@ -13,6 +13,7 @@ set(TestMathMoreSource
      testGSLIntegration.cxx
      testMCIntegration.cxx
      testGSLRootFinder.cxx
+     testMultiRootFinder.cxx
      testMinimization1D.cxx
      testInterpolation.cxx
      testRandom.cxx
@@ -24,6 +25,8 @@ set(TestMathMoreSource
      testVavilov.cxx
      simanTSP.cxx  )
 
+set(testFunctor_LABELS longtest)
+set(testPermute_LABELS longtest)
 
 if(ROOT_unuran_FOUND)
   list(APPEND Libraries Unuran)
@@ -36,15 +39,15 @@ if(ROOT_minuit2_FOUND)
   list(APPEND Libraries Minuit2)
 endif()
 
-
 #some tests requires directly gsl
 include_directories(${GSL_INCLUDE_DIR} ${CMAKE_SOURCE_DIR})
-add_definitions(-DUSE_ROOT_ERROR -DHAVE_ROOTLIBS)
+add_definitions(-DHAVE_ROOTLIBS)
 
 #---Build and add all the defined test in the list---------------
 foreach(file ${TestMathMoreSource})
   get_filename_component(testname ${file} NAME_WE)
   ROOT_EXECUTABLE(${testname} ${file} LIBRARIES ${GSL_LIBRARIES} ${Libraries})
-  ROOT_ADD_TEST(mathmore-${testname} COMMAND ${testname}) 
+  ROOT_ADD_TEST(mathmore-${testname} COMMAND ${testname} LABELS ${${testname}_LABELS})
 endforeach()
 
+ROOT_ADD_GTEST(stressMathMoreUnit testStress.cxx StatFunction.cxx LIBRARIES MathMore)

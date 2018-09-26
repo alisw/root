@@ -21,15 +21,9 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TGObject
 #include "TGObject.h"
-#endif
-#ifndef ROOT_TGClient
 #include "TGClient.h"
-#endif
-#ifndef ROOT_TVirtualX
 #include "TVirtualX.h"
-#endif
 
 class TGClient;
 class TGIdleHandler;
@@ -71,6 +65,10 @@ public:
       kEditDisableWidth  = BIT(6),     // window width cannot be editted
       kEditDisableBtnEnable = BIT(7),  // window can handle mouse button events
       kEditDisableKeyEnable = BIT(8)   // window can handle keyboard events
+   };
+
+   enum EStatusBits {
+      kIsHtmlView = BIT(14)
    };
 
    TGWindow(const TGWindow *p = 0, Int_t x = 0, Int_t y = 0,
@@ -131,7 +129,7 @@ public:
 
    static Int_t        GetCounter();
 
-   ClassDef(TGWindow,1)  // GUI Window base class
+   ClassDef(TGWindow, 0);  // GUI Window base class
 };
 
 

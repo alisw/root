@@ -41,6 +41,11 @@ In a later release the collections may become templatized.
 #include "TRegexp.h"
 #include "TPRegexp.h"
 #include "TVirtualMutex.h"
+#include "TError.h"
+#include "TSystem.h"
+#include <sstream>
+
+#include "TSpinLockGuard.h"
 
 TVirtualMutex *gCollectionMutex = 0;
 
@@ -49,8 +54,138 @@ TObjectTable  *TCollection::fgGarbageCollection = 0;
 Bool_t         TCollection::fgEmptyingGarbage   = kFALSE;
 Int_t          TCollection::fgGarbageStack      = 0;
 
-ClassImp(TCollection)
-ClassImp(TIter)
+ClassImp(TCollection);
+ClassImp(TIter);
+
+#ifdef R__CHECK_COLLECTION_MULTI_ACCESS
+
+void TCollection::TErrorLock::ConflictReport(std::thread::id holder, const char *accesstype,
+                                             const TCollection *collection, const char *function)
+{
+
+   auto local = std::this_thread::get_id();
+   std::stringstream cur, loc;
+   if (holder == std::thread::id())
+      cur << "None";
+   else
+      cur << "0x" << std::hex << holder;
+   loc << "0x" << std::hex << local;
+
+   //   std::cerr << "Error in " << function << ": Access (" << accesstype << ") to a collection (" <<
+   //   collection->IsA()->GetName() << ":" << collection <<
+   //   ") from multiple threads at a time. holder=" << "0x" << std::hex << holder << " readers=" << fReadSet.size() <<
+   //   "0x" << std::hex << local << std::endl;
+
+   ::Error(function,
+           "Access (%s) to a collection (%s:%p) from multiple threads at a time. holder=%s readers=%lu intruder=%s",
+           accesstype, collection->IsA()->GetName(), collection, cur.str().c_str(), fReadSet.size(), loc.str().c_str());
+
+   std::set<std::thread::id> tmp;
+   for (auto r : fReadSet) tmp.insert(r);
+   for (auto r : tmp) {
+      std::stringstream reader;
+      reader << "0x" << std::hex << r;
+      ::Error(function, " Readers includes %s", reader.str().c_str());
+   }
+   gSystem->StackTrace();
+}
+
+void TCollection::TErrorLock::Lock(const TCollection *collection, const char *function)
+{
+   auto local = std::this_thread::get_id();
+
+   std::thread::id holder;
+
+   if (fWriteCurrent.compare_exchange_strong(holder, local)) {
+      // fWriteCurrent was the default id and is now local.
+      ++fWriteCurrentRecurse;
+      // std::cerr << "#" << "0x" << std::hex << local << " acquired first " << collection << " lock:" << this <<
+      // std::endl;
+
+      // Now check if there is any readers lingering
+      if (fReadCurrentRecurse) {
+         if (fReadSet.size() > 1 || fReadSet.find(local) != fReadSet.end()) {
+            ConflictReport(std::thread::id(), "WriteLock while ReadLock taken", collection, function);
+         }
+      }
+   } else {
+      // fWriteCurrent was not the default id and is still the 'holder' thread id
+      // this id is now also in the holder variable
+      if (holder == local) {
+         // The holder was actually this thread, no problem there, we
+         // allow re-entrancy.
+         // std::cerr << "#" << "0x" << std::hex << local << " re-entered " << fWriteCurrentRecurse << " " << collection
+         // << " lock:" << this << std::endl;
+      } else {
+         ConflictReport(holder, "WriteLock", collection, function);
+      }
+      ++fWriteCurrentRecurse;
+   }
+}
+
+void TCollection::TErrorLock::Unlock()
+{
+   auto local = std::this_thread::get_id();
+   auto none = std::thread::id();
+
+   --fWriteCurrentRecurse;
+   if (fWriteCurrentRecurse == 0) {
+      if (fWriteCurrent.compare_exchange_strong(local, none)) {
+         // fWriteCurrent was local and is now none.
+
+         // std::cerr << "#" << "0x" << std::hex << local << " zero and cleaned : " << std::dec << fWriteCurrentRecurse
+         // << " 0x" << std::hex << fWriteCurrent.load() << " lock:" << this << std::endl;
+      } else {
+         // fWriteCurrent was not local, just live it as is.
+
+         // std::cerr << "#" << "0x" << std::hex << local << " zero but somebody else : " << "0x" << std::hex <<
+         // fWriteCurrent.load() << " lock:" << this << std::endl;
+      }
+   } else {
+      // std::cerr << "#" << "0x" << std::hex << local << " still holding " << "0x" << std::hex << fWriteCurrentRecurse
+      // << " lock:" << this << std::endl;
+   }
+
+   // std::cerr << "#" << "0x" << std::hex << local << " ended with : " << std::dec << fWriteCurrentRecurse << " 0x" <<
+   // std::hex << fWriteCurrent.load() << " lock:" << this << std::endl;
+}
+
+void TCollection::TErrorLock::ReadLock(const TCollection *collection, const char *function)
+{
+   auto local = std::this_thread::get_id();
+
+   {
+      ROOT::Internal::TSpinLockGuard guard(fSpinLockFlag);
+      fReadSet.insert(local); // this is not thread safe ...
+   }
+   ++fReadCurrentRecurse;
+
+   if (fWriteCurrentRecurse) {
+      auto holder = fWriteCurrent.load();
+      if (holder != local) ConflictReport(holder, "ReadLock with WriteLock taken", collection, function);
+   }
+}
+
+void TCollection::TErrorLock::ReadUnlock()
+{
+   auto local = std::this_thread::get_id();
+   {
+      ROOT::Internal::TSpinLockGuard guard(fSpinLockFlag);
+      fReadSet.erase(local); // this is not thread safe ...
+   }
+   --fReadCurrentRecurse;
+}
+
+#endif // R__CHECK_COLLECTION_MULTI_ACCESS
+
+////////////////////////////////////////////////////////////////////////////////
+/// TNamed destructor.
+
+TCollection::~TCollection()
+{
+   // Required since we overload TObject::Hash.
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Add all objects from collection col to this collection.
@@ -263,6 +398,15 @@ void TCollection::ls(Option_t *option) const
       object->ls(option);
    }
    TROOT::DecreaseDirLevel();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// 'Notify' all objects in this collection.
+Bool_t TCollection::Notify()
+{
+   Bool_t success = true;
+   for (auto obj : *this) success &= obj->Notify();
+   return success;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -606,6 +750,20 @@ void TCollection::SetOwner(Bool_t enable)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Set this collection to use a RW lock upon access, making it thread safe.
+/// Return the previous state.
+///
+/// Note: To test whether the usage is enabled do:
+///    collection->TestBit(TCollection::kUseRWLock);
+
+bool TCollection::UseRWLock()
+{
+   bool prev = TestBit(TCollection::kUseRWLock);
+   SetBit(TCollection::kUseRWLock);
+   return prev;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Copy a TIter. This involves allocating a new TIterator of the right
 /// sub class and assigning it with the original.
 
@@ -650,4 +808,21 @@ TIter &TIter::Begin()
 TIter TIter::End()
 {
    return TIter(static_cast<TIterator*>(nullptr));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Return an empty collection for use with nullptr TRangeCast
+
+const TCollection &ROOT::Internal::EmptyCollection()
+{
+   static TObjArray sEmpty;
+   return sEmpty;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Return true if 'cl' inherits from 'base'.
+
+bool ROOT::Internal::ContaineeInheritsFrom(TClass *cl, TClass *base)
+{
+   return cl->InheritsFrom(base);
 }

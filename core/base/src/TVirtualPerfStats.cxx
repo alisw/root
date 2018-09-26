@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TVirtualPerfStats
+\ingroup Base
+
 Provides the interface for the PROOF internal performance measurement
 and event tracing.
 */
@@ -19,7 +21,7 @@ and event tracing.
 #include "TThreadSlots.h"
 
 
-ClassImp(TVirtualPerfStats)
+ClassImp(TVirtualPerfStats);
 
 
 static const char *gEventTypeNames[] = {

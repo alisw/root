@@ -23,18 +23,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_THashList
 #include "THashList.h"
-#endif
 
 #include <set>
 #include <string>
-#ifdef R__GLOBALSTL
-namespace std { using ::set; using ::string; }
-#endif
 
 class TStatus : public TNamed {
 

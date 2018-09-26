@@ -24,7 +24,7 @@
 
 #include <stdlib.h>
 
-ClassImp(TPgSQLStatement)
+ClassImp(TPgSQLStatement);
 
 #ifdef PG_VERSION_NUM
 
@@ -568,7 +568,7 @@ Bool_t TPgSQLStatement::GetTime(Int_t npar, Int_t& hour, Int_t& min, Int_t& sec)
    Int_t year = d.GetYear();
    Int_t month = d.GetMonth();
    Int_t day = d.GetDay();
-   ConvertTimeToUTC(val, day, month, year, hour, min, sec);
+   ConvertTimeToUTC(val, year, month, day, hour, min, sec);
    return kTRUE;
 }
 
@@ -594,7 +594,7 @@ Bool_t TPgSQLStatement::GetDatime(Int_t npar, Int_t& year, Int_t& month, Int_t& 
 
 void TPgSQLStatement::ConvertTimeToUTC(const TString &PQvalue, Int_t& year, Int_t& month, Int_t& day, Int_t& hour, Int_t& min, Int_t& sec)
 {
-   Ssiz_t p = PQvalue.Last('.');
+   Ssiz_t p = PQvalue.Last(':');
    // Check if timestamp has timezone
    TSubString *s_zone = nullptr;
    Bool_t hasZone = kFALSE;

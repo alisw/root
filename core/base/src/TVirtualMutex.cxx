@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TVirtualMutex
+\ingroup Base
 
 This class implements a mutex interface. The actual work is done via
 TMutex which is available as soon as the thread library is loaded.
@@ -32,12 +33,17 @@ of local objects so it is exception safe.
 */
 
 #include "TVirtualMutex.h"
+#include "TVirtualRWMutex.h"
 
-ClassImp(TVirtualMutex)
-ClassImp(TLockGuard)
+ClassImp(TVirtualMutex);
+ClassImp(TLockGuard);
 
 // Global mutex set in TThread::Init protecting creation
 // of other (preferably local) mutexes. Note that in this
 // concept gGlobalMutex must be used in TStorage to prevent
 // lockup of the system (see TMutex::Factory)
 TVirtualMutex *gGlobalMutex = 0;
+
+// From TVirtualRWMutex.h:
+ROOT::TVirtualRWMutex::State::~State() = default;
+ROOT::TVirtualRWMutex::StateDelta::~StateDelta() = default;

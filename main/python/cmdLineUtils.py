@@ -17,6 +17,12 @@ from contextlib import contextmanager
 import os
 import sys
 
+# Support both Python2 and Python3 at the same time
+if sys.version_info.major > 2 :
+    _input = input
+else:
+    _input = raw_input
+
 def fileno(file_or_fd):
     """
     Look for 'fileno' attribute.
@@ -191,6 +197,14 @@ def isTreeKey(key):
     cl = ROOT.gROOT.GetClass(classname)
     return cl.InheritsFrom(ROOT.TTree.Class())
 
+def isTHnSparseKey(key):
+    """
+    Return True if the object, corresponding to the key, inherits from THnSparse
+    """
+    classname = key.GetClassName()
+    cl = ROOT.gROOT.GetClass(classname)
+    return cl.InheritsFrom(ROOT.THnSparse.Class())
+
 def getKey(rootFile,pathSplit):
     """
     Get the key of the corresponding object (rootFile,pathSplit)
@@ -259,6 +273,9 @@ def openROOTFile(fileName, mode="read"):
     """
     Open the ROOT file corresponding to fileName in the corresponding mode,
     redirecting the output not to see missing dictionnaries
+
+    Returns:
+        theFile (TFile)
     """
     #with stderrRedirected():
     with _setIgnoreLevel(ROOT.kError):
@@ -327,7 +344,7 @@ def patternToPathSplitList(fileName,pattern):
     if pathSplitList == []:
         logging.warning("can't find {0} in {1}".format(pattern,fileName))
 
-    # Same match (remove double occurences from the list)
+    # Same match (remove double occurrences from the list)
     manyOccurenceRemove(pathSplitList,fileName)
 
     return pathSplitList
@@ -437,6 +454,21 @@ def getSourceListArgs(parser, wildcards = True):
 def getSourceListOptDict(parser, wildcards = True):
     """
     Get the list of tuples and the dictionary with options
+
+    returns:
+        sourceList: a list of tuples with one list element per file
+                    the first tuple entry being the root file,
+                    the second a list of subdirectories,
+                        each being represented as a list itself with a string per level
+                    e.g.
+                    rootls tutorial/tmva/TMVA.root:Method_BDT/BDT turns into
+                    [('tutorials/tmva/TMVA.root', [['Method_BDT','BDT']])]
+        vars(args): a dictionary of matched options, e.g.
+                    {'longListing': False,
+                     'oneColumn': False,
+                     'treeListing': False,
+                     'FILE': ['tutorials/tmva/TMVA.root:Method_BDT/BDT']
+                     }
     """
     sourceList, args = getSourceListArgs(parser, wildcards)
     if sourceList == []:
@@ -464,7 +496,7 @@ def getSourceDestListOptDict(parser, wildcards = True):
 ##########
 
 ##########
-# Several functions shared by roocp, roomv and roorm
+# Several functions shared by rootcp, rootmv and rootrm
 
 TARGET_ERROR = "target '{0}' is not a directory"
 OMITTING_FILE_ERROR = "omitting file '{0}'"
@@ -478,7 +510,7 @@ def copyRootObject(sourceFile,sourcePathSplit,destFile,destPathSplit,oneSource,r
     retcode = 0
     isMultipleInput = not (oneSource and sourcePathSplit != [])
     recursiveOption = recursive
-    # Multiple input and unexisting or non-directory destination
+    # Multiple input and un-existing or non-directory destination
     # TARGET_ERROR
     if isMultipleInput and destPathSplit != [] \
         and not (isExisting(destFile,destPathSplit) \
@@ -566,8 +598,19 @@ def copyRootObjectRecursive(sourceFile,sourcePathSplit,destFile,destPathSplit,re
     """
     retcode = 0
     replaceOption = replace
+    seen = {}
     for key in getKeyList(sourceFile,sourcePathSplit):
         objectName = key.GetName()
+
+        # write keys only if the cycle is higher than before
+        if objectName not in seen.keys():
+            seen[objectName] = key
+        else:
+            if seen[objectName].GetCycle() < key.GetCycle():
+                seen[objectName] = key
+            else:
+                continue
+
         if isDirectoryKey(key):
             if not isExisting(destFile,destPathSplit+[objectName]):
                 createDirectory(destFile,destPathSplit+[objectName])
@@ -609,9 +652,15 @@ def copyRootObjectRecursive(sourceFile,sourcePathSplit,destFile,destPathSplit,re
                     obj.SetName(setName)
                     changeDirectory(destFile,destPathSplit)
                     obj.Write()
+            elif issubclass(obj.__class__, ROOT.TCollection):
+                # probably the object was written with kSingleKey
+                changeDirectory(destFile,destPathSplit)
+                obj.Write(setName, ROOT.TObject.kSingleKey)
             else:
                 if setName != "":
                     obj.SetName(setName)
+                else:
+                    obj.SetName(objectName)
                 changeDirectory(destFile,destPathSplit)
                 obj.Write()
             obj.Delete()
@@ -641,10 +690,10 @@ def deleteRootObject(rootFile, pathSplit, interactive, recursive):
     else:
         if interactive:
             if pathSplit != []:
-                answer = raw_input(ASK_OBJECT_REMOVE \
+                answer = _input(ASK_OBJECT_REMOVE \
                     .format("/".join(pathSplit),rootFile.GetName()))
             else:
-                answer = raw_input(ASK_FILE_REMOVE \
+                answer = _input(ASK_FILE_REMOVE \
                     .format(rootFile.GetName()))
             remove = answer.lower() == 'y'
         else:
@@ -657,7 +706,7 @@ def deleteRootObject(rootFile, pathSplit, interactive, recursive):
                 os.remove(rootFile.GetName())
     return retcode
 
-# End of functions shared by roocp, roomv and roorm
+# End of functions shared by rootcp, rootmv and rootrm
 ##########
 
 ##########
@@ -685,8 +734,7 @@ REPLACE_HELP = "replace object if already existing"
 
 def _openBrowser(rootFile=None):
     browser = ROOT.TBrowser()
-    if rootFile: rootFile.Browse(browser)
-    ROOT.PyROOT.TPyROOTApplication.Run(ROOT.gApplication)
+    _input("Press enter to exit.")
 
 def rootBrowse(fileName=None):
     if fileName:
@@ -747,7 +795,15 @@ def rootCp(sourceList, destFileName, destPathSplit, \
 ##########
 # ROOTEVENTSELECTOR
 
-def _copyTreeSubset(sourceFile,sourcePathSplit,destFile,destPathSplit,firstEvent,lastEvent,selectionString):
+def _setBranchStatus(tree,branchSelectionString,status=0):
+    """This is used by _copyTreeSubset() to turn on/off branches"""
+    for branchToModify in branchSelectionString.split(","):
+        logging.info("Setting branch status to %d for %s"%(status,branchToModify)  )
+        tree.SetBranchStatus(branchToModify,status)
+    return tree
+
+def _copyTreeSubset(sourceFile,sourcePathSplit,destFile,destPathSplit,firstEvent,lastEvent,selectionString,
+    branchinclude, branchexclude):
     """Copy a subset of the tree from (sourceFile,sourcePathSplit)
     to (destFile,destPathSplit) according to options in optDict"""
     retcode = changeDirectory(sourceFile,sourcePathSplit[:-1])
@@ -757,27 +813,31 @@ def _copyTreeSubset(sourceFile,sourcePathSplit,destFile,destPathSplit,firstEvent
     # changeDirectory for the small tree not to be memory-resident
     retcode = changeDirectory(destFile,destPathSplit)
     if retcode != 0: return retcode
-    smallTree = bigTree.CloneTree(0)
+
     if lastEvent == -1:
         lastEvent = nbrEntries-1
-    isNtuple = bigTree.InheritsFrom(ROOT.TNtuple.Class())
-    for i in range(firstEvent, lastEvent+1):
-        bigTree.GetEntry(i)
-        if isNtuple:
-            super(ROOT.TNtuple,smallTree).Fill()
-        else:
-            smallTree.Fill()
-    if selectionString:
-        if isNtuple:
-            smallSkimmedTree = super(ROOT.TNtuple,smallTree).CopyTree(selectionString)
-        else:
-            smallSkimmedTree = smallTree.CopyTree(selectionString)
-        smallSkimmedTree.Write()
-    else:
-        smallTree.Write()
+    numberOfEntries = (lastEvent-firstEvent)+1
+
+    # "Skim" events based on branch values using selectionString
+    # as well as selecting a range of events by index
+    outputTree = bigTree.CopyTree(selectionString,"",numberOfEntries,firstEvent)
+
+    # "Slim" tree by removing branches -
+    # This is done after the skimming to allow for the user to skim on a
+    # branch they no longer need to keep
+    if branchexclude:
+        _setBranchStatus(outputTree,branchexclude,0)
+    if branchinclude:
+        _setBranchStatus(outputTree,branchinclude,1)
+    if branchexclude or branchinclude:
+        outputTree = outputTree.CloneTree()
+
+    outputTree.Write()
     return retcode
 
-def _copyTreeSubsets(fileName, pathSplitList, destFile, destPathSplit, first, last, selectionString):
+
+def _copyTreeSubsets(fileName, pathSplitList, destFile, destPathSplit, first, last, selectionString,
+    branchinclude, branchexclude):
     retcode = 0
     destFileName = destFile.GetName()
     rootFile = openROOTFile(fileName) \
@@ -787,12 +847,13 @@ def _copyTreeSubsets(fileName, pathSplitList, destFile, destPathSplit, first, la
     for pathSplit in pathSplitList:
         if isTree(rootFile,pathSplit):
             retcode += _copyTreeSubset(rootFile,pathSplit, \
-            destFile,destPathSplit,first,last,selectionString)
+            destFile,destPathSplit,first,last,selectionString,branchinclude, branchexclude)
     if fileName != destFileName: rootFile.Close()
     return retcode
 
 def rootEventselector(sourceList, destFileName, destPathSplit, \
-                      compress=None, recreate=False, first=0, last=-1, selectionString=""):
+                      compress=None, recreate=False, first=0, last=-1, selectionString="",
+                      branchinclude="", branchexclude=""):
     # Check arguments
     if sourceList == [] or destFileName == "": return 1
     if recreate and destFileName in sourceList:
@@ -807,7 +868,7 @@ def rootEventselector(sourceList, destFileName, destPathSplit, \
     retcode = 0
     for fileName, pathSplitList in sourceList:
         retcode += _copyTreeSubsets(fileName, pathSplitList, destFile, destPathSplit, \
-                                    first, last, selectionString)
+                                    first, last, selectionString, branchinclude, branchexclude)
     destFile.Close()
     return retcode
 
@@ -897,17 +958,21 @@ def _rootLsPrintLongLs(keyList,indent,treeListing):
         datime = key.GetDatime()
         time = datime.GetTime()
         date = datime.GetDate()
+        year = datime.GetYear()
         time = _prepareTime(time)
         rec = \
             [key.GetClassName(), \
             MONTH[int(str(date)[4:6])]+" " +str(date)[6:]+ \
-            " "+time[:2]+":"+time[2:4], \
+            " "+time[:2]+":"+time[2:4]+" "+str(year)+" ", \
             key.GetName(), \
             "\""+key.GetTitle()+"\""]
         write(LONG_TEMPLATE.format(*rec,**dic),indent,end="\n")
         if treeListing and isTreeKey(key):
             tree = key.ReadObj()
             _recursifTreePrinter(tree,indent+2)
+        if treeListing and isTHnSparseKey(key):
+            hs = key.ReadObj()
+            hs.Print('all')
 
 ##
 # The code of the getTerminalSize function can be found here :
@@ -1002,7 +1067,7 @@ def _rootLsPrintSimpleLs(keyList,indent,oneColumn):
     """Print list of strings in columns
     - blue for directories
     - green for trees"""
-    # This code is adaptated from the pprint_list function here :
+    # This code is adapted from the pprint_list function here :
     # http://stackoverflow.com/questions/25026556/output-list-like-ls
     # Thanks hawkjo !!
     if len(keyList) == 0: return
@@ -1016,7 +1081,7 @@ def _rootLsPrintSimpleLs(keyList,indent,oneColumn):
     if max_element_width >= term_width: ncol,col_widths = 1,[1]
     else:
         # Start with max possible number of columns and reduce until it fits
-        ncol = 1 if oneColumn else min( len(keyList), term_width / min_element_width  )
+        ncol = 1 if oneColumn else min( len(keyList), term_width // min_element_width  )
         while True:
             col_widths = \
                 [ max( len(key.GetName()) + min_chars_between \
@@ -1058,11 +1123,32 @@ def _rootLsPrint(keyList, indent, oneColumn, \
 
 def _rootLsProcessFile(fileName, pathSplitList, manySources, indent, \
                        oneColumn, longListing, treeListing):
+    '''rootls main routine for one file looping over paths in the file
+
+    sorts out directories and key, and loops over all paths, then forwards to
+    (_rootLsPrintLongLs or _rootLsPrintSimpleLs) - split in _rootLsPrint
+
+    args:
+       oneColumn   (bool):
+       longListing (bool):
+       treeListing (bool):
+       indent       (int): how many columns the printout should be indented globally
+       manySources (bool): if more than one file is printed
+       fileName     (str): the root file name
+       pathSplitList: a list of subdirectories,
+                       each being represented as a list itself with a string per level
+                       e.g.
+                       [['Method_BDT','BDT']]
+    Returns:
+        retcode (int): 0 in case of success, 1 if the file could not be opened
+    '''
     retcode = 0
     rootFile = openROOTFile(fileName)
     if not rootFile: return 1
 
     keyList,dirList = keyClassSpliter(rootFile,pathSplitList)
+    # keyList lists the TKey objects from pathSplitList
+    # dirList is 'just the pathSplitList' for what aren't TKeys
     if manySources: write("{0} :".format(fileName)+"\n")
     _rootLsPrint(keyList, indent, oneColumn, longListing, treeListing)
 
@@ -1079,8 +1165,26 @@ def _rootLsProcessFile(fileName, pathSplitList, manySources, indent, \
     return retcode
 
 def rootLs(sourceList, oneColumn=False, longListing=False, treeListing=False):
+    '''rootls main routine for an arbitrary number of files
+
+    args:
+       oneColumn   (bool):
+       longListing (bool):
+       treeListing (bool):
+       sourceList: a list of tuples with one list element per file
+                   the first tuple entry being the root file,
+                   the second a list of subdirectories,
+                       each being represented as a list itself with a string per level
+                   e.g.
+                   rootls tutorial/tmva/TMVA.root:Method_BDT/BDT turns into
+                   [('tutorials/tmva/TMVA.root', [['Method_BDT','BDT']])]
+
+    returns:
+       retcode (int): 0 in case of success
+    '''
     # Check arguments
     if sourceList == []: return 1
+    # sort sourceList according to filenames
     tupleListSort(sourceList)
 
     # Loop on the ROOT files
@@ -1287,7 +1391,7 @@ def rootPrint(sourceList, directoryOption = None, divideOption = None, drawOptio
             retcode += 1
             continue
         openRootFiles.append(rootFile)
-        # Fill the key list (almost the same as in rools)
+        # Fill the key list (almost the same as in root)
         keyList = _keyListExtended(rootFile,pathSplitList)
         for key in keyList:
             if isTreeKey(key):

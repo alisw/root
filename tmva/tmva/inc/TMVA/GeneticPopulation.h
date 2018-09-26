@@ -36,18 +36,9 @@
 #include <string>
 #include <vector>
 
-#ifndef ROOT_Riosfwd
-#include "Riosfwd.h"
-#endif
-#ifndef ROOT_TMVA_GeneticGenes
 #include "TMVA/GeneticGenes.h"
-#endif
-#ifndef ROOT_TMVA_Interval
 #include "TMVA/Interval.h"
-#endif
-#ifndef ROOT_TMVA_GeneticRange
 #include "TMVA/GeneticRange.h"
-#endif
 
 class TH1F;
 
@@ -111,7 +102,7 @@ namespace TMVA {
 
       Int_t fPopulationSizeLimit;
 
-      ClassDef(GeneticPopulation,0) //Population definition for genetic algorithm
+      ClassDef(GeneticPopulation,0); //Population definition for genetic algorithm
    };
 
 } // namespace TMVA

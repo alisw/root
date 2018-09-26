@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TVirtualViewer3D
+\ingroup Base
+
 Abstract 3D shapes viewer.
 
 The concrete implementations are:
@@ -269,7 +271,10 @@ object if suitable.
 #include "TError.h"
 #include "TClass.h"
 
-ClassImp(TVirtualViewer3D)
+ClassImp(TVirtualViewer3D);
+
+// pin the vtable here.
+TVirtualViewer3D::~TVirtualViewer3D() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a Viewer 3D of specified type.

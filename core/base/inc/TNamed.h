@@ -22,12 +22,8 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 
 class TNamed : public TObject {
@@ -42,7 +38,7 @@ public:
    TNamed(const TString &name, const TString &title) : fName(name), fTitle(title) { }
    TNamed(const TNamed &named);
    TNamed& operator=(const TNamed& rhs);
-   virtual ~TNamed() { }
+   virtual ~TNamed();
    virtual void     Clear(Option_t *option ="");
    virtual TObject *Clone(const char *newname="") const;
    virtual Int_t    Compare(const TObject *obj) const;

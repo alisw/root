@@ -25,7 +25,7 @@ defined types (accessible via TROOT::GetListOfTypes()).
 #include <typeinfo>
 #endif
 
-ClassImp(TDataType)
+ClassImp(TDataType);
 
 TDataType* TDataType::fgBuiltins[kNumDataTypes] = {0};
 
@@ -39,7 +39,7 @@ TDataType::TDataType(TypedefInfo_t *info) : TDictionary(),
    fInfo = info;
 
    if (fInfo) {
-      R__LOCKGUARD2(gInterpreterMutex);
+      R__LOCKGUARD(gInterpreterMutex);
       SetName(gCling->TypedefInfo_Name(fInfo));
       SetTitle(gCling->TypedefInfo_Title(fInfo));
       SetType(gCling->TypedefInfo_TrueName(fInfo));
@@ -257,7 +257,11 @@ const char *TDataType::AsString(void *buf) const
       line.Form( "%ld", *(Long_t *)buf);
    else if (!strcmp("unsigned long long", name))
       line.Form( "%llu", *(ULong64_t *)buf);
+   else if (!strcmp("ULong64_t", name))
+      line.Form( "%llu", *(ULong64_t *)buf);
    else if (!strcmp("long long", name))
+      line.Form( "%lld", *(Long64_t *)buf);
+   else if (!strcmp("Long64_t", name))
       line.Form( "%lld", *(Long64_t *)buf);
    else if (!strcmp("unsigned short", name))
       line.Form( "%hu", *(unsigned short *)buf);
@@ -378,7 +382,7 @@ void TDataType::CheckInfo()
 
    // This intentionally cast the constness away so that
    // we can call CheckInfo from const data members.
-   R__LOCKGUARD2(gInterpreterMutex);
+   R__LOCKGUARD(gInterpreterMutex);
 
    if (!gCling->TypedefInfo_IsValid(fInfo) ||
        strcmp(gCling->TypedefInfo_Name(fInfo),fName.Data())!=0) {

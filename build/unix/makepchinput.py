@@ -46,8 +46,11 @@ def getParams():
    clingetpchList = argv[3:posDelim]
    cxxflags = argv[posDelim + 1:]
    #print (', '.join(cxxflags))
-   cxxflagsNoW = [flag for flag in cxxflags if (flag[0:2] != '-W' and flag[0:3] != '-wd' and \
-                                                flag[0:2] != '-O' and flag[0:5] != '-arch') or flag[0:4] == '-Wno']
+   cxxflagsNoW = {flag for flag in cxxflags if (flag[0:2] != '-W' and flag[0:3] != '-wd' and \
+                                                flag[0:2] != '-x' and flag[0:3] != '-ax' and \
+                                                flag[0:2] != '-O' and flag[0:5] != '-arch') \
+                                                or flag[0:4] == '-Wno'} - \
+                  {'-Wno-noexcept-type'}
    #print (', '.join(cxxflagsNoW))
 
    return rootSrcDir, modules, clingetpchList, cxxflagsNoW
@@ -63,7 +66,7 @@ def getSTLIncludes():
    """
    Here we include the list of c++11 stl headers
    From http://en.cppreference.com/w/cpp/header
-   regex is removed until ROOT-7004 is fixed
+   valarray is removed because it causes lots of compilation at startup.
    """
    stlHeadersList = ("cstdlib",
                      "csignal",
@@ -114,7 +117,7 @@ def getSTLIncludes():
                      "iterator",
                      "cmath",
                      "complex",
-                     "valarray",
+#                     "valarray",
                      "random",
                      "numeric",
                      "ratio",
@@ -141,6 +144,7 @@ def getSTLIncludes():
                      "ccomplex",
                      "ctgmath",
                      "cstdalign",
+                     "regex",
                      "cstdbool")
 
    allHeadersPartContent = "// STL headers\n"
@@ -183,14 +187,14 @@ def getDictNames(theDirName):
    """
    Get a list of all dictionaries in a directory
    """
-   #`find $modules -name 'G__*.cxx' 2> /dev/null | grep -v /G__Cling.cxx  | grep -v core/metautils/src/G__std_`; do
+   #`find $modules -name 'G__*.cxx' 2> /dev/null | grep -v core/metautils/src/G__std_`; do
    wildcards = (os.path.join(theDirName , "*", "*", "G__*.cxx"),
                 os.path.join(theDirName , "*", "G__*.cxx"))
    allDictNames = []
    for wildcard in wildcards:
       allDictNames += glob.glob(wildcard)
    stdDictpattern = os.path.join("core","metautils","src","G__std_")
-   dictNames = filter (lambda dictName: not ('G__Cling.cxx' in dictName or stdDictpattern in dictName),allDictNames )
+   dictNames = filter (lambda dictName: not (stdDictpattern in dictName),allDictNames )
    return dictNames
 
 #-------------------------------------------------------------------------------
@@ -216,7 +220,7 @@ def isAnyPatternInString(patterns,theString):
    Check if any of the patterns is contained in the string
    """
    for pattern in patterns:
-      if pattern in theString: return True
+      if os.path.normpath(pattern) in theString: return True
    return False
 
 #-------------------------------------------------------------------------------
@@ -225,7 +229,7 @@ def isDirForPCH(dirName):
    Check if the directory corresponds to a module whose headers must belong to
    the PCH
    """
-   PCHPatternsWhitelist = ("interpreter/",
+   PCHPatternsWhitelist = ["interpreter/",
                            "core/",
                            "io/io",
                            "net/net",
@@ -242,8 +246,8 @@ def isDirForPCH(dirName):
                            "bindings/pyroot",
                            "roofit/",
                            "tmva",
-                           "main")
-   PCHPatternsBlacklist = ("graf2d/qt",
+                           "main"]
+   PCHPatternsBlacklist = ["graf2d/qt",
                            "gui/guihtml",
                            "gui/guibuilder",
                            "math/fftw",
@@ -251,11 +255,14 @@ def isDirForPCH(dirName):
                            "math/fumili",
                            "math/mlp",
                            "math/quadp",
+                           "math/rtools",
                            "math/splot",
                            "math/unuran",
-                           "math/vc",
                            "math/vdt",
-                           "tmva/rmva")
+                           "tmva/rmva"]
+
+   if (sys.maxsize <= 2**32): # https://docs.python.org/3/library/platform.html#cross-platform
+      PCHPatternsBlacklist.append("tree/dataframe")
 
    accepted = isAnyPatternInString(PCHPatternsWhitelist,dirName) and \
                not isAnyPatternInString(PCHPatternsBlacklist,dirName)
@@ -424,11 +431,23 @@ def printModulesMessageOnScreen(selModules):
 def getExtraHeaders():
    """ Get extra headers which do not fall in other special categories
    """
-   extraHeaders=["ROOT/TSeq.h","ROOT/StringConv.h"]
+   extraHeaders=["ROOT/TSeq.hxx","ROOT/StringConv.hxx"]
    code = "// Extra headers\n"
    for extraHeader in extraHeaders:
       code += '#include "%s"\n' %extraHeader
    return code
+
+#-------------------------------------------------------------------------------
+def removeUnwantedHeaders(allHeadersContent):
+   """ remove unwanted headers, e.g. the ones used for dictionaries but not desirable in the pch
+   """
+   unwantedHeaders = []
+   deprecatedHeaders = ['']
+   unwantedHeaders.extend(deprecatedHeaders)
+   for unwantedHeader in unwantedHeaders:
+      allHeadersContent = allHeadersContent.replace('#include "%s"' %unwantedHeader,"")
+   return allHeadersContent
+
 
 #-------------------------------------------------------------------------------
 def makePCHInput():
@@ -446,6 +465,12 @@ def makePCHInput():
    allHeadersFilename = os.path.join(outdir,"allHeaders.h")
    allLinkdefsFilename = os.path.join(outdir,"allLinkDefs.h")
    cppFlagsFilename = os.path.join(outdir, "allCppflags.txt")
+
+   if sys.platform == 'win32':
+      outdir.replace("\\","/")
+      allHeadersFilename.replace("\\","/")
+      allLinkdefsFilename.replace("\\","/")
+      cppFlagsFilename.replace("\\","/")
 
    mkdirIfNotThere(outdir)
    removeFiles((allHeadersFilename,allLinkdefsFilename))
@@ -474,6 +499,8 @@ def makePCHInput():
 
    allHeadersContent += getExtraHeaders()
 
+   allHeadersContent = removeUnwantedHeaders(allHeadersContent)
+
    copyLinkDefs(rootSrcDir, outdir)
 
    cppFlagsContent = getCppFlags(rootSrcDir,allIncPathsList) + '\n'.join(cxxflags) + '\n'
@@ -487,53 +514,3 @@ def makePCHInput():
 
 if __name__ == "__main__":
    makePCHInput()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

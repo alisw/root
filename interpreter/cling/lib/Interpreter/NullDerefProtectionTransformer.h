@@ -13,20 +13,33 @@
 
 #include "ASTTransformer.h"
 
+#include "llvm/ADT/DenseMap.h"
+
 namespace clang {
   class Decl;
-  class Sema;
+  class DirectoryEntry;
+}
+namespace cling {
+  class Interpreter;
 }
 
 namespace cling {
 
-  class NullDerefProtectionTransformer : public WrapperTransformer {
+  class NullDerefProtectionTransformer : public ASTTransformer {
+    cling::Interpreter* m_Interp;
+
+    /// Whether to visit a Decl coming from a file in a given directory.
+    llvm::DenseMap<const clang::DirectoryEntry*, bool> m_ShouldVisitDir;
+
+    /// Whether the declaration should be visited and possibly transformed.
+    bool shouldTransform(const clang::Decl* D);
+
   public:
     ///\ brief Constructs the NullDeref AST Transformer.
     ///
-    ///\param[in] S - The semantic analysis object.
+    ///\param[in] I - The interpreter.
     ///
-    NullDerefProtectionTransformer(clang::Sema* S);
+    NullDerefProtectionTransformer(cling::Interpreter* I);
 
     virtual ~NullDerefProtectionTransformer();
     Result Transform(clang::Decl* D) override;

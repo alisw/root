@@ -11,6 +11,7 @@
 
 #include "TROOT.h"
 #include "TClass.h"
+#include "TClassEdit.h"
 #include "TVirtualStreamerInfo.h"
 #include "TStreamer.h"
 #include "TVirtualIsAProxy.h"
@@ -26,6 +27,20 @@
 namespace ROOT {
 namespace Internal {
 
+   std::string GetDemangledTypeName(const std::type_info &t)
+   {
+      int status = 0;
+      char *name = TClassEdit::DemangleName(t.name(), status);
+
+      if (!name || status != 0)
+         return "";
+
+      std::string ret;
+      TClassEdit::GetNormalizedName(ret, name);
+      free(name);
+      return ret;
+   }
+
    const TInitBehavior *DefineBehavior(void * /*parent_type*/,
                                        void * /*actual_type*/)
    {
@@ -35,6 +50,34 @@ namespace Internal {
 
       static TDefaultInitBehavior theDefault;
       return &theDefault;
+   }
+
+   void TCDGIILIBase::SetInstance(::ROOT::TGenericClassInfo& R__instance,
+                                  NewFunc_t New, NewArrFunc_t NewArray,
+                                  DelFunc_t Delete, DelArrFunc_t DeleteArray,
+                                  DesFunc_t Destruct) {
+         R__LOCKGUARD(gROOTMutex);
+         R__instance.SetNew(New);
+         R__instance.SetNewArray(NewArray);
+         R__instance.SetDelete(Delete);
+         R__instance.SetDeleteArray(DeleteArray);
+         R__instance.SetDestructor(Destruct);
+         R__instance.SetImplFile("", -1);
+   }
+
+   void TCDGIILIBase::SetName(const std::string& name,
+                              std::string& nameMember) {
+      R__LOCKGUARD(gInterpreterMutex);
+      if (nameMember.empty()) {
+         TClassEdit::GetNormalizedName(nameMember, name);
+      }
+   }
+
+   void TCDGIILIBase::SetfgIsA(atomic_TClass_ptr& isA, TClass*(*dictfun)()) {
+      if (!isA.load()) {
+         R__LOCKGUARD(gInterpreterMutex);
+         dictfun();
+      }
    }
 } // Internal
 
@@ -199,7 +242,7 @@ namespace Internal {
          ::Fatal("TClass::TClass", "ROOT system not initialized");
 
       if (!fClass && fAction) {
-         R__LOCKGUARD2(gInterpreterMutex);
+         R__LOCKGUARD(gInterpreterMutex);
          // Check again, while we waited for the lock, something else might
          // have set fClass.
          if (fClass) return fClass;

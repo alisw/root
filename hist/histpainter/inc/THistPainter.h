@@ -21,12 +21,8 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TVirtualHistPainter
 #include "TVirtualHistPainter.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 #include <vector>
 #include <utility>
@@ -67,6 +63,8 @@ protected:
    TList                *fStack;             //Pointer to stack of histograms (if any)
    Int_t                 fShowProjection;    //True if a projection must be drawn
    TString               fShowOption;        //Option to draw the projection
+   Int_t                 fXHighlightBin;     //X highlight bin
+   Int_t                 fYHighlightBin;     //Y highlight bin
 
 public:
    THistPainter();
@@ -78,6 +76,9 @@ public:
    virtual TList     *GetContourList(Double_t contour) const;
    virtual char      *GetObjectInfo(Int_t px, Int_t py) const;
    virtual TList     *GetStack() const {return fStack;}
+   virtual Int_t      GetXHighlightBin() const { return fXHighlightBin; }
+   virtual Int_t      GetYHighlightBin() const { return fYHighlightBin; }
+   virtual void       HighlightBin(Int_t px, Int_t py);
    virtual Bool_t     IsInside(Int_t x, Int_t y);
    virtual Bool_t     IsInside(Double_t x, Double_t y);
    virtual Int_t      MakeChopt(Option_t *option);
@@ -89,10 +90,6 @@ public:
    virtual void       PaintBarH(Option_t *option);
    virtual void       PaintBoxes(Option_t *option);
    virtual void       PaintCandlePlot(Option_t *option);
-   virtual void       PaintOneCandle(Double_t candlePosition, Double_t candleWidth, TH1 *proj);
-   virtual void       PaintOneCandleLBox(Int_t nPoints, Double_t *x, Double_t *y, Bool_t swapXY = kFALSE, Bool_t fill = kFALSE);
-   virtual void       PaintOneCandleLine(Double_t x1, Double_t y1, Double_t x2, Double_t y2, bool swapXY = false);
-   virtual void       PaintViolinPlot(Option_t *option);
    virtual void       PaintColorLevels(Option_t *option);
    virtual void       PaintColorLevelsFast(Option_t *option);
    virtual std::vector<THistRenderingRegion> ComputeRenderingRegions(TAxis *pAxis, Int_t nPixels, bool isLog);
@@ -109,8 +106,11 @@ public:
    virtual void       Paint2DErrors(Option_t *option);
    virtual void       PaintFrame();
    virtual void       PaintFunction(Option_t *option);
+   virtual void       PaintHighlightBin(Option_t *option="");
    virtual void       PaintHist(Option_t *option);
    virtual void       PaintH3(Option_t *option="");
+   virtual void       PaintH3Box(Int_t iopt);
+   virtual void       PaintH3BoxRaster();
    virtual void       PaintH3Iso();
    virtual Int_t      PaintInit();
    virtual Int_t      PaintInitH();
@@ -134,6 +134,7 @@ public:
    static  Int_t      ProjectParabolic2xy(Double_t l, Double_t b, Double_t &Al, Double_t &Ab);
    virtual void       RecalculateRange();
    virtual void       RecursiveRemove(TObject *) {;}
+   virtual void       SetHighlight();
    virtual void       SetHistogram(TH1 *h);
    virtual void       SetStack(TList *stack) {fStack = stack;}
    virtual void       SetShowProjection(const char *option,Int_t nbins);

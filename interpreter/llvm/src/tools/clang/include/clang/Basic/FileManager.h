@@ -16,7 +16,6 @@
 #define LLVM_CLANG_BASIC_FILEMANAGER_H
 
 #include "clang/Basic/FileSystemOptions.h"
-#include "clang/Basic/LLVM.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
@@ -24,35 +23,33 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/FileSystem.h"
+#include <ctime>
 #include <memory>
-// FIXME: Enhance libsystem to support inode and other fields in stat.
-#include <sys/types.h>
 #include <map>
+#include <string>
 #include <set>
 
-#ifdef _MSC_VER
-typedef unsigned short mode_t;
-#endif
-
-struct stat;
-
 namespace llvm {
+
 class MemoryBuffer;
-}
+
+} // end namespace llvm
 
 namespace clang {
-class FileManager;
+
 class FileSystemStatCache;
-class HeaderSearch;
 
 /// \brief Cached information about one directory (either on disk or in
 /// the virtual file system).
 class DirectoryEntry {
-  const char *Name;   // Name of the directory.
   friend class FileManager;
+
+  StringRef Name; // Name of the directory.
+
 public:
-  DirectoryEntry() : Name(nullptr) {}
-  const char *getName() const { return Name; }
+  StringRef getName() const { return Name; }
 };
 
 /// \brief Cached information about one file (either on disk
@@ -61,7 +58,10 @@ public:
 /// If the 'File' member is valid, then this FileEntry has an open file
 /// descriptor for the file.
 class FileEntry {
-  const char *Name;           // Name of the file.
+  friend class FileManager;
+
+  StringRef Name;             // Name of the file.
+  std::string RealPathName;   // Real path to the file; could be empty.
   off_t Size;                 // File size in bytes.
   time_t ModTime;             // Modification time of file.
   const DirectoryEntry *Dir;  // Directory file lives in.
@@ -73,30 +73,17 @@ class FileEntry {
 
   /// \brief The open file, if it is owned by the \p FileEntry.
   mutable std::unique_ptr<vfs::File> File;
-  friend class FileManager;
-  friend class HeaderSearch;
-
-  void closeFile() const {
-    File.reset(); // rely on destructor to close File
-  }
-
-  void operator=(const FileEntry &) LLVM_DELETED_FUNCTION;
 
 public:
   FileEntry()
       : UniqueID(0, 0), IsNamedPipe(false), InPCH(false), IsValid(false)
   {}
 
-  // FIXME: this is here to allow putting FileEntry in std::map.  Once we have
-  // emplace, we shouldn't need a copy constructor anymore.
-  /// Intentionally does not copy fields that are not set in an uninitialized
-  /// \c FileEntry.
-  FileEntry(const FileEntry &FE) : UniqueID(FE.UniqueID),
-      IsNamedPipe(FE.IsNamedPipe), InPCH(FE.InPCH), IsValid(FE.IsValid) {
-    assert(!isValid() && "Cannot copy an initialized FileEntry");
-  }
+  FileEntry(const FileEntry &) = delete;
+  FileEntry &operator=(const FileEntry &) = delete;
 
-  const char *getName() const { return Name; }
+  StringRef getName() const { return Name; }
+  StringRef tryGetRealPathName() const { return RealPathName; }
   bool isOpen() const { return (bool)File; }
   bool isValid() const { return IsValid; }
   off_t getSize() const { return Size; }
@@ -113,6 +100,10 @@ public:
   /// \brief Check whether the file is a named pipe (and thus can't be opened by
   /// the native FileManager methods).
   bool isNamedPipe() const { return IsNamedPipe; }
+
+  void closeFile() const {
+    File.reset(); // rely on destructor to close File
+  }
 };
 
 struct FileData;
@@ -138,9 +129,9 @@ class FileManager : public RefCountedBase<FileManager> {
   ///
   /// For each virtual file (e.g. foo/bar/baz.cpp), we add all of its parent
   /// directories (foo/ and foo/bar/) here.
-  SmallVector<DirectoryEntry*, 4> VirtualDirectoryEntries;
+  SmallVector<std::unique_ptr<DirectoryEntry>, 4> VirtualDirectoryEntries;
   /// \brief The virtual files that we have allocated.
-  SmallVector<FileEntry*, 4> VirtualFileEntries;
+  SmallVector<std::unique_ptr<FileEntry>, 4> VirtualFileEntries;
 
   /// \brief A cache that maps paths to directory entries (either real or
   /// virtual) we have looked up
@@ -177,7 +168,7 @@ class FileManager : public RefCountedBase<FileManager> {
   // Caching.
   std::unique_ptr<FileSystemStatCache> StatCache;
 
-  bool getStatValue(const char *Path, FileData &Data, bool isFile,
+  bool getStatValue(StringRef Path, FileData &Data, bool isFile,
                     std::unique_ptr<vfs::File> *F);
 
   /// Add all ancestors of the given path (pointing to either a file
@@ -232,7 +223,8 @@ public:
                            bool CacheFailure = true);
 
   /// \brief Returns the current file system options
-  const FileSystemOptions &getFileSystemOptions() { return FileSystemOpts; }
+  FileSystemOptions &getFileSystemOpts() { return FileSystemOpts; }
+  const FileSystemOptions &getFileSystemOpts() const { return FileSystemOpts; }
 
   IntrusiveRefCntPtr<vfs::FileSystem> getVirtualFileSystem() const {
     return FS;
@@ -268,7 +260,13 @@ public:
   /// \brief If path is not absolute and FileSystemOptions set the working
   /// directory, the path is modified to be relative to the given
   /// working directory.
-  void FixupRelativePath(SmallVectorImpl<char> &path) const;
+  /// \returns true if \c path changed.
+  bool FixupRelativePath(SmallVectorImpl<char> &path) const;
+
+  /// Makes \c Path absolute taking into account FileSystemOptions and the
+  /// working directory option.
+  /// \returns true if \c Path changed to absolute.
+  bool makeAbsolutePath(SmallVectorImpl<char> &Path) const;
 
   /// \brief Produce an array mapping from the unique IDs assigned to each
   /// file to the corresponding FileEntry pointer.
@@ -280,9 +278,6 @@ public:
   static void modifyFileEntry(FileEntry *File, off_t Size,
                               time_t ModificationTime);
 
-  /// \brief Remove any './' components from a path.
-  static bool removeDotPaths(SmallVectorImpl<char> &Path);
-
   /// \brief Retrieve the canonical name for a given directory.
   ///
   /// This is a very expensive operation, despite its results being cached,
@@ -293,6 +288,6 @@ public:
   void PrintStats() const;
 };
 
-}  // end namespace clang
+} // end namespace clang
 
-#endif
+#endif // LLVM_CLANG_BASIC_FILEMANAGER_H

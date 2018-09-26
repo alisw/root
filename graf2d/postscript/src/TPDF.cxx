@@ -95,7 +95,7 @@ const Int_t kNumberOfFonts = 15;
 
 Int_t TPDF::fgLineJoin = 0;
 
-ClassImp(TPDF)
+ClassImp(TPDF);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default PDF constructor
@@ -375,7 +375,7 @@ void TPDF::DrawBox(Double_t x1, Double_t y1, Double_t x2, Double_t  y2)
       }
       if (fillsi == -3) {
          SetColor(5);
-         if (fAlpha == 1) PrintFast(17," q 0.002 w [] 0 d");
+         if (fAlpha == 1) PrintFast(15," q 0.4 w [] 0 d");
          WriteReal(ix1);
          WriteReal(iy1);
          WriteReal(ix2 - ix1);
@@ -386,7 +386,7 @@ void TPDF::DrawBox(Double_t x1, Double_t y1, Double_t x2, Double_t  y2)
    }
    if (fillis == 1) {
       SetColor(fFillColor);
-      if (fAlpha == 1) PrintFast(17," q 0.002 w [] 0 d");
+      if (fAlpha == 1) PrintFast(15," q 0.4 w [] 0 d");
       WriteReal(ix1);
       WriteReal(iy1);
       WriteReal(ix2 - ix1);
@@ -610,6 +610,9 @@ void TPDF::DrawPolyMarker(Int_t n, Float_t *xw, Float_t *yw)
    Double_t m3 = m/3;
    Double_t m4 = m2*1.333333333333;
    Double_t m6 = m/6;
+   Double_t m0 = m/10.;
+   Double_t m8 = m/4;
+   Double_t m9 = m/8;
 
    // Draw the marker according to the type
    Double_t ix,iy;
@@ -699,13 +702,181 @@ void TPDF::DrawPolyMarker(Int_t n, Float_t *xw, Float_t *yw)
          LineTo(ix-0.47552*m , iy+0.15451*m);
          LineTo(ix-0.112255*m, iy+0.15451*m);
          PrintFast(2," h");
+      } else if (ms == 35 ) {
+      // diamond with cross
+         MoveTo(ix-m2, iy   );
+         LineTo(ix   , iy-m2);
+         LineTo(ix+m2, iy   );
+         LineTo(ix   , iy+m2);
+         LineTo(ix-m2, iy   );
+         LineTo(ix+m2, iy   );
+         LineTo(ix   , iy+m2);
+         LineTo(ix   , iy-m2);
+         PrintFast(2," h");
+      } else if (ms == 36 ) {
+      // square with diagonal cross
+         MoveTo(ix-m2, iy-m2);
+         LineTo(ix+m2, iy-m2);
+         LineTo(ix+m2, iy+m2);
+         LineTo(ix-m2, iy+m2);
+         LineTo(ix-m2, iy-m2);
+         LineTo(ix+m2, iy+m2);
+         LineTo(ix-m2, iy+m2);
+         LineTo(ix+m2, iy-m2);
+         PrintFast(2," h");
+      } else if (ms == 37 || ms == 39 ) {
+      // square with cross
+         MoveTo(ix   , iy   );
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy   );
+         LineTo(ix   , iy   );
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix   , iy   );
+         LineTo(ix+m2, iy   );
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix   , iy   );
+         PrintFast(2," h");
+      } else if (ms == 38 ) {
+      // + shaped marker with octagon
+         MoveTo(ix-m2, iy   );
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m2, iy   );
+         LineTo(ix+m2, iy   );
+         LineTo(ix   , iy   );
+         LineTo(ix   , iy-m2);
+         LineTo(ix   , iy+m2);
+         LineTo(ix   , iy);
+         PrintFast(2," h");
+      } else if (ms == 40 || ms == 41 ) {
+       // four triangles X
+         MoveTo(ix   , iy   );
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix   , iy   );
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix   , iy   );
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix   , iy   );
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix   , iy   );
+         PrintFast(2," h");
+      } else if (ms == 42 || ms == 43 ) {
+      // double diamonds
+         MoveTo(ix   , iy+m2);
+         LineTo(ix-m9, iy+m9);
+         LineTo(ix-m2, iy   );
+         LineTo(ix-m9, iy-m9);
+         LineTo(ix   , iy-m2);
+         LineTo(ix+m9, iy-m9);
+         LineTo(ix+m2, iy   );
+         LineTo(ix+m9, iy+m9);
+         LineTo(ix   , iy+m2);
+         PrintFast(2," h");
+      } else if (ms == 44 ) {
+      // open four triangles plus
+         MoveTo(ix   , iy   );
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix   , iy   );
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix   , iy   );
+         PrintFast(2," h");
+      } else if (ms == 45 ) {
+      // filled four triangles plus
+         MoveTo(ix+m0, iy+m0);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m0, iy+m0);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m0, iy-m0);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m0, iy-m0);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m0, iy+m0);
+         PrintFast(2," h");
+      } else if (ms == 46 || ms == 47 ) {
+      // four triangles X
+         MoveTo(ix   , iy+m8);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m8, iy   );
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix   , iy-m8);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m8, iy   );
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix   , iy+m8);
+         PrintFast(2," h");
+      } else if (ms == 48 ) {
+      // four filled squares X
+         MoveTo(ix   , iy+m8*1.01);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m8, iy   );
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix   , iy-m8);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m8, iy   );
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix   , iy+m8*0.99);
+         LineTo(ix+m8*0.99, iy   );
+         LineTo(ix   , iy-m8*0.99);
+         LineTo(ix-m8*0.99, iy   );
+         LineTo(ix   , iy+m8*0.99);
+         PrintFast(2," h");
+      } else if (ms == 49 ) {
+      // four filled squares plus
+         MoveTo(ix-m6, iy-m6*1.01);
+         LineTo(ix-m6, iy-m2);
+         LineTo(ix+m6, iy-m2);
+         LineTo(ix+m6, iy-m6);
+         LineTo(ix+m2, iy-m6);
+         LineTo(ix+m2, iy+m6);
+         LineTo(ix+m6, iy+m6);
+         LineTo(ix+m6, iy+m2);
+         LineTo(ix-m6, iy+m2);
+         LineTo(ix-m6, iy+m6);
+         LineTo(ix-m2, iy+m6);
+         LineTo(ix-m2, iy-m6);
+         LineTo(ix-m6, iy-m6*0.99);
+         LineTo(ix-m6, iy+m6);
+         LineTo(ix+m6, iy+m6);
+         LineTo(ix+m6, iy-m6);
+         PrintFast(2," h");
       } else {
-         MoveTo(ix-1, iy);
-         LineTo(ix  , iy);
+         MoveTo(ix-m6, iy-m6);
+         LineTo(ix-m6, iy-m2);
       }
    }
 
-   if ((ms > 19 && ms < 24) || ms == 29 || ms == 33 || ms == 34) {
+   if ((ms > 19 && ms < 24) || ms == 29 || ms == 33 || ms == 34 ||
+       ms == 39 || ms == 41 || ms == 43 || ms == 45 ||
+       ms == 47 || ms == 48 || ms == 49) {
       PrintFast(2," f");
    } else {
       PrintFast(2," S");
@@ -750,6 +921,8 @@ void TPDF::DrawPolyMarker(Int_t n, Double_t *xw, Double_t *yw)
    Double_t m3 = m/3;
    Double_t m4 = m2*1.333333333333;
    Double_t m6 = m/6;
+   Double_t m8 = m/4;
+   Double_t m9 = m/8;
 
    // Draw the marker according to the type
    Double_t ix,iy;
@@ -839,13 +1012,171 @@ void TPDF::DrawPolyMarker(Int_t n, Double_t *xw, Double_t *yw)
          LineTo(ix-0.47552*m , iy+0.15451*m);
          LineTo(ix-0.112255*m, iy+0.15451*m);
          PrintFast(2," h");
+      } else if (ms == 35 ) {
+         MoveTo(ix-m2, iy   );
+         LineTo(ix   , iy-m2);
+         LineTo(ix+m2, iy   );
+         LineTo(ix   , iy+m2);
+         LineTo(ix-m2, iy   );
+         LineTo(ix+m2, iy   );
+         LineTo(ix   , iy+m2);
+         LineTo(ix   , iy-m2);
+         PrintFast(2," h");
+      } else if (ms == 36 ) {
+         MoveTo(ix-m2, iy-m2);
+         LineTo(ix+m2, iy-m2);
+         LineTo(ix+m2, iy+m2);
+         LineTo(ix-m2, iy+m2);
+         LineTo(ix-m2, iy-m2);
+         LineTo(ix+m2, iy+m2);
+         LineTo(ix-m2, iy+m2);
+         LineTo(ix+m2, iy-m2);
+         PrintFast(2," h");
+      } else if (ms == 37 || ms == 39 ) {
+         MoveTo(ix   , iy   );
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy   );
+         LineTo(ix   , iy   );
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix   , iy   );
+         LineTo(ix+m2, iy   );
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix   , iy   );
+         PrintFast(2," h");
+      } else if (ms == 38 ) {
+         MoveTo(ix-m2, iy   );
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m2, iy   );
+         LineTo(ix+m2, iy   );
+         LineTo(ix   , iy   );
+         LineTo(ix   , iy-m2);
+         LineTo(ix   , iy+m2);
+         LineTo(ix   , iy   );
+         PrintFast(2," h");
+      } else if (ms == 40 || ms == 41 ) {
+         MoveTo(ix   , iy   );
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix   , iy   );
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix   , iy   );
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix   , iy   );
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix   , iy   );
+         PrintFast(2," h");
+      } else if (ms == 42 || ms == 43 ) {
+         MoveTo(ix   , iy+m2);
+         LineTo(ix-m9, iy+m9);
+         LineTo(ix-m2, iy   );
+         LineTo(ix-m9, iy-m9);
+         LineTo(ix   , iy-m2);
+         LineTo(ix+m9, iy-m9);
+         LineTo(ix+m2, iy   );
+         LineTo(ix+m9, iy+m9);
+         LineTo(ix   , iy+m2);
+         PrintFast(2," h");
+      } else if (ms == 44 ) {
+         MoveTo(ix   , iy   );
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix   , iy   );
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix   , iy   );
+         PrintFast(2," h");
+      } else if (ms == 45 ) {
+         MoveTo(ix+m6/2., iy+m6/2.);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m6/2., iy+m6/2.);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m6/2., iy-m6/2.);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m6/2., iy-m6/2.);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m6/2., iy+m6/2.);
+         PrintFast(2," h");
+      } else if (ms == 46 || ms == 47 ) {
+         MoveTo(ix   , iy+m8);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m8, iy   );
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix   , iy-m8);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m8, iy   );
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix   , iy+m8);
+         PrintFast(2," h");
+      } else if (ms == 48 ) {
+         MoveTo(ix   , iy+m8*1.005);
+         LineTo(ix-m8, iy+m2);
+         LineTo(ix-m2, iy+m8);
+         LineTo(ix-m8, iy   );
+         LineTo(ix-m2, iy-m8);
+         LineTo(ix-m8, iy-m2);
+         LineTo(ix   , iy-m8);
+         LineTo(ix+m8, iy-m2);
+         LineTo(ix+m2, iy-m8);
+         LineTo(ix+m8, iy   );
+         LineTo(ix+m2, iy+m8);
+         LineTo(ix+m8, iy+m2);
+         LineTo(ix   , iy+m8*0.995);
+         LineTo(ix+m8*0.995, iy   );
+         LineTo(ix   , iy-m8*0.995);
+         LineTo(ix-m8*0.995, iy   );
+         LineTo(ix   , iy+m8*0.995);
+         PrintFast(2," h");
+      } else if (ms == 49 ) {
+         MoveTo(ix-m6, iy-m6*1.01);
+         LineTo(ix-m6, iy-m2);
+         LineTo(ix+m6, iy-m2);
+         LineTo(ix+m6, iy-m6);
+         LineTo(ix+m2, iy-m6);
+         LineTo(ix+m2, iy+m6);
+         LineTo(ix+m6, iy+m6);
+         LineTo(ix+m6, iy+m2);
+         LineTo(ix-m6, iy+m2);
+         LineTo(ix-m6, iy+m6);
+         LineTo(ix-m2, iy+m6);
+         LineTo(ix-m2, iy-m6);
+         LineTo(ix-m6, iy-m6*0.99);
+         LineTo(ix-m6, iy+m6);
+         LineTo(ix+m6, iy+m6);
+         LineTo(ix+m6, iy-m6);
+         MoveTo(ix-m6, iy-m6*1.01);
+         PrintFast(2," h");
       } else {
          MoveTo(ix-1, iy);
          LineTo(ix  , iy);
       }
    }
 
-   if ((ms > 19 && ms < 24) || ms == 29 || ms == 33 || ms == 34) {
+   if ((ms > 19 && ms < 24) || ms == 29 || ms == 33 || ms == 34 ||
+       ms == 39 || ms == 41 || ms == 43 || ms == 45 ||
+       ms == 47 || ms == 48 || ms == 49) {
       PrintFast(2," f");
    } else {
       PrintFast(2," S");
@@ -2115,7 +2446,7 @@ void TPDF::SetLineColor( Color_t cindex )
 ///
 /// To change the line join behaviour just do:
 /// ~~~ {.cpp}
-/// gStyle->SetLineJoinPS(2); // Set the PDF line join to bevel.
+/// gStyle->SetJoinLinePS(2); // Set the PDF line join to bevel.
 /// ~~~
 
 void TPDF::SetLineJoin( Int_t linejoin )
@@ -2233,9 +2564,9 @@ void TPDF::Text(Double_t xx, Double_t yy, const char *chars)
    Float_t tsizex = gPad->AbsPixeltoX(Int_t(tsize))-gPad->AbsPixeltoX(0);
    Float_t tsizey = gPad->AbsPixeltoY(0)-gPad->AbsPixeltoY(Int_t(tsize));
    Int_t txalh = fTextAlign/10;
-   if (txalh < 1) txalh = 1; if (txalh > 3) txalh = 3;
+   if (txalh < 1) txalh = 1; else if (txalh > 3) txalh = 3;
    Int_t txalv = fTextAlign%10;
-   if (txalv < 1) txalv = 1; if (txalv > 3) txalv = 3;
+   if (txalv < 1) txalv = 1; else if (txalv > 3) txalv = 3;
    if (txalv == 3) {
       y -= 0.8*tsizey*TMath::Cos(kDEGRAD*fTextAngle);
       x += 0.8*tsizex*TMath::Sin(kDEGRAD*fTextAngle);

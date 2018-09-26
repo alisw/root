@@ -56,11 +56,10 @@ The singleton instance is accessible through RooMsgService::instance() ;
 #include "TSystem.h"
 #include "Riostream.h"
 #include <iomanip>
-#include <fstream>
 using namespace std ;
 using namespace RooFit ;
 
-ClassImp(RooMsgService)
+ClassImp(RooMsgService);
 ;
 
 RooMsgService* gMsgService = 0 ;

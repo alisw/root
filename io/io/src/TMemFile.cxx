@@ -38,7 +38,7 @@ only from memory.
 #define TRACE(x);
 #endif
 
-ClassImp(TMemFile)
+ClassImp(TMemFile);
 
 Long64_t TMemFile::fgDefaultBlockSize = 2*1024*1024;
 
@@ -51,13 +51,28 @@ TMemFile::TMemBlock::TMemBlock() : fPrevious(0), fNext(0), fBuffer(0), fSize(0)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor allocating the memory buffer.
+///
+/// \param size: size of the buffer to be allocated. A value of -1 means that
+///              no allocation should happen, leaving fBuffer and fSize at 0.
+///
+/// \param previous: previous TMemBlock, used to set up the linked list.
 
 TMemFile::TMemBlock::TMemBlock(Long64_t size, TMemBlock *previous) :
    fPrevious(previous), fNext(0), fBuffer(0), fSize(0)
 {
-   fBuffer = new UChar_t[size];
-   fSize = size;
+   // size will be -1 when copying an existing buffer into fBuffer.
+   if (size != -1) {
+      fBuffer = new UChar_t[size];
+      fSize = size;
+   }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// Constructor not allocating the memory buffer, for external ownership.
+
+TMemFile::TMemBlock::TMemBlock(UChar_t* data, Long64_t size) :
+   fPrevious(nullptr), fNext(nullptr), fBuffer(data), fSize(size)
+{}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Usual destructors.  Delete the block memory.
@@ -77,80 +92,70 @@ void TMemFile::TMemBlock::CreateNext(Long64_t size)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Usual Constructor.  See the TFile constructor for details.
-
-TMemFile::TMemFile(const char *path, Option_t *option,
-                   const char *ftitle, Int_t compress) :
-   TFile(path, "WEB", ftitle, compress),
-   fSize(-1), fSysOffset(0), fBlockSeek(&fBlockList), fBlockOffset(0)
+/// Parse option strings and set fOption.
+TMemFile::EMode TMemFile::ParseOption(Option_t *option)
 {
    fOption = option;
    fOption.ToUpper();
    if (fOption == "NEW")  fOption = "CREATE";
-   Bool_t create   = (fOption == "CREATE") ? kTRUE : kFALSE;
-   Bool_t recreate = (fOption == "RECREATE") ? kTRUE : kFALSE;
-   Bool_t update   = (fOption == "UPDATE") ? kTRUE : kFALSE;
-   Bool_t read     = (fOption == "READ") ? kTRUE : kFALSE;
-   if (!create && !recreate && !update && !read) {
-      read    = kTRUE;
+
+   EMode mode = EMode::kRead;
+   if (fOption == "CREATE")
+      mode = EMode::kCreate;
+   else if (fOption == "RECREATE")
+      mode = EMode::kRecreate;
+   else if (fOption == "UPDATE")
+      mode = EMode::kUpdate;
+   else {
       fOption = "READ";
    }
 
-   if (!(create || recreate)) {
-      Error("TMemFile","Reading a TMemFile requires a memory buffer\n");
-      goto zombie;
-   }
-   if (create || update || recreate) {
-      Int_t mode = O_RDWR | O_CREAT;
-      if (recreate) mode |= O_TRUNC;
+   return mode;
+}
 
-      fD = SysOpen(path, O_RDWR | O_CREAT, 0644);
-      if (fD == -1) {
-         SysError("TMemFile", "file %s can not be opened", path);
-         goto zombie;
-      }
-      fWritable = kTRUE;
-   } else {
-      fD = SysOpen(path, O_RDONLY, 0644);
-      if (fD == -1) {
-         SysError("TMemFile", "file %s can not be opened for reading", path);
-         goto zombie;
-      }
-      fWritable = kFALSE;
+////////////////////////////////////////////////////////////////////////////////
+/// Constructor to create a TMemFile re-using external storage.
+
+TMemFile::TMemFile(const char *path, ExternalDataPtr_t data) :
+   TFile(path, "WEB", "read-only memfile", 0 /*compress*/),
+   fBlockList(reinterpret_cast<UChar_t*>(const_cast<char*>(data->data())), data->size()),
+   fExternalData(std::move(data)), fSize(fExternalData->size()), fSysOffset(0), fBlockSeek(nullptr), fBlockOffset(0)
+{
+   EMode optmode = ParseOption("READ");
+   if (NeedsToWrite(optmode)) {
+      SysError("TMemFile", "file %s can not be opened", path);
+      // Error in opening file; make this a zombie
+      MakeZombie();
+      gDirectory = gROOT;
+      return;
    }
 
-   Init(create || recreate);
+   fD = 0;
+   fWritable = kFALSE;
 
-   return;
-
-zombie:
-   // Error in opening file; make this a zombie
-   MakeZombie();
-   gDirectory = gROOT;
+   Init(!NeedsExistingFile(optmode));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Usual Constructor.  See the TFile constructor for details.
+
+TMemFile::TMemFile(const char *path, Option_t *option,
+                   const char *ftitle, Int_t compress) :
+   TMemFile(path, nullptr, -1, option, ftitle, compress) {}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Usual Constructor.  See the TFile constructor for details. Copy data from buffer.
 
 TMemFile::TMemFile(const char *path, char *buffer, Long64_t size, Option_t *option,
                    const char *ftitle, Int_t compress):
    TFile(path, "WEB", ftitle, compress), fBlockList(size),
    fSize(size), fSysOffset(0), fBlockSeek(&(fBlockList)), fBlockOffset(0)
 {
-   fOption = option;
-   fOption.ToUpper();
-   Bool_t create   = (fOption == "CREATE") ? kTRUE : kFALSE;
-   Bool_t recreate = (fOption == "RECREATE") ? kTRUE : kFALSE;
-   Bool_t update   = (fOption == "UPDATE") ? kTRUE : kFALSE;
-   Bool_t read     = (fOption == "READ") ? kTRUE : kFALSE;
-   if (!create && !recreate && !update && !read) {
-      read    = kTRUE;
-      fOption = "READ";
-   }
+   EMode optmode = ParseOption(option);
 
-   if (create || update || recreate) {
+   if (NeedsToWrite(optmode)) {
       Int_t mode = O_RDWR | O_CREAT;
-      if (recreate) mode |= O_TRUNC;
+      if (optmode == EMode::kRecreate) mode |= O_TRUNC;
 
       fD = SysOpen(path, O_RDWR | O_CREAT, 0644);
       if (fD == -1) {
@@ -168,9 +173,11 @@ TMemFile::TMemFile(const char *path, char *buffer, Long64_t size, Option_t *opti
       fWritable = kFALSE;
    }
 
-   SysWrite(fD,buffer,size);
 
-   Init(create || recreate);
+   if (buffer)
+      SysWriteImpl(fD,buffer,size);
+
+   Init(!NeedsExistingFile(optmode));
    return;
 
 zombie:
@@ -184,27 +191,20 @@ zombie:
 
 TMemFile::TMemFile(const TMemFile &orig) :
    TFile(orig.GetEndpointUrl()->GetUrl(), "WEB", orig.GetTitle(),
-         orig.GetCompressionSettings() ), fBlockList(orig.GetEND()),
+         orig.GetCompressionSettings() ), fBlockList(orig.GetEND()), fExternalData(orig.fExternalData),
    fSize(orig.GetEND()), fSysOffset(0), fBlockSeek(&(fBlockList)), fBlockOffset(0)
 {
-   fOption = orig.fOption;
-
-   Bool_t create   = (fOption == "CREATE") ? kTRUE : kFALSE;
-   Bool_t recreate = (fOption == "RECREATE") ? kTRUE : kFALSE;
-   Bool_t update   = (fOption == "UPDATE") ? kTRUE : kFALSE;
-   Bool_t read     = (fOption == "READ") ? kTRUE : kFALSE;
-   if (!create && !recreate && !update && !read) {
-      read    = kTRUE;
-      fOption = "READ";
-   }
+   EMode optmode = ParseOption(orig.fOption);
 
    fD = orig.fD; // not really used, so it is okay to have the same value.
    fWritable = orig.fWritable;
 
-   // We intentionally allocated just one big buffer for this object.
-   orig.CopyTo(fBlockList.fBuffer,fSize);
+   if (!fExternalData) {
+      // We intentionally allocated just one big buffer for this object.
+      orig.CopyTo(fBlockList.fBuffer,fSize);
+   }
 
-   Init(create || recreate); // A copy is
+   Init(!NeedsExistingFile(optmode)); // A copy is
 }
 
 
@@ -216,6 +216,12 @@ TMemFile::~TMemFile()
    // Need to call close, now as it will need both our virtual table
    // and the content of the list of blocks
    Close();
+   if (fExternalData) {
+      // Do not delete external buffer, we don't own it.
+      fBlockList.fBuffer = nullptr;
+      // We must not get extra blocks, as writing is disabled for external data!
+      R__ASSERT(!fBlockList.fNext || "External block is not the only one!");
+   }
    TRACE("destroy")
 }
 
@@ -235,7 +241,7 @@ Long64_t TMemFile::CopyTo(void *to, Long64_t maxsize) const
    TMemBlock *storedBlockSeek = fBlockSeek;
 
    const_cast<TMemFile*>(this)->SysSeek(fD, 0, SEEK_SET);
-   len = const_cast<TMemFile*>(this)->SysRead(fD, to, len);
+   len = const_cast<TMemFile*>(this)->SysReadImpl(fD, to, len);
 
    const_cast<TMemFile*>(this)->fBlockSeek   = storedBlockSeek;
    const_cast<TMemFile*>(this)->fBlockOffset = storedBlockOffset;
@@ -331,7 +337,7 @@ void TMemFile::ResetAfterMerge(TFileMergeInfo *info)
    fBlockSeek   = &fBlockList;
    fBlockOffset = 0;
    {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfFiles()->Remove(this);
    }
 
@@ -399,11 +405,11 @@ void TMemFile::ResetObjects(TDirectoryFile *directory, TFileMergeInfo *info) con
 /// Read specified number of bytes from current offset into the buffer.
 /// See documentation for TFile::SysRead().
 
-Int_t TMemFile::SysRead(Int_t, void *buf, Int_t len)
+Int_t TMemFile::SysReadImpl(Int_t, void *buf, Long64_t len)
 {
    TRACE("READ")
 
-   if (fBlockList.fBuffer == 0) {
+   if (fBlockSeek == nullptr || fBlockSeek->fBuffer == nullptr) {
       errno = EBADF;
       gSystem->SetErrorStr("The memory file is not open.");
       return 0;
@@ -450,6 +456,16 @@ Int_t TMemFile::SysRead(Int_t, void *buf, Int_t len)
       fSysOffset += len;
       return len;
    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Read specified number of bytes from current offset into the buffer.
+/// See documentation for TFile::SysRead().
+
+Int_t TMemFile::SysRead(Int_t fd, void *buf, Int_t len)
+{
+   return SysReadImpl(fd, buf, len);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -557,9 +573,14 @@ Int_t TMemFile::SysClose(Int_t /* fd */)
 ////////////////////////////////////////////////////////////////////////////////
 /// Write a buffer into the file.
 
-Int_t TMemFile::SysWrite(Int_t /* fd */, const void *buf, Int_t len)
+Int_t TMemFile::SysWriteImpl(Int_t /* fd */, const void *buf, Long64_t len)
 {
    TRACE("WRITE")
+
+   if (fExternalData) {
+      gSystem->SetErrorStr("A memory file with shared data is read-only.");
+      return 0;
+   }
 
    if (fBlockList.fBuffer == 0) {
       errno = EBADF;
@@ -611,6 +632,14 @@ Int_t TMemFile::SysWrite(Int_t /* fd */, const void *buf, Int_t len)
       fSysOffset += len;
       return len;
    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Write a buffer into the file.
+
+Int_t TMemFile::SysWrite(Int_t fd, const void *buf, Int_t len)
+{
+   return SysWriteImpl(fd,buf,len);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

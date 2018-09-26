@@ -12,9 +12,7 @@
 #ifndef ROOT_TZIPFile
 #define ROOT_TZIPFile
 
-#ifndef ROOT_TArchiveFile
 #include "TArchiveFile.h"
-#endif
 
 class TZIPMember;
 
@@ -189,7 +187,7 @@ public:
 
    void      Print(Option_t *option = "") const;
 
-   ClassDef(TZIPMember,2)  //A ZIP archive member file
+   ClassDef(TZIPMember, 0);  //A ZIP archive member file
 };
 
 #endif

@@ -2,12 +2,34 @@
 
 #include "TMVA/NeuralNet.h"
 
+#include "TMVA/MethodDNN.h"
 
 namespace TMVA
 {
     namespace DNN
     {
 
+        std::shared_ptr<std::function<double(double)>> Gauss = std::make_shared<std::function<double(double)>> ([](double value){ const double s = 6.0; return exp (-std::pow(value*s,2.0)); });
+        std::shared_ptr<std::function<double(double)>> GaussComplement = std::make_shared<std::function<double(double)>> ([](double value){ const double s = 6.0; return 1.0 - exp (-std::pow(value*s,2.0)); });
+        std::shared_ptr<std::function<double(double)>> InvGauss = std::make_shared<std::function<double(double)>> ([](double value){ const double s = 6.0; return -2.0 * value * s*s * (*Gauss.get ()) (value); });
+        std::shared_ptr<std::function<double(double)>> InvGaussComplement = std::make_shared<std::function<double(double)>> ([](double value){ const double s = 6.0; return +2.0 * value * s*s * (*GaussComplement.get ()) (value); });
+        std::shared_ptr<std::function<double(double)>> InvLinear = std::make_shared<std::function<double(double)>> ([](double /*value*/){ return 1.0; });
+        std::shared_ptr<std::function<double(double)>> InvReLU = std::make_shared<std::function<double(double)>> ([](double value){ const double margin = 0.0; return value > margin ? 1.0 : 0; });
+        std::shared_ptr<std::function<double(double)>> InvSigmoid = std::make_shared<std::function<double(double)>> ([](double value){ double s = (*Sigmoid.get ()) (value); return s*(1.0-s); });
+        std::shared_ptr<std::function<double(double)>> InvSoftPlus = std::make_shared<std::function<double(double)>> ([](double value){ return 1.0 / (1.0 + std::exp (-value)); });
+        std::shared_ptr<std::function<double(double)>> InvSoftSign = std::make_shared<std::function<double(double)>> ([](double value){ return std::pow ((1.0 - fabs (value)),2.0); });
+        std::shared_ptr<std::function<double(double)>> InvSymmReLU = std::make_shared<std::function<double(double)>> ([](double value){ const double margin = 0.3; return value > margin ? 1.0 : value < -margin ? 1.0 : 0; });
+        std::shared_ptr<std::function<double(double)>> InvTanh = std::make_shared<std::function<double(double)>> ([](double value){ return 1.0 - std::pow (value, 2.0); });
+        std::shared_ptr<std::function<double(double)>> InvTanhShift = std::make_shared<std::function<double(double)>> ([](double value){ return 0.3 + (1.0 - std::pow (value, 2.0)); });
+        std::shared_ptr<std::function<double(double)>> Linear = std::make_shared<std::function<double(double)>> ([](double value){ return value; });
+        std::shared_ptr<std::function<double(double)>> ReLU = std::make_shared<std::function<double(double)>> ([](double value){ const double margin = 0.0; return value > margin ? value-margin : 0; });
+        std::shared_ptr<std::function<double(double)>> Sigmoid = std::make_shared<std::function<double(double)>> ([](double value){ value = std::max (-100.0, std::min (100.0,value)); return 1.0/(1.0 + std::exp (-value)); });
+        std::shared_ptr<std::function<double(double)>> SoftPlus = std::make_shared<std::function<double(double)>> ([](double value){ return std::log (1.0+ std::exp (value)); });
+        std::shared_ptr<std::function<double(double)>> ZeroFnc = std::make_shared<std::function<double(double)>> ([](double /*value*/){ return 0; });
+        std::shared_ptr<std::function<double(double)>> Tanh = std::make_shared<std::function<double(double)>> ([](double value){ return tanh (value); });
+        std::shared_ptr<std::function<double(double)>> SymmReLU = std::make_shared<std::function<double(double)>> ([](double value){ const double margin = 0.3; return value > margin ? value-margin : value < -margin ? value+margin : 0; });
+        std::shared_ptr<std::function<double(double)>> TanhShift = std::make_shared<std::function<double(double)>> ([](double value){ return tanh (value-0.3); });
+        std::shared_ptr<std::function<double(double)>> SoftSign = std::make_shared<std::function<double(double)>> ([](double value){ return value / (1.0 + fabs (value)); });
 
 
         double gaussDouble (double mean, double sigma)
@@ -44,7 +66,8 @@ namespace TMVA
 
 
         LayerData::LayerData (size_t inputSize)
-            : m_isInputLayer (true)
+            : m_hasDropOut (false)
+            , m_isInputLayer (true)
             , m_hasWeights (false)
             , m_hasGradients (false)
             , m_eModeOutput (ModeOutputValues::DIRECT) 
@@ -56,7 +79,8 @@ namespace TMVA
 
 
         LayerData::LayerData (const_iterator_type itInputBegin, const_iterator_type itInputEnd, ModeOutputValues eModeOutput)
-            : m_isInputLayer (true)
+            : m_hasDropOut (false)
+            , m_isInputLayer (true)
             , m_hasWeights (false)
             , m_hasGradients (false)
             , m_eModeOutput (eModeOutput) 
@@ -77,6 +101,7 @@ namespace TMVA
                               std::shared_ptr<std::function<double(double)>> _inverseActivationFunction,
                               ModeOutputValues eModeOutput)
             : m_size (_size)
+            , m_hasDropOut (false)
             , m_itConstWeightBegin   (itWeightBegin)
             , m_itGradientBegin (itGradientBegin)
             , m_activationFunction (_activationFunction)
@@ -98,8 +123,10 @@ namespace TMVA
                               std::shared_ptr<std::function<double(double)>> _activationFunction, 
                               ModeOutputValues eModeOutput)
             : m_size (_size)
+            , m_hasDropOut (false)
             , m_itConstWeightBegin   (itWeightBegin)
             , m_activationFunction (_activationFunction)
+            , m_inverseActivationFunction ()
             , m_isInputLayer (false)
             , m_hasWeights (true)
             , m_hasGradients (false)
@@ -110,7 +137,7 @@ namespace TMVA
 
 
 
-        typename LayerData::container_type LayerData::computeProbabilities ()
+        typename LayerData::container_type LayerData::computeProbabilities () const
         {
             container_type probabilitiesContainer;
             if (TMVA::DNN::isFlagSet (ModeOutputValues::SIGMOID, m_eModeOutput))
@@ -206,8 +233,7 @@ namespace TMVA
                             size_t _convergenceSteps, size_t _batchSize, size_t _testRepetitions, 
                             double _factorWeightDecay, EnumRegularization eRegularization,
                             MinimizerType _eMinimizerType, double _learningRate, 
-                            double _momentum, int _repetitions, bool _useMultithreading, 
-                            bool _doBatchNormalization)
+                            double _momentum, int _repetitions, bool _useMultithreading)
             : m_timer (100, name)
             , m_minProgress (0)
             , m_maxProgress (100)
@@ -228,7 +254,6 @@ namespace TMVA
             , m_maxConvergenceCount (0)
             , m_minError (1e10)
             , m_useMultithreading (_useMultithreading)
-            , m_doBatchNormalization (_doBatchNormalization)
             , fMonitoring (NULL)
         {
         }
@@ -250,9 +275,9 @@ namespace TMVA
 
 
 
-/** \brief action to be done when the training cycle is started (e.g. update some monitoring output)
- *
- */
+        /** \brief action to be done when the training cycle is started (e.g. update some monitoring output)
+         *
+         */
         void ClassificationSettings::startTrainCycle () 
         {
             if (fMonitoring)
@@ -265,18 +290,18 @@ namespace TMVA
             }
         }
 
-/** \brief action to be done when the training cycle is ended (e.g. update some monitoring output)
- *
- */
+        /** \brief action to be done when the training cycle is ended (e.g. update some monitoring output)
+         *
+         */
         void ClassificationSettings::endTrainCycle (double /*error*/) 
         {
             if (fMonitoring) fMonitoring->ProcessEvents ();
         }
 
-/** \brief action to be done after the computation of a test sample (e.g. update some monitoring output)
- *
- */
-    void ClassificationSettings::testSample (double /*error*/, double output, double target, double weight)
+        /** \brief action to be done after the computation of a test sample (e.g. update some monitoring output)
+         *
+         */
+        void ClassificationSettings::testSample (double /*error*/, double output, double target, double weight)
         {
             
             m_output.push_back (output);
@@ -285,9 +310,9 @@ namespace TMVA
         }
 
 
-/** \brief action to be done when the test cycle is started (e.g. update some monitoring output)
- *
- */
+        /** \brief action to be done when the test cycle is started (e.g. update some monitoring output)
+         *
+         */
         void ClassificationSettings::startTestCycle () 
         {
             m_output.clear ();
@@ -295,9 +320,9 @@ namespace TMVA
             m_weights.clear ();
         }
 
-/** \brief action to be done when the training cycle is ended (e.g. update some monitoring output)
- *
- */
+        /** \brief action to be done when the training cycle is ended (e.g. update some monitoring output)
+         *
+         */
         void ClassificationSettings::endTestCycle () 
         {
             if (m_output.empty ())
@@ -409,7 +434,7 @@ namespace TMVA
                 sigEff.push_back (seff);
                 backRej.push_back (brej);
             
-//            m_histROC->Fill (seff, brej);
+                //            m_histROC->Fill (seff, brej);
                 addPoint ("ROC", seff, brej); // x, y
 
 
@@ -425,7 +450,7 @@ namespace TMVA
                 }
 
                 addPoint ("Significance", currentCut, significance);
-//            m_histSignificance->Fill (currentCut, significance);
+                //            m_histSignificance->Fill (currentCut, significance);
             }
 
             m_significances.push_back (bestSignificance);
@@ -457,9 +482,9 @@ namespace TMVA
         }
 
 
-/** \brief check for convergence 
- *
- */
+        /** \brief check for convergence 
+         *
+         */
         bool Settings::hasConverged (double testError)
         {
             // std::cout << "check convergence; minError " << m_minError << "  current " << testError
@@ -484,17 +509,17 @@ namespace TMVA
 
 
 
-/** \brief set the weight sums to be scaled to (preparations for monitoring output)
- *
- */
+        /** \brief set the weight sums to be scaled to (preparations for monitoring output)
+         *
+         */
         void ClassificationSettings::setWeightSums (double sumOfSigWeights, double sumOfBkgWeights)
         {
             m_sumOfSigWeights = sumOfSigWeights; m_sumOfBkgWeights = sumOfBkgWeights;
         }
     
-/** \brief preparation for monitoring output
- *
- */
+        /** \brief preparation for monitoring output
+         *
+         */
         void ClassificationSettings::setResultComputation (
             std::string _fileNameNetConfig,
             std::string _fileNameResult,
@@ -512,9 +537,9 @@ namespace TMVA
 
     
 
-/** \brief compute the number of weights given the size of the input layer
- *
- */
+        /** \brief compute the number of weights given the size of the input layer
+         *
+         */
         size_t Net::numWeights (size_t trainingStartLayer) const 
         {
             size_t num (0);
@@ -531,27 +556,34 @@ namespace TMVA
         }
 
 
-
-/** \brief prepare the drop-out container given the provided drop-fractions
- *
- */
-        void Net::fillDropContainer (DropContainer& dropContainer, double dropFraction, size_t numNodes) const
+        size_t Net::numNodes (size_t trainingStartLayer) const 
         {
-            size_t numDrops = dropFraction * numNodes;
-            if (numDrops >= numNodes) // maintain at least one node
-                numDrops = numNodes - 1;
-            dropContainer.insert (end (dropContainer), numNodes-numDrops, true); // add the markers for the nodes which are enabled
-            dropContainer.insert (end (dropContainer), numDrops, false); // add the markers for the disabled nodes
-            // shuffle 
-            std::random_shuffle (end (dropContainer)-numNodes, end (dropContainer)); // shuffle enabled and disabled markers
+            size_t num (0);
+            size_t index (0);
+            for (auto& layer : m_layers)
+            {
+                if (index >= trainingStartLayer)
+                    num += layer.numNodes ();
+                ++index;
+            }
+            return num;
         }
 
-
-
-
-
-
-
+        /** \brief prepare the drop-out container given the provided drop-fractions
+         *
+         */
+        void Net::fillDropContainer (DropContainer& dropContainer, double dropFraction, size_t _numNodes) const
+        {
+            size_t numDrops = dropFraction * _numNodes;
+            if (numDrops >= _numNodes) // maintain at least one node
+                numDrops = _numNodes - 1;
+            // add the markers for the nodes which are enabled
+            dropContainer.insert (end (dropContainer), _numNodes-numDrops, true);
+            // add the markers for the disabled nodes
+            dropContainer.insert (end (dropContainer), numDrops, false);
+            // shuffle enabled and disabled markers
+            std::shuffle(end(dropContainer)-_numNodes, end(dropContainer), std::default_random_engine{});
+        }
  
     }; // namespace DNN
 }; // namespace TMVA

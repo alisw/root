@@ -15,252 +15,617 @@
 #ifndef LLVM_EXECUTIONENGINE_ORC_COMPILEONDEMANDLAYER_H
 #define LLVM_EXECUTIONENGINE_ORC_COMPILEONDEMANDLAYER_H
 
-#include "IndirectionUtils.h"
-#include "LookasideRTDyldMM.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/Orc/IndirectionUtils.h"
+#include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
+#include "llvm/ExecutionEngine/Orc/OrcError.h"
+#include "llvm/ExecutionEngine/RuntimeDyld.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalAlias.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Mangler.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/ValueMapper.h"
+#include <algorithm>
+#include <cassert>
+#include <functional>
+#include <iterator>
 #include <list>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace llvm {
 
+class Value;
+
+namespace orc {
+
 /// @brief Compile-on-demand layer.
 ///
-///   Modules added to this layer have their calls indirected, and are then
-/// broken up into a set of single-function modules, each of which is added
-/// to the layer below in a singleton set. The lower layer can be any layer that
-/// accepts IR module sets.
-///
-/// It is expected that this layer will frequently be used on top of a
-/// LazyEmittingLayer. The combination of the two ensures that each function is
-/// compiled only when it is first called.
-template <typename BaseLayerT> class CompileOnDemandLayer {
-public:
-  /// @brief Lookup helper that provides compatibility with the classic
-  ///        static-compilation symbol resolution process.
-  ///
-  ///   The CompileOnDemand (COD) layer splits modules up into multiple
-  /// sub-modules, each held in its own llvm::Module instance, in order to
-  /// support lazy compilation. When a module that contains private symbols is
-  /// broken up symbol linkage changes may be required to enable access to
-  /// "private" data that now resides in a different llvm::Module instance. To
-  /// retain expected symbol resolution behavior for clients of the COD layer,
-  /// the CODScopedLookup class uses a two-tiered lookup system to resolve
-  /// symbols. Lookup first scans sibling modules that were split from the same
-  /// original module (logical-module scoped lookup), then scans all other
-  /// modules that have been added to the lookup scope (logical-dylib scoped
-  /// lookup).
-  class CODScopedLookup {
-  private:
-    typedef typename BaseLayerT::ModuleSetHandleT BaseLayerModuleSetHandleT;
-    typedef std::vector<BaseLayerModuleSetHandleT> SiblingHandlesList;
-    typedef std::list<SiblingHandlesList> PseudoDylibModuleSetHandlesList;
-
-  public:
-    /// @brief Handle for a logical module.
-    typedef typename PseudoDylibModuleSetHandlesList::iterator LMHandle;
-
-    /// @brief Construct a scoped lookup.
-    CODScopedLookup(BaseLayerT &BaseLayer) : BaseLayer(BaseLayer) {}
-
-    /// @brief Start a new context for a single logical module.
-    LMHandle createLogicalModule() {
-      Handles.push_back(SiblingHandlesList());
-      return std::prev(Handles.end());
-    }
-
-    /// @brief Add a concrete Module's handle to the given logical Module's
-    ///        lookup scope.
-    void addToLogicalModule(LMHandle LMH, BaseLayerModuleSetHandleT H) {
-      LMH->push_back(H);
-    }
-
-    /// @brief Remove a logical Module from the CODScopedLookup entirely.
-    void removeLogicalModule(LMHandle LMH) { Handles.erase(LMH); }
-
-    /// @brief Look up a symbol in this context.
-    uint64_t lookup(LMHandle LMH, const std::string &Name) {
-      if (uint64_t Addr = lookupOnlyIn(LMH, Name))
-        return Addr;
-
-      for (auto I = Handles.begin(), E = Handles.end(); I != E; ++I)
-        if (I != LMH)
-          if (uint64_t Addr = lookupOnlyIn(I, Name))
-            return Addr;
-
-      return 0;
-    }
-
-  private:
-    uint64_t lookupOnlyIn(LMHandle LMH, const std::string &Name) {
-      for (auto H : *LMH)
-        if (uint64_t Addr = BaseLayer.lookupSymbolAddressIn(H, Name, false))
-          return Addr;
-      return 0;
-    }
-
-    BaseLayerT &BaseLayer;
-    PseudoDylibModuleSetHandlesList Handles;
-  };
-
+///   When a module is added to this layer a stub is created for each of its
+/// function definitions. The stubs and other global values are immediately
+/// added to the layer below. When a stub is called it triggers the extraction
+/// of the function body from the original module. The extracted body is then
+/// compiled and executed.
+template <typename BaseLayerT,
+          typename CompileCallbackMgrT = JITCompileCallbackManager,
+          typename IndirectStubsMgrT = IndirectStubsManager>
+class CompileOnDemandLayer {
 private:
-  typedef typename BaseLayerT::ModuleSetHandleT BaseLayerModuleSetHandleT;
-  typedef std::vector<BaseLayerModuleSetHandleT> BaseLayerModuleSetHandleListT;
+  template <typename MaterializerFtor>
+  class LambdaMaterializer final : public ValueMaterializer {
+  public:
+    LambdaMaterializer(MaterializerFtor M) : M(std::move(M)) {}
 
-  struct ModuleSetInfo {
-    // Symbol lookup - just one for the whole module set.
-    std::shared_ptr<CODScopedLookup> Lookup;
+    Value *materialize(Value *V) final { return M(V); }
 
-    // Logical module handles.
-    std::vector<typename CODScopedLookup::LMHandle> LMHandles;
-
-    // Persistent manglers - one per TU.
-    std::vector<PersistentMangler> PersistentManglers;
-
-    // Symbol resolution callback handlers - one per TU.
-    std::vector<std::unique_ptr<JITResolveCallbackHandler>>
-        JITResolveCallbackHandlers;
-
-    // List of vectors of module set handles:
-    // One vector per logical module - each vector holds the handles for the
-    // exploded modules for that logical module in the base layer.
-    BaseLayerModuleSetHandleListT BaseLayerModuleSetHandles;
-
-    ModuleSetInfo(std::shared_ptr<CODScopedLookup> Lookup)
-        : Lookup(std::move(Lookup)) {}
-
-    void releaseResources(BaseLayerT &BaseLayer) {
-      for (auto LMH : LMHandles)
-        Lookup->removeLogicalModule(LMH);
-      for (auto H : BaseLayerModuleSetHandles)
-        BaseLayer.removeModuleSet(H);
-    }
+  private:
+    MaterializerFtor M;
   };
 
-  typedef std::list<ModuleSetInfo> ModuleSetInfoListT;
+  template <typename MaterializerFtor>
+  LambdaMaterializer<MaterializerFtor>
+  createLambdaMaterializer(MaterializerFtor M) {
+    return LambdaMaterializer<MaterializerFtor>(std::move(M));
+  }
+
+  using BaseLayerModuleHandleT = typename BaseLayerT::ModuleHandleT;
+
+  // Provide type-erasure for the Modules and MemoryManagers.
+  template <typename ResourceT>
+  class ResourceOwner {
+  public:
+    ResourceOwner() = default;
+    ResourceOwner(const ResourceOwner &) = delete;
+    ResourceOwner &operator=(const ResourceOwner &) = delete;
+    virtual ~ResourceOwner() = default;
+
+    virtual ResourceT& getResource() const = 0;
+  };
+
+  template <typename ResourceT, typename ResourcePtrT>
+  class ResourceOwnerImpl : public ResourceOwner<ResourceT> {
+  public:
+    ResourceOwnerImpl(ResourcePtrT ResourcePtr)
+      : ResourcePtr(std::move(ResourcePtr)) {}
+
+    ResourceT& getResource() const override { return *ResourcePtr; }
+
+  private:
+    ResourcePtrT ResourcePtr;
+  };
+
+  template <typename ResourceT, typename ResourcePtrT>
+  std::unique_ptr<ResourceOwner<ResourceT>>
+  wrapOwnership(ResourcePtrT ResourcePtr) {
+    using RO = ResourceOwnerImpl<ResourceT, ResourcePtrT>;
+    return llvm::make_unique<RO>(std::move(ResourcePtr));
+  }
+
+  class StaticGlobalRenamer {
+  public:
+    StaticGlobalRenamer() = default;
+    StaticGlobalRenamer(StaticGlobalRenamer &&) = default;
+    StaticGlobalRenamer &operator=(StaticGlobalRenamer &&) = default;
+
+    void rename(Module &M) {
+      for (auto &F : M)
+        if (F.hasLocalLinkage())
+          F.setName("$static." + Twine(NextId++));
+      for (auto &G : M.globals())
+        if (G.hasLocalLinkage())
+          G.setName("$static." + Twine(NextId++));
+    }
+
+  private:
+    unsigned NextId = 0;
+  };
+
+  struct LogicalDylib {
+    using SymbolResolverFtor = std::function<JITSymbol(const std::string&)>;
+
+    using ModuleAdderFtor =
+      std::function<typename BaseLayerT::ModuleHandleT(
+                    BaseLayerT&,
+                    std::unique_ptr<Module>,
+                    std::unique_ptr<JITSymbolResolver>)>;
+
+    struct SourceModuleEntry {
+      std::shared_ptr<Module> SourceMod;
+      std::set<Function*> StubsToClone;
+    };
+
+    using SourceModulesList = std::vector<SourceModuleEntry>;
+    using SourceModuleHandle = typename SourceModulesList::size_type;
+
+    SourceModuleHandle
+    addSourceModule(std::shared_ptr<Module> M) {
+      SourceModuleHandle H = SourceModules.size();
+      SourceModules.push_back(SourceModuleEntry());
+      SourceModules.back().SourceMod = std::move(M);
+      return H;
+    }
+
+    Module& getSourceModule(SourceModuleHandle H) {
+      return *SourceModules[H].SourceMod;
+    }
+
+    std::set<Function*>& getStubsToClone(SourceModuleHandle H) {
+      return SourceModules[H].StubsToClone;
+    }
+
+    JITSymbol findSymbol(BaseLayerT &BaseLayer, const std::string &Name,
+                         bool ExportedSymbolsOnly) {
+      if (auto Sym = StubsMgr->findStub(Name, ExportedSymbolsOnly))
+        return Sym;
+      for (auto BLH : BaseLayerHandles)
+        if (auto Sym = BaseLayer.findSymbolIn(BLH, Name, ExportedSymbolsOnly))
+          return Sym;
+        else if (auto Err = Sym.takeError())
+          return std::move(Err);
+      return nullptr;
+    }
+
+    Error removeModulesFromBaseLayer(BaseLayerT &BaseLayer) {
+      for (auto &BLH : BaseLayerHandles)
+        if (auto Err = BaseLayer.removeModule(BLH))
+          return Err;
+      return Error::success();
+    }
+
+    std::shared_ptr<JITSymbolResolver> ExternalSymbolResolver;
+    std::unique_ptr<IndirectStubsMgrT> StubsMgr;
+    StaticGlobalRenamer StaticRenamer;
+    SourceModulesList SourceModules;
+    std::vector<BaseLayerModuleHandleT> BaseLayerHandles;
+  };
+
+  using LogicalDylibList = std::list<LogicalDylib>;
 
 public:
-  /// @brief Handle to a set of loaded modules.
-  typedef typename ModuleSetInfoListT::iterator ModuleSetHandleT;
 
-  /// @brief Convenience typedef for callback inserter.
-  typedef std::function<void(Module&, JITResolveCallbackHandler&)>
-    InsertCallbackAsmFtor;
+  /// @brief Handle to loaded module.
+  using ModuleHandleT = typename LogicalDylibList::iterator;
+
+  /// @brief Module partitioning functor.
+  using PartitioningFtor = std::function<std::set<Function*>(Function&)>;
+
+  /// @brief Builder for IndirectStubsManagers.
+  using IndirectStubsManagerBuilderT =
+      std::function<std::unique_ptr<IndirectStubsMgrT>()>;
 
   /// @brief Construct a compile-on-demand layer instance.
-  CompileOnDemandLayer(BaseLayerT &BaseLayer,
-                       InsertCallbackAsmFtor InsertCallbackAsm)
-    : BaseLayer(BaseLayer), InsertCallbackAsm(InsertCallbackAsm) {}
+  CompileOnDemandLayer(BaseLayerT &BaseLayer, PartitioningFtor Partition,
+                       CompileCallbackMgrT &CallbackMgr,
+                       IndirectStubsManagerBuilderT CreateIndirectStubsManager,
+                       bool CloneStubsIntoPartitions = true)
+      : BaseLayer(BaseLayer), Partition(std::move(Partition)),
+        CompileCallbackMgr(CallbackMgr),
+        CreateIndirectStubsManager(std::move(CreateIndirectStubsManager)),
+        CloneStubsIntoPartitions(CloneStubsIntoPartitions) {}
+
+  ~CompileOnDemandLayer() {
+    // FIXME: Report error on log.
+    while (!LogicalDylibs.empty())
+      consumeError(removeModule(LogicalDylibs.begin()));
+  }
 
   /// @brief Add a module to the compile-on-demand layer.
-  template <typename ModuleSetT>
-  ModuleSetHandleT addModuleSet(ModuleSetT Ms,
-                                std::unique_ptr<RTDyldMemoryManager> MM) {
+  Expected<ModuleHandleT>
+  addModule(std::shared_ptr<Module> M,
+            std::shared_ptr<JITSymbolResolver> Resolver) {
 
-    const char *JITAddrSuffix = "$orc_addr";
-    const char *JITImplSuffix = "$orc_impl";
+    LogicalDylibs.push_back(LogicalDylib());
+    auto &LD = LogicalDylibs.back();
+    LD.ExternalSymbolResolver = std::move(Resolver);
+    LD.StubsMgr = CreateIndirectStubsManager();
 
-    // Create a symbol lookup context and ModuleSetInfo for this module set.
-    auto DylibLookup = std::make_shared<CODScopedLookup>(BaseLayer);
-    ModuleSetHandleT H =
-        ModuleSetInfos.insert(ModuleSetInfos.end(), ModuleSetInfo(DylibLookup));
-    ModuleSetInfo &MSI = ModuleSetInfos.back();
+    // Process each of the modules in this module set.
+    if (auto Err = addLogicalModule(LD, std::move(M)))
+      return std::move(Err);
 
-    // Process each of the modules in this module set. All modules share the
-    // same lookup context, but each will get its own TU lookup context.
-    for (auto &M : Ms) {
+    return std::prev(LogicalDylibs.end());
+  }
 
-      // Create a TU lookup context for this module.
-      auto LMH = DylibLookup->createLogicalModule();
-      MSI.LMHandles.push_back(LMH);
-
-      // Create a persistent mangler for this module.
-      MSI.PersistentManglers.emplace_back(*M->getDataLayout());
-
-      // Make all calls to functions defined in this module indirect.
-      JITIndirections Indirections =
-          makeCallsDoubleIndirect(*M, [](const Function &) { return true; },
-                                  JITImplSuffix, JITAddrSuffix);
-
-      // Then carve up the module into a bunch of single-function modules.
-      std::vector<std::unique_ptr<Module>> ExplodedModules =
-          explode(*M, Indirections);
-
-      // Add a resolve-callback handler for this module to look up symbol
-      // addresses when requested via a callback.
-      MSI.JITResolveCallbackHandlers.push_back(
-          createCallbackHandlerFromJITIndirections(
-              Indirections, MSI.PersistentManglers.back(),
-              [=](StringRef S) { return DylibLookup->lookup(LMH, S); }));
-
-      // Insert callback asm code into the first module.
-      InsertCallbackAsm(*ExplodedModules[0],
-                        *MSI.JITResolveCallbackHandlers.back());
-
-      // Now we need to take each of the extracted Modules and add them to
-      // base layer. Each Module will be added individually to make sure they
-      // can be compiled separately, and each will get its own lookaside
-      // memory manager with lookup functors that resolve symbols in sibling
-      // modules first.OA
-      for (auto &M : ExplodedModules) {
-        std::vector<std::unique_ptr<Module>> MSet;
-        MSet.push_back(std::move(M));
-
-        BaseLayerModuleSetHandleT H = BaseLayer.addModuleSet(
-            std::move(MSet),
-            createLookasideRTDyldMM<SectionMemoryManager>(
-                [=](const std::string &Name) {
-                  if (uint64_t Addr = DylibLookup->lookup(LMH, Name))
-                    return Addr;
-                  return getSymbolAddress(Name, true);
-                },
-                [=](const std::string &Name) {
-                  return DylibLookup->lookup(LMH, Name);
-                }));
-        DylibLookup->addToLogicalModule(LMH, H);
-        MSI.BaseLayerModuleSetHandles.push_back(H);
-      }
-
-      initializeFuncAddrs(*MSI.JITResolveCallbackHandlers.back(), Indirections,
-                          MSI.PersistentManglers.back(), [=](StringRef S) {
-                            return DylibLookup->lookup(LMH, S);
-                          });
-    }
-
-    return H;
+  /// @brief Add extra modules to an existing logical module.
+  Error addExtraModule(ModuleHandleT H, std::shared_ptr<Module> M) {
+    return addLogicalModule(*H, std::move(M));
   }
 
   /// @brief Remove the module represented by the given handle.
   ///
   ///   This will remove all modules in the layers below that were derived from
   /// the module represented by H.
-  void removeModuleSet(ModuleSetHandleT H) {
-    H->releaseResources(BaseLayer);
-    ModuleSetInfos.erase(H);
+  Error removeModule(ModuleHandleT H) {
+    auto Err = H->removeModulesFromBaseLayer(BaseLayer);
+    LogicalDylibs.erase(H);
+    return Err;
   }
 
-  /// @brief Get the address of a symbol provided by this layer, or some layer
-  ///        below this one.
-  uint64_t getSymbolAddress(const std::string &Name, bool ExportedSymbolsOnly) {
-    return BaseLayer.getSymbolAddress(Name, ExportedSymbolsOnly);
-  }
-
-  /// @brief Get the address of a symbol provided by this layer, or some layer
-  ///        below this one.
-  uint64_t lookupSymbolAddressIn(ModuleSetHandleT H, const std::string &Name,
-                                 bool ExportedSymbolsOnly) {
-    BaseLayerModuleSetHandleListT &BaseLayerHandles = H->second;
-    for (auto &BH : BaseLayerHandles) {
-      if (uint64_t Addr =
-            BaseLayer.lookupSymbolAddressIn(BH, Name, ExportedSymbolsOnly))
-        return Addr;
+  /// @brief Search for the given named symbol.
+  /// @param Name The name of the symbol to search for.
+  /// @param ExportedSymbolsOnly If true, search only for exported symbols.
+  /// @return A handle for the given named symbol, if it exists.
+  JITSymbol findSymbol(StringRef Name, bool ExportedSymbolsOnly) {
+    for (auto LDI = LogicalDylibs.begin(), LDE = LogicalDylibs.end();
+         LDI != LDE; ++LDI) {
+      if (auto Sym = LDI->StubsMgr->findStub(Name, ExportedSymbolsOnly))
+        return Sym;
+      if (auto Sym = findSymbolIn(LDI, Name, ExportedSymbolsOnly))
+        return Sym;
+      else if (auto Err = Sym.takeError())
+        return std::move(Err);
     }
-    return 0;
+    return BaseLayer.findSymbol(Name, ExportedSymbolsOnly);
+  }
+
+  /// @brief Get the address of a symbol provided by this layer, or some layer
+  ///        below this one.
+  JITSymbol findSymbolIn(ModuleHandleT H, const std::string &Name,
+                         bool ExportedSymbolsOnly) {
+    return H->findSymbol(BaseLayer, Name, ExportedSymbolsOnly);
+  }
+
+  /// @brief Update the stub for the given function to point at FnBodyAddr.
+  /// This can be used to support re-optimization.
+  /// @return true if the function exists and the stub is updated, false
+  ///         otherwise.
+  //
+  // FIXME: We should track and free associated resources (unused compile
+  //        callbacks, uncompiled IR, and no-longer-needed/reachable function
+  //        implementations).
+  Error updatePointer(std::string FuncName, JITTargetAddress FnBodyAddr) {
+    //Find out which logical dylib contains our symbol
+    auto LDI = LogicalDylibs.begin();
+    for (auto LDE = LogicalDylibs.end(); LDI != LDE; ++LDI) {
+      if (auto LMResources =
+            LDI->getLogicalModuleResourcesForSymbol(FuncName, false)) {
+        Module &SrcM = LMResources->SourceModule->getResource();
+        std::string CalledFnName = mangle(FuncName, SrcM.getDataLayout());
+        if (auto Err = LMResources->StubsMgr->updatePointer(CalledFnName,
+                                                            FnBodyAddr))
+          return Err;
+        return Error::success();
+      }
+    }
+    return make_error<JITSymbolNotFound>(FuncName);
   }
 
 private:
+
+  Error addLogicalModule(LogicalDylib &LD, std::shared_ptr<Module> SrcMPtr) {
+
+    // Rename all static functions / globals to $static.X :
+    // This will unique the names across all modules in the logical dylib,
+    // simplifying symbol lookup.
+    LD.StaticRenamer.rename(*SrcMPtr);
+
+    // Bump the linkage and rename any anonymous/privote members in SrcM to
+    // ensure that everything will resolve properly after we partition SrcM.
+    makeAllSymbolsExternallyAccessible(*SrcMPtr);
+
+    // Create a logical module handle for SrcM within the logical dylib.
+    Module &SrcM = *SrcMPtr;
+    auto LMId = LD.addSourceModule(std::move(SrcMPtr));
+
+    // Create stub functions.
+    const DataLayout &DL = SrcM.getDataLayout();
+    {
+      typename IndirectStubsMgrT::StubInitsMap StubInits;
+      for (auto &F : SrcM) {
+        // Skip declarations.
+        if (F.isDeclaration())
+          continue;
+
+        // Skip weak functions for which we already have definitions.
+        auto MangledName = mangle(F.getName(), DL);
+        if (F.hasWeakLinkage() || F.hasLinkOnceLinkage()) {
+          if (auto Sym = LD.findSymbol(BaseLayer, MangledName, false))
+            continue;
+          else if (auto Err = Sym.takeError())
+            return std::move(Err);
+        }
+
+        // Record all functions defined by this module.
+        if (CloneStubsIntoPartitions)
+          LD.getStubsToClone(LMId).insert(&F);
+
+        // Create a callback, associate it with the stub for the function,
+        // and set the compile action to compile the partition containing the
+        // function.
+        auto CCInfo = CompileCallbackMgr.getCompileCallback();
+        StubInits[MangledName] =
+          std::make_pair(CCInfo.getAddress(),
+                         JITSymbolFlags::fromGlobalValue(F));
+        CCInfo.setCompileAction([this, &LD, LMId, &F]() -> JITTargetAddress {
+            if (auto FnImplAddrOrErr = this->extractAndCompile(LD, LMId, F))
+              return *FnImplAddrOrErr;
+            else {
+              // FIXME: Report error, return to 'abort' or something similar.
+              consumeError(FnImplAddrOrErr.takeError());
+              return 0;
+            }
+          });
+      }
+
+      if (auto Err = LD.StubsMgr->createStubs(StubInits))
+        return Err;
+    }
+
+    // If this module doesn't contain any globals, aliases, or module flags then
+    // we can bail out early and avoid the overhead of creating and managing an
+    // empty globals module.
+    if (SrcM.global_empty() && SrcM.alias_empty() &&
+        !SrcM.getModuleFlagsMetadata())
+      return Error::success();
+
+    // Create the GlobalValues module.
+    auto GVsM = llvm::make_unique<Module>((SrcM.getName() + ".globals").str(),
+                                          SrcM.getContext());
+    GVsM->setDataLayout(DL);
+
+    ValueToValueMapTy VMap;
+
+    // Clone global variable decls.
+    for (auto &GV : SrcM.globals())
+      if (!GV.isDeclaration() && !VMap.count(&GV))
+        cloneGlobalVariableDecl(*GVsM, GV, &VMap);
+
+    // And the aliases.
+    for (auto &A : SrcM.aliases())
+      if (!VMap.count(&A))
+        cloneGlobalAliasDecl(*GVsM, A, VMap);
+
+    // Clone the module flags.
+    cloneModuleFlagsMetadata(*GVsM, SrcM, VMap);
+
+    // Now we need to clone the GV and alias initializers.
+
+    // Initializers may refer to functions declared (but not defined) in this
+    // module. Build a materializer to clone decls on demand.
+    Error MaterializerErrors = Error::success();
+    auto Materializer = createLambdaMaterializer(
+      [&LD, &GVsM, &MaterializerErrors](Value *V) -> Value* {
+        if (auto *F = dyn_cast<Function>(V)) {
+          // Decls in the original module just get cloned.
+          if (F->isDeclaration())
+            return cloneFunctionDecl(*GVsM, *F);
+
+          // Definitions in the original module (which we have emitted stubs
+          // for at this point) get turned into a constant alias to the stub
+          // instead.
+          const DataLayout &DL = GVsM->getDataLayout();
+          std::string FName = mangle(F->getName(), DL);
+          unsigned PtrBitWidth = DL.getPointerTypeSizeInBits(F->getType());
+          JITTargetAddress StubAddr = 0;
+
+          // Get the address for the stub. If we encounter an error while
+          // doing so, stash it in the MaterializerErrors variable and use a
+          // null address as a placeholder.
+          if (auto StubSym = LD.StubsMgr->findStub(FName, false)) {
+            if (auto StubAddrOrErr = StubSym.getAddress())
+              StubAddr = *StubAddrOrErr;
+            else
+              MaterializerErrors = joinErrors(std::move(MaterializerErrors),
+                                              StubAddrOrErr.takeError());
+          }
+
+          ConstantInt *StubAddrCI =
+            ConstantInt::get(GVsM->getContext(), APInt(PtrBitWidth, StubAddr));
+          Constant *Init = ConstantExpr::getCast(Instruction::IntToPtr,
+                                                 StubAddrCI, F->getType());
+          return GlobalAlias::create(F->getFunctionType(),
+                                     F->getType()->getAddressSpace(),
+                                     F->getLinkage(), F->getName(),
+                                     Init, GVsM.get());
+        }
+        // else....
+        return nullptr;
+      });
+
+    // Clone the global variable initializers.
+    for (auto &GV : SrcM.globals())
+      if (!GV.isDeclaration())
+        moveGlobalVariableInitializer(GV, VMap, &Materializer);
+
+    // Clone the global alias initializers.
+    for (auto &A : SrcM.aliases()) {
+      auto *NewA = cast<GlobalAlias>(VMap[&A]);
+      assert(NewA && "Alias not cloned?");
+      Value *Init = MapValue(A.getAliasee(), VMap, RF_None, nullptr,
+                             &Materializer);
+      NewA->setAliasee(cast<Constant>(Init));
+    }
+
+    if (MaterializerErrors)
+      return MaterializerErrors;
+
+    // Build a resolver for the globals module and add it to the base layer.
+    auto GVsResolver = createLambdaResolver(
+        [this, &LD](const std::string &Name) -> JITSymbol {
+          if (auto Sym = LD.StubsMgr->findStub(Name, false))
+            return Sym;
+          if (auto Sym = LD.findSymbol(BaseLayer, Name, false))
+            return Sym;
+          else if (auto Err = Sym.takeError())
+            return std::move(Err);
+          return LD.ExternalSymbolResolver->findSymbolInLogicalDylib(Name);
+        },
+        [&LD](const std::string &Name) {
+          return LD.ExternalSymbolResolver->findSymbol(Name);
+        });
+
+    if (auto GVsHOrErr =
+          BaseLayer.addModule(std::move(GVsM), std::move(GVsResolver)))
+      LD.BaseLayerHandles.push_back(*GVsHOrErr);
+    else
+      return GVsHOrErr.takeError();
+
+    return Error::success();
+  }
+
+  static std::string mangle(StringRef Name, const DataLayout &DL) {
+    std::string MangledName;
+    {
+      raw_string_ostream MangledNameStream(MangledName);
+      Mangler::getNameWithPrefix(MangledNameStream, Name, DL);
+    }
+    return MangledName;
+  }
+
+  Expected<JITTargetAddress>
+  extractAndCompile(LogicalDylib &LD,
+                    typename LogicalDylib::SourceModuleHandle LMId,
+                    Function &F) {
+    Module &SrcM = LD.getSourceModule(LMId);
+
+    // If F is a declaration we must already have compiled it.
+    if (F.isDeclaration())
+      return 0;
+
+    // Grab the name of the function being called here.
+    std::string CalledFnName = mangle(F.getName(), SrcM.getDataLayout());
+
+    JITTargetAddress CalledAddr = 0;
+    auto Part = Partition(F);
+    if (auto PartHOrErr = emitPartition(LD, LMId, Part)) {
+      auto &PartH = *PartHOrErr;
+      for (auto *SubF : Part) {
+        std::string FnName = mangle(SubF->getName(), SrcM.getDataLayout());
+        if (auto FnBodySym = BaseLayer.findSymbolIn(PartH, FnName, false)) {
+          if (auto FnBodyAddrOrErr = FnBodySym.getAddress()) {
+            JITTargetAddress FnBodyAddr = *FnBodyAddrOrErr;
+
+            // If this is the function we're calling record the address so we can
+            // return it from this function.
+            if (SubF == &F)
+              CalledAddr = FnBodyAddr;
+
+            // Update the function body pointer for the stub.
+            if (auto EC = LD.StubsMgr->updatePointer(FnName, FnBodyAddr))
+              return 0;
+
+          } else
+            return FnBodyAddrOrErr.takeError();
+        } else if (auto Err = FnBodySym.takeError())
+          return std::move(Err);
+        else
+          llvm_unreachable("Function not emitted for partition");
+      }
+
+      LD.BaseLayerHandles.push_back(PartH);
+    } else
+      return PartHOrErr.takeError();
+
+    return CalledAddr;
+  }
+
+  template <typename PartitionT>
+  Expected<BaseLayerModuleHandleT>
+  emitPartition(LogicalDylib &LD,
+                typename LogicalDylib::SourceModuleHandle LMId,
+                const PartitionT &Part) {
+    Module &SrcM = LD.getSourceModule(LMId);
+
+    // Create the module.
+    std::string NewName = SrcM.getName();
+    for (auto *F : Part) {
+      NewName += ".";
+      NewName += F->getName();
+    }
+
+    auto M = llvm::make_unique<Module>(NewName, SrcM.getContext());
+    M->setDataLayout(SrcM.getDataLayout());
+    ValueToValueMapTy VMap;
+
+    auto Materializer = createLambdaMaterializer([&LD, &LMId,
+                                                  &M](Value *V) -> Value * {
+      if (auto *GV = dyn_cast<GlobalVariable>(V))
+        return cloneGlobalVariableDecl(*M, *GV);
+
+      if (auto *F = dyn_cast<Function>(V)) {
+        // Check whether we want to clone an available_externally definition.
+        if (!LD.getStubsToClone(LMId).count(F))
+          return cloneFunctionDecl(*M, *F);
+
+        // Ok - we want an inlinable stub. For that to work we need a decl
+        // for the stub pointer.
+        auto *StubPtr = createImplPointer(*F->getType(), *M,
+                                          F->getName() + "$stub_ptr", nullptr);
+        auto *ClonedF = cloneFunctionDecl(*M, *F);
+        makeStub(*ClonedF, *StubPtr);
+        ClonedF->setLinkage(GlobalValue::AvailableExternallyLinkage);
+        ClonedF->addFnAttr(Attribute::AlwaysInline);
+        return ClonedF;
+      }
+
+      if (auto *A = dyn_cast<GlobalAlias>(V)) {
+        auto *Ty = A->getValueType();
+        if (Ty->isFunctionTy())
+          return Function::Create(cast<FunctionType>(Ty),
+                                  GlobalValue::ExternalLinkage, A->getName(),
+                                  M.get());
+
+        return new GlobalVariable(*M, Ty, false, GlobalValue::ExternalLinkage,
+                                  nullptr, A->getName(), nullptr,
+                                  GlobalValue::NotThreadLocal,
+                                  A->getType()->getAddressSpace());
+      }
+
+      return nullptr;
+    });
+
+    // Create decls in the new module.
+    for (auto *F : Part)
+      cloneFunctionDecl(*M, *F, &VMap);
+
+    // Move the function bodies.
+    for (auto *F : Part)
+      moveFunctionBody(*F, VMap, &Materializer);
+
+    // Create memory manager and symbol resolver.
+    auto Resolver = createLambdaResolver(
+        [this, &LD](const std::string &Name) -> JITSymbol {
+          if (auto Sym = LD.findSymbol(BaseLayer, Name, false))
+            return Sym;
+          else if (auto Err = Sym.takeError())
+            return std::move(Err);
+          return LD.ExternalSymbolResolver->findSymbolInLogicalDylib(Name);
+        },
+        [&LD](const std::string &Name) {
+          return LD.ExternalSymbolResolver->findSymbol(Name);
+        });
+
+    return BaseLayer.addModule(std::move(M), std::move(Resolver));
+  }
+
   BaseLayerT &BaseLayer;
-  InsertCallbackAsmFtor InsertCallbackAsm;
-  ModuleSetInfoListT ModuleSetInfos;
+  PartitioningFtor Partition;
+  CompileCallbackMgrT &CompileCallbackMgr;
+  IndirectStubsManagerBuilderT CreateIndirectStubsManager;
+
+  LogicalDylibList LogicalDylibs;
+  bool CloneStubsIntoPartitions;
 };
-}
+
+} // end namespace orc
+
+} // end namespace llvm
 
 #endif // LLVM_EXECUTIONENGINE_ORC_COMPILEONDEMANDLAYER_H

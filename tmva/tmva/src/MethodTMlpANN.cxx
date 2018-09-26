@@ -24,34 +24,39 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-////////////////////////////////////////////////////////////////////////////////
+/*! \class TMVA::MethodTMlpANN
+\ingroup TMVA
 
-/* Begin_Html
+This is the TMVA TMultiLayerPerceptron interface class. It provides the
+training and testing the ROOT internal MLP class in the TMVA framework.
 
-  This is the TMVA TMultiLayerPerceptron interface class. It provides the
-  training and testing the ROOT internal MLP class in the TMVA framework.<be>
+Available learning methods:<br>
 
-  Available learning methods:<br>
-  <ul>
-  <li>Stochastic      </li>
-  <li>Batch           </li>
-  <li>SteepestDescent </li>
-  <li>RibierePolak    </li>
-  <li>FletcherReeves  </li>
-  <li>BFGS            </li>
-  </ul>
-End_Html */
-//
-//  See the TMultiLayerPerceptron class description
-//  for details on this ANN.
-//
-//_______________________________________________________________________
+  - Stochastic
+  - Batch
+  - SteepestDescent
+  - RibierePolak
+  - FletcherReeves
+  - BFGS
+
+See the TMultiLayerPerceptron class description
+for details on this ANN.
+*/
 
 #include "TMVA/MethodTMlpANN.h"
 
-#include <cstdlib>
-#include <iostream>
-#include <fstream>
+#include "TMVA/Config.h"
+#include "TMVA/Configurable.h"
+#include "TMVA/DataSet.h"
+#include "TMVA/DataSetInfo.h"
+#include "TMVA/IMethod.h"
+#include "TMVA/MethodBase.h"
+#include "TMVA/MsgLogger.h"
+#include "TMVA/Types.h"
+#include "TMVA/VariableInfo.h"
+
+#include "TMVA/ClassifierFactory.h"
+#include "TMVA/Tools.h"
 
 #include "Riostream.h"
 #include "TLeaf.h"
@@ -60,18 +65,10 @@ End_Html */
 #include "TROOT.h"
 #include "TMultiLayerPerceptron.h"
 
-#include "TMVA/Config.h"
-#include "TMVA/DataSet.h"
-#include "TMVA/DataSetInfo.h"
-#include "TMVA/MethodBase.h"
-#include "TMVA/MsgLogger.h"
-#include "TMVA/Types.h"
-#include "TMVA/VariableInfo.h"
+#include <cstdlib>
+#include <iostream>
+#include <fstream>
 
-#include "TMVA/ClassifierFactory.h"
-#ifndef ROOT_TMVA_Tools
-#include "TMVA/Tools.h"
-#endif
 
 using std::atoi;
 
@@ -86,17 +83,16 @@ const Bool_t EnforceNormalization__=kTRUE;
 
 REGISTER_METHOD(TMlpANN)
 
-ClassImp(TMVA::MethodTMlpANN)
+ClassImp(TMVA::MethodTMlpANN);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// standard constructor
 
-TMVA::MethodTMlpANN::MethodTMlpANN( const TString& jobName,
-                                    const TString& methodTitle,
-                                    DataSetInfo& theData,
-                                    const TString& theOption,
-                                    TDirectory* theTargetDir) :
-   TMVA::MethodBase( jobName, Types::kTMlpANN, methodTitle, theData, theOption, theTargetDir ),
+   TMVA::MethodTMlpANN::MethodTMlpANN( const TString& jobName,
+                                       const TString& methodTitle,
+                                       DataSetInfo& theData,
+                                       const TString& theOption) :
+   TMVA::MethodBase( jobName, Types::kTMlpANN, methodTitle, theData, theOption),
    fMLP(0),
    fLocalTrainingTree(0),
    fNcycles(100),
@@ -109,9 +105,8 @@ TMVA::MethodTMlpANN::MethodTMlpANN( const TString& jobName,
 /// constructor from weight file
 
 TMVA::MethodTMlpANN::MethodTMlpANN( DataSetInfo& theData,
-                                    const TString& theWeightFile,
-                                    TDirectory* theTargetDir ) :
-   TMVA::MethodBase( Types::kTMlpANN, theData, theWeightFile, theTargetDir ),
+                                    const TString& theWeightFile) :
+   TMVA::MethodBase( Types::kTMlpANN, theData, theWeightFile),
    fMLP(0),
    fLocalTrainingTree(0),
    fNcycles(100),
@@ -173,7 +168,7 @@ void TMVA::MethodTMlpANN::CreateMLPOptions( TString layerSpec )
    std::vector<TString>::iterator itrVar    = (*fInputVars).begin();
    std::vector<TString>::iterator itrVarEnd = (*fInputVars).end();
    fMLPBuildOptions = "";
-   for (; itrVar != itrVarEnd; itrVar++) {
+   for (; itrVar != itrVarEnd; ++itrVar) {
       if (EnforceNormalization__) fMLPBuildOptions += "@";
       TString myVar = *itrVar; ;
       fMLPBuildOptions += myVar;
@@ -191,15 +186,18 @@ void TMVA::MethodTMlpANN::CreateMLPOptions( TString layerSpec )
 
 ////////////////////////////////////////////////////////////////////////////////
 /// define the options (their key words) that can be set in the option string
+///
 /// know options:
-/// NCycles       <integer>    Number of training cycles (too many cycles could overtrain the network)
-/// HiddenLayers  <string>     Layout of the hidden layers (nodes per layer)
-///   * specifiactions for each hidden layer are separated by commata
-///   * for each layer the number of nodes can be either absolut (simply a number)
-///        or relative to the number of input nodes to the neural net (N)
-///   * there is always a single node in the output layer
+///
+///  - NCycles       <integer>    Number of training cycles (too many cycles could overtrain the network)
+///  - HiddenLayers  <string>     Layout of the hidden layers (nodes per layer)
+///     * specifications for each hidden layer are separated by comma
+///     * for each layer the number of nodes can be either absolut (simply a number)
+///          or relative to the number of input nodes to the neural net (N)
+///     * there is always a single node in the output layer
+///
 ///   example: a net with 6 input nodes and "Hiddenlayers=N-1,N-2" has 6,5,4,1 nodes in the
-///   layers 1,2,3,4, repectively
+///   layers 1,2,3,4, respectively
 
 void TMVA::MethodTMlpANN::DeclareOptions()
 {
@@ -256,12 +254,12 @@ Double_t TMVA::MethodTMlpANN::GetMvaValue( Double_t* err, Double_t* errUpper )
 /// performs TMlpANN training
 /// available learning methods:
 ///
-///       TMultiLayerPerceptron::kStochastic
-///       TMultiLayerPerceptron::kBatch
-///       TMultiLayerPerceptron::kSteepestDescent
-///       TMultiLayerPerceptron::kRibierePolak
-///       TMultiLayerPerceptron::kFletcherReeves
-///       TMultiLayerPerceptron::kBFGS
+///  - TMultiLayerPerceptron::kStochastic
+///  - TMultiLayerPerceptron::kBatch
+///  - TMultiLayerPerceptron::kSteepestDescent
+///  - TMultiLayerPerceptron::kRibierePolak
+///  - TMultiLayerPerceptron::kFletcherReeves
+///  - TMultiLayerPerceptron::kBFGS
 ///
 /// TMultiLayerPerceptron wants test and training tree at once
 /// so merge the training and testing trees from the MVA factory first:
@@ -308,7 +306,7 @@ void TMVA::MethodTMlpANN::Train( void )
    TString testList  = TString("!(") + trainList + ")";
 
    // print the requirements
-   Log() << kINFO << "Requirement for training   events: \"" << trainList << "\"" << Endl;
+   Log() << kHEADER << "Requirement for training   events: \"" << trainList << "\"" << Endl;
    Log() << kINFO << "Requirement for validation events: \"" << testList << "\"" << Endl;
 
    // localTrainingTree->Print();
@@ -341,14 +339,13 @@ void TMVA::MethodTMlpANN::Train( void )
    fMLP->SetLearningMethod( learningMethod );
 
    // train NN
-   fMLP->Train(fNcycles, "text,update=50" );
+   fMLP->Train(fNcycles, "" ); //"text,update=50" );
 
    // write weights to File;
    // this is not nice, but fMLP gets deleted at the end of Train()
    delete localTrainingTree;
    delete [] vArr;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// write weights to xml file

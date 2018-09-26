@@ -18,10 +18,12 @@
 
 #include "Unix.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Config/config.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
-#include <llvm/Config/config.h>
 #if HAVE_SYS_STAT_H
 #include <sys/stat.h>
 #endif
@@ -38,9 +40,6 @@
 #include <unistd.h>
 #endif
 #ifdef HAVE_POSIX_SPAWN
-#ifdef __sun__
-#define  _RESTRICT_KYWD
-#endif
 #include <spawn.h>
 
 #if defined(__APPLE__)
@@ -91,7 +90,7 @@ ErrorOr<std::string> sys::findProgramByName(StringRef Name,
     if (sys::fs::can_execute(FilePath.c_str()))
       return std::string(FilePath.str()); // Found the executable!
   }
-  return std::errc::no_such_file_or_directory;
+  return errc::no_such_file_or_directory;
 }
 
 static bool RedirectIO(const StringRef *Path, int FD, std::string* ErrMsg) {
@@ -160,16 +159,6 @@ static void SetMemoryLimits (unsigned size)
   getrlimit (RLIMIT_RSS, &r);
   r.rlim_cur = limit;
   setrlimit (RLIMIT_RSS, &r);
-#endif
-#ifdef RLIMIT_AS  // e.g. NetBSD doesn't have it.
-  // Don't set virtual memory limit if built with any Sanitizer. They need 80Tb
-  // of virtual memory for shadow memory mapping.
-#if !LLVM_MEMORY_SANITIZER_BUILD && !LLVM_ADDRESS_SANITIZER_BUILD
-  // Virtual memory.
-  getrlimit (RLIMIT_AS, &r);
-  r.rlim_cur = limit;
-  setrlimit (RLIMIT_AS, &r);
-#endif
 #endif
 #endif
 }
@@ -321,7 +310,6 @@ namespace llvm {
 
 ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
                       bool WaitUntilTerminates, std::string *ErrMsg) {
-#ifdef HAVE_SYS_WAIT_H
   struct sigaction Act, Old;
   assert(PI.Pid && "invalid pid to wait on, process not started?");
 
@@ -415,12 +403,6 @@ ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
     // signal during execution as opposed to failing to execute.
     WaitResult.ReturnCode = -2;
   }
-#else
-  if (ErrMsg)
-    *ErrMsg = "Program::Wait is not implemented on this platform yet!";
-  ProcessInfo WaitResult;
-  WaitResult.ReturnCode = -2;
-#endif
   return WaitResult;
 }
 
@@ -446,12 +428,12 @@ llvm::sys::writeFileWithEncoding(StringRef FileName, StringRef Contents,
   OS << Contents;
 
   if (OS.has_error())
-    return std::make_error_code(std::errc::io_error);
+    return make_error_code(errc::io_error);
 
   return EC;
 }
 
-bool llvm::sys::argumentsFitWithinSystemLimits(ArrayRef<const char*> Args) {
+bool llvm::sys::commandLineFitsWithinSystemLimits(StringRef Program, ArrayRef<const char*> Args) {
   static long ArgMax = sysconf(_SC_ARG_MAX);
 
   // System says no practical limit.
@@ -461,14 +443,25 @@ bool llvm::sys::argumentsFitWithinSystemLimits(ArrayRef<const char*> Args) {
   // Conservatively account for space required by environment variables.
   long HalfArgMax = ArgMax / 2;
 
-  size_t ArgLength = 0;
+  size_t ArgLength = Program.size() + 1;
   for (ArrayRef<const char*>::iterator I = Args.begin(), E = Args.end();
        I != E; ++I) {
-    ArgLength += strlen(*I) + 1;
+    size_t length = strlen(*I);
+
+    // Ensure that we do not exceed the MAX_ARG_STRLEN constant on Linux, which
+    // does not have a constant unlike what the man pages would have you
+    // believe. Since this limit is pretty high, perform the check
+    // unconditionally rather than trying to be aggressive and limiting it to
+    // Linux only.
+    if (length >= (32 * 4096))
+      return false;
+
+    ArgLength += length + 1;
     if (ArgLength > size_t(HalfArgMax)) {
       return false;
     }
   }
+
   return true;
 }
 }

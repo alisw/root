@@ -38,39 +38,18 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include <vector>
-#include <stdlib.h>
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TTree
 #include "TTree.h"
-#endif
-#ifndef ROOT_TCut
 #include "TCut.h"
-#endif
-#ifndef ROOT_TTreeFormula
 #include "TTreeFormula.h"
-#endif
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
-#ifndef ROOT_TPrincipal
 #include "TPrincipal.h"
-#endif
-#ifndef ROOT_TRandom3
 #include "TRandom3.h"
-#endif
 
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
-#ifndef ROOT_TMVA_VariableInfo
 #include "TMVA/VariableInfo.h"
-#endif
-#ifndef ROOT_TMVA_Event
 #include "TMVA/Event.h"
-#endif
 
 namespace TMVA {
 
@@ -84,42 +63,28 @@ namespace TMVA {
 
    // =============== functors =======================
 
-
-   class RandomGenerator {
-   public:
-      RandomGenerator( UInt_t seed ){
-         fRandom.SetSeed( seed );
-      }
-      UInt_t operator() ( UInt_t n ) {
-         return fRandom.Integer(n);
-      }
-   private:
-      TRandom3 fRandom; // random generator
-   };
-
-
    // delete-functor (to be used in e.g. for_each algorithm)
    template<class T>
-   struct DeleteFunctor_t
-   {
-      DeleteFunctor_t& operator()(const T* p) {
-         delete p;
-         return *this;
-      }
-   };
+      struct DeleteFunctor_t
+      {
+         DeleteFunctor_t& operator()(const T* p) {
+            delete p;
+            return *this;
+         }
+      };
 
    template<class T>
-   DeleteFunctor_t<const T> DeleteFunctor()
-   {
-      return DeleteFunctor_t<const T>();
-   }
+      DeleteFunctor_t<const T> DeleteFunctor()
+      {
+         return DeleteFunctor_t<const T>();
+      }
 
 
    template< typename T >
-   class Increment {
+      class Increment {
       T value;
    public:
-      Increment( T start ) : value( start ){ }
+   Increment( T start ) : value( start ){ }
       T operator()() {
          return value++;
       }
@@ -128,48 +93,48 @@ namespace TMVA {
 
 
    template <typename F>
-   class null_t
-   {
-   private:
-      // returns argF
-   public:
-      typedef F argument_type;
-      F operator()(const F& argF) const 
+      class null_t
       {
-         return argF;
-      }
-   };
+      private:
+         // returns argF
+      public:
+         typedef F argument_type;
+         F operator()(const F& argF) const 
+         {
+            return argF;
+         }
+      };
 
    template <typename F>
-   inline null_t<F> null() {
+      inline null_t<F> null() {
       return null_t<F>();
    }
 
 
 
    template <typename F, typename G, typename H>
-   class compose_binary_t : public std::binary_function<typename G::argument_type,
-                                                        typename H::argument_type,
-                                                        typename F::result_type>
-   {
-   private:
-      const F& f;    // f(g(argG),h(argH))
-      const G& g;
-      const H& h;
-   public:
-      compose_binary_t(const F& _f, const G& _g, const H& _h) : f(_f), g(_g), h(_h) 
-      {
-      }
+      class compose_binary_t : public std::binary_function<typename G::argument_type,
+      typename H::argument_type,
+      typename F::result_type>
+         {
+         private:
+            const F& f;    // f(g(argG),h(argH))
+            const G& g;
+            const H& h;
+         public:
+         compose_binary_t(const F& _f, const G& _g, const H& _h) : f(_f), g(_g), h(_h) 
+            {
+            }
 
-      typename F::result_type operator()(const typename G::argument_type& argG,
-                                         const typename H::argument_type& argH) const 
-      {
-         return f(g(argG),h(argH));
-      }
-   };
+            typename F::result_type operator()(const typename G::argument_type& argG,
+                                               const typename H::argument_type& argH) const 
+               {
+                  return f(g(argG),h(argH));
+               }
+         };
 
    template <typename F, typename G, typename H>
-   inline compose_binary_t<F,G,H> compose_binary(const F& _f, const G& _g, const H& _h) {
+      inline compose_binary_t<F,G,H> compose_binary(const F& _f, const G& _g, const H& _h) {
       return compose_binary_t<F,G,H>(_f,_g,_h);
    }
 
@@ -177,25 +142,25 @@ namespace TMVA {
 
 
    template <typename F, typename G>
-   class compose_unary_t : public std::unary_function<typename G::argument_type,
-                                                      typename F::result_type>
-   {
-   private:
-      const F& f;    // f(g(argG))
-      const G& g;
-   public:
-      compose_unary_t(const F& _f, const G& _g) : f(_f), g(_g) 
-      {
-      }
+      class compose_unary_t : public std::unary_function<typename G::argument_type,
+      typename F::result_type>
+         {
+         private:
+            const F& f;    // f(g(argG))
+            const G& g;
+         public:
+         compose_unary_t(const F& _f, const G& _g) : f(_f), g(_g) 
+            {
+            }
 
-      typename F::result_type operator()(const typename G::argument_type&  argG) const 
-      {
-         return f(g(argG));
-      }
-   };
+            typename F::result_type operator()(const typename G::argument_type&  argG) const 
+               {
+                  return f(g(argG));
+               }
+         };
 
    template <typename F, typename G>
-   inline compose_unary_t<F,G> compose_unary(const F& _f, const G& _g) {
+      inline compose_unary_t<F,G> compose_unary(const F& _f, const G& _g) {
       return compose_unary_t<F,G>(_f,_g);
    }
 
@@ -205,7 +170,7 @@ namespace TMVA {
    // =========================================================
 
 
-   class DataSetFactory {
+   class DataSetFactory:public TObject {
 
       typedef std::vector<Event* >                             EventVector;
       typedef std::vector< EventVector >                        EventVectorOfClasses;
@@ -219,16 +184,18 @@ namespace TMVA {
       public:
          Int_t    nTrainingEventsRequested;
          Int_t    nTestingEventsRequested;
+         Float_t  TrainTestSplitRequested;
          Int_t    nInitialEvents;
          Int_t    nEvBeforeCut;
          Int_t    nEvAfterCut;
          Float_t  nWeEvBeforeCut;
          Float_t  nWeEvAfterCut;
          Double_t nNegWeights;
-         Float_t* varAvLength;
-         EventStats():
-            nTrainingEventsRequested(0),
+         Float_t* varAvLength;//->
+      EventStats():
+         nTrainingEventsRequested(0),
             nTestingEventsRequested(0),
+            TrainTestSplitRequested(0),
             nInitialEvents(0),
             nEvBeforeCut(0),
             nEvAfterCut(0),
@@ -236,7 +203,7 @@ namespace TMVA {
             nWeEvAfterCut(0),
             nNegWeights(0),
             varAvLength(0)
-         {}
+               {}
          ~EventStats() { delete[] varAvLength; }
          Float_t cutScaling() const { return Float_t(nEvAfterCut)/nEvBeforeCut; }
       };
@@ -246,22 +213,13 @@ namespace TMVA {
 
    public:
 
-
-
-      // singleton class
-      static DataSetFactory& Instance() { if (!fgInstance) fgInstance = new DataSetFactory(); return *fgInstance; }
-      static void destroyInstance() { if (fgInstance) { delete fgInstance; fgInstance=0; } }
-
-      DataSet* CreateDataSet( DataSetInfo &, DataInputHandler& );
-
-      static DataSetFactory* NewInstance() { return new DataSetFactory(); }
-      static void destroyNewInstance(DataSetFactory* iOther) { delete iOther;}
-   protected:
-
       ~DataSetFactory();
 
       DataSetFactory();
-      static DataSetFactory *fgInstance;
+
+      DataSet* CreateDataSet( DataSetInfo &, DataInputHandler& );
+   protected:
+     
 
       DataSet*  BuildInitialDataSet( DataSetInfo&, TMVA::DataInputHandler& );
       DataSet*  BuildDynamicDataSet( DataSetInfo& );
@@ -288,7 +246,7 @@ namespace TMVA {
       void      InitOptions      ( DataSetInfo& dsi,
                                    EvtStatsPerClass& eventsmap,
                                    TString& normMode, UInt_t& splitSeed,
-                                   TString& splitMode, TString& mixMode );
+                                   TString& splitMode, TString& mixMode);
 
 
       // ------------------------
@@ -310,24 +268,29 @@ namespace TMVA {
       // data members
 
       // verbosity
-      Bool_t                     fVerbose;           //! Verbosity
-      TString                    fVerboseLevel;      //! VerboseLevel
+      Bool_t                     fVerbose;           // Verbosity
+      TString                    fVerboseLevel;      // VerboseLevel
 
-      Bool_t                     fScaleWithPreselEff; //! how to deal with requested #events in connection with preselection cuts 
+      // Printing
+      Bool_t fCorrelations; // Whether to print correlations or not
+
+      Bool_t                     fScaleWithPreselEff; // how to deal with requested #events in connection with preselection cuts 
 
       // the event
-      TTree*                     fCurrentTree;       //! the tree, events are currently read from
-      UInt_t                     fCurrentEvtIdx;     //! the current event (to avoid reading of the same event)
+      TTree*                     fCurrentTree;       // the tree, events are currently read from
+      UInt_t                     fCurrentEvtIdx;     // the current event (to avoid reading of the same event)
 
       // the formulas for reading the original tree
-      std::vector<TTreeFormula*> fInputFormulas;   //! input variables
-      std::vector<TTreeFormula*> fTargetFormulas;  //! targets
-      std::vector<TTreeFormula*> fCutFormulas;     //! cuts
-      std::vector<TTreeFormula*> fWeightFormula;   //! weights
-      std::vector<TTreeFormula*> fSpectatorFormulas; //! spectators
+      std::vector<TTreeFormula*> fInputFormulas;   // input variables
+      std::vector<TTreeFormula*> fTargetFormulas;  // targets
+      std::vector<TTreeFormula*> fCutFormulas;     // cuts
+      std::vector<TTreeFormula*> fWeightFormula;   // weights
+      std::vector<TTreeFormula*> fSpectatorFormulas; // spectators
 
       MsgLogger*                 fLogger;          //! message logger
       MsgLogger& Log() const { return *fLogger; }
+   public:
+      ClassDef(DataSetFactory, 2);
    };
 }
 

@@ -30,110 +30,98 @@
 #include "Fit/DataRange.h"
 #include "Math/MinimizerOptions.h"
 
-ClassImp(TGraph2D)
+ClassImp(TGraph2D);
 
 
 /** \class TGraph2D
-    \ingroup Hist 
+    \ingroup Hist
 Graphics object made of three arrays X, Y and Z with the same number of points each.
 
 This class has different constructors:
 - With an array's dimension and three arrays x, y, and z:
-<pre>
-   TGraph2D *g = new TGraph2D(n, x, y, z);
-</pre>
+~~~ {.cpp}
+     TGraph2D *g = new TGraph2D(n, x, y, z);
+~~~
    x, y, z arrays can be doubles, floats, or ints.
 - With an array's dimension only:
-<pre>
-   TGraph2D *g = new TGraph2D(n);
-</pre>
-   The internal arrays are then filled with <tt>SetPoint()</tt>. The following line
-   fills the internal arrays at the position <tt>i</tt> with the values
-   <tt>x</tt>, <tt>y</tt>, <tt>z</tt>.
-<pre>
-   g->SetPoint(i, x, y, z);
-</pre>
+~~~ {.cpp}
+     TGraph2D *g = new TGraph2D(n);
+~~~
+   The internal arrays are then filled with `SetPoint()`. The following line
+   fills the internal arrays at the position `i` with the values
+   `x`, `y`, `z`.
+~~~ {.cpp}
+     g->SetPoint(i, x, y, z);
+~~~
 - Without parameters:
-<pre>
-   TGraph2D *g = new TGraph2D();
-</pre>
-   again <tt>SetPoint()</tt> must be used to fill the internal arrays.
+~~~ {.cpp}
+     TGraph2D *g = new TGraph2D();
+~~~
+   again `SetPoint()` must be used to fill the internal arrays.
 -  From a file:
-<pre>
-   TGraph2D *g = new TGraph2D("graph.dat");
-</pre>
+~~~ {.cpp}
+     TGraph2D *g = new TGraph2D("graph.dat");
+~~~
    Arrays are read from the ASCII file "graph.dat" according to a specifies
-   format. The default format is <tt>%lg %lg %lg</tt>
+   format. The default format is `%%lg %%lg %%lg`
 
-Note that in any of these three cases, <tt>SetPoint()</tt> can be used to change a data
-point or add a new one. If the data point index (<tt>i</tt>) is greater than the
+Note that in any of these three cases, `SetPoint()` can be used to change a data
+point or add a new one. If the data point index (`i`) is greater than the
 current size of the internal arrays, they are automatically extended.
-<p>
+
+Like TGraph the TGraph2D constructors do not have the TGraph2D title and name as parameters.
+A TGraph2D has the default title and name "Graph2D". To change the default title
+and name `SetTitle` and `SetName` should be called on the TGraph2D after its creation.
+
 Specific drawing options can be used to paint a TGraph2D:
 
-<table border=0>
 
-<tr><th valign=top>"TRI"</th><td>
-The Delaunay triangles are drawn using filled area.
-An hidden surface drawing technique is used. The surface is
-painted with the current fill area color. The edges of each
-triangles are painted with the current line color.
-</td></tr>
+| Option   | Description                                                       |
+|----------|-------------------------------------------------------------------|
+| "TRI"    | The Delaunay triangles are drawn using filled area. An hidden surface drawing technique is used. The surface is painted with the current fill area color. The edges of each triangles are painted with the current line color. |
+| "TRIW"   | The Delaunay triangles are drawn as wire frame. |
+| "TRI1"   | The Delaunay triangles are painted with color levels. The edges of each triangles are painted with the current line color. |
+| "TRI2"   | The Delaunay triangles are painted with color levels. |
+| "P"      | Draw a marker at each vertex. |
+| "P0"     | Draw a circle at each vertex. Each circle background is white. |
+| "PCOL"   | Draw a marker at each vertex. The color of each marker is defined according to its Z position. |
+| "LINE"   | Draw a 3D polyline. |
 
-<tr><th valign=top>"TRIW</th><td>
-The Delaunay triangles are drawn as wire frame
-</td></tr>
-
-<tr><th valign=top>"TRI1</th><td>
-The Delaunay triangles are painted with color levels. The edges
-of each triangles are painted with the current line color.
-</td></tr>
-
-<tr><th valign=top>"TRI2</th><td>
-the Delaunay triangles are painted with color levels.
-</td></tr>
-
-<tr><th valign=top>"P"  </th><td>
-Draw a marker at each vertex
-</td></tr>
-
-<tr><th valign=top>"P0" </th><td>
-Draw a circle at each vertex. Each circle background is white.
-</td></tr>
-
-<tr><th valign=top>"PCOL" </th><td>
-Draw a marker at each vertex. The color of each marker is
-defined according to its Z position.
-</td></tr>
-
-<tr><th valign=top>"LINE" </th><td>
-Draw a 3D polyline.
-</td></tr>
-
-</table>
-<p>
 A TGraph2D can be also drawn with any options valid to draw a 2D histogram
-(like <tt>COL</tt>, <tt>SURF</tt>, <tt>LEGO</tt>, <tt>CONT</tt> etc..).
-<p>
+(like `COL`, `SURF`, `LEGO`, `CONT` etc..).
+
 When a TGraph2D is drawn with one of the 2D histogram drawing option,
 an intermediate 2D histogram is filled using the Delaunay triangles
- to interpolate the data set. The 2D histogram has equidistant bins along the X
- and Y directions. The number of bins along each direction can be change using
- <tt>SetNpx()</tt> and <tt>SetNpy()</tt>. Each bin is filled with the Z
- value found via a linear interpolation on the plane defined by the triangle above
- the (X,Y) coordinates of the bin center.
+to interpolate the data set. The 2D histogram has equidistant bins along the X
+and Y directions. The number of bins along each direction can be change using
+`SetNpx()` and `SetNpy()`. Each bin is filled with the Z
+value found via a linear interpolation on the plane defined by the triangle above
+the (X,Y) coordinates of the bin center.
 
-<p>
 The existing (X,Y,Z) points can be randomly scattered.
 The Delaunay triangles are build in the (X,Y) plane. These 2D triangles are then
 used to define flat planes in (X,Y,Z) over which the interpolation is done to fill
 the 2D histogram. The 3D triangles int takes build a 3D surface in
 the form of tessellating triangles at various angles. The triangles found can be
 drawn in 3D with one of the TGraph2D specific drawing options.
-<p>
+
 The histogram generated by the Delaunay interpolation can be accessed using the
-<tt>GetHistogram()</tt> method.
-<p>
+`GetHistogram()` method.
+
+The axis settings (title, ranges etc ...) can be changed accessing the axis via
+the GetXaxis GetYaxis and GetZaxis methods. They access the histogram axis created
+at drawing time only. Therefore they should called after the TGraph2D is drawn:
+
+~~~ {.cpp}
+     TGraph2D *g = new TGraph2D();
+
+     [...]
+
+     g->Draw("tri1");
+     gPad->Update();
+     g->GetXaxis()->SetTitle("X axis title");
+~~~
+
 Example:
 
 Begin_Macro(source)
@@ -142,6 +130,7 @@ Begin_Macro(source)
    Double_t x, y, z, P = 6.;
    Int_t np = 200;
    TGraph2D *dt = new TGraph2D();
+   dt->SetTitle("Graph title; X axis title; Y axis title; Z axis title");
    TRandom *r = new TRandom();
    for (Int_t N=0; N<np; N++) {
       x = 2*P*(r->Rndm(N))-P;
@@ -195,7 +184,7 @@ Begin_Macro(source)
 }
 End_Macro
 
-<h3>Definition of Delaunay triangulation (After B. Delaunay)</h3>
+### Definition of Delaunay triangulation (After B. Delaunay)
 For a set S of points in the Euclidean plane, the unique triangulation DT(S)
 of S such that no point in S is inside the circumcircle of any triangle in
 DT(S). DT(S) is the dual of the Voronoi diagram of S.
@@ -205,10 +194,9 @@ contains exactly one point and every point in a given polygon is closer to its
 central point than to any other. A Voronoi diagram is sometimes also known as
 a Dirichlet tessellation.
 
-\image html tgraph2d_delaunay.gif
+\image html tgraph2d_delaunay.png
 
-<br>
-<a href="http://www.cs.cornell.edu/Info/People/chew/Delaunay.html">This applet</a>
+[This applet](http://www.cs.cornell.edu/Info/People/chew/Delaunay.html)
 gives a nice practical view of Delaunay triangulation and Voronoi diagram.
 */
 
@@ -226,7 +214,7 @@ TGraph2D::TGraph2D()
    fNpy       = 40;
    fDirectory = 0;
    fHistogram = 0;
-   fDelaunay = nullptr; 
+   fDelaunay = nullptr;
    fMaximum   = -1111;
    fMinimum   = -1111;
    fX         = 0;
@@ -386,7 +374,7 @@ TGraph2D::TGraph2D(Int_t n)
 /// you can avoid using %*s to bypass this delimiter by explicitly specify the "option" argument,
 /// e.g. option=" \t,;" for columns of figures separated by any of these characters (' ', '\t', ',', ';')
 /// used once (e.g. "1;1") or in a combined way (" 1;,;;  1").
-/// Note in that case, the instanciation is about 2 times slower.
+/// Note in that case, the instantiation is about 2 times slower.
 
 TGraph2D::TGraph2D(const char *filename, const char *format, Option_t *option)
    : TNamed("Graph2D", filename), TAttLine(1, 1, 1), TAttFill(0, 1001),
@@ -514,12 +502,10 @@ TGraph2D::TGraph2D(const TGraph2D &g)
 {
    fFunctions = new TList();   // do not copy the functions
 
-
    // use operator=
    (*this) = g;
 
-
-   // append Tgraph to gdirectory
+   // append TGraph2D to gdirectory
    if (TH1::AddDirectoryStatus()) {
       fDirectory = gDirectory;
       if (fDirectory) {
@@ -556,7 +542,7 @@ TGraph2D& TGraph2D::operator=(const TGraph2D &g)
       delete fHistogram;
       fHistogram = 0;
    }
-   // copy everyting except the function list
+   // copy everything except the function list
    fNpoints = g.fNpoints;
    fNpx = g.fNpx;
    fNpy = g.fNpy;
@@ -694,20 +680,20 @@ Int_t TGraph2D::DistancetoPrimitive(Int_t px, Int_t py)
 ////////////////////////////////////////////////////////////////////////////////
 /// Specific drawing options can be used to paint a TGraph2D:
 ///
-///   "TRI"  : The Delaunay triangles are drawn using filled area.
-///            An hidden surface drawing technique is used. The surface is
-///            painted with the current fill area color. The edges of each
-///            triangles are painted with the current line color.
-///   "TRIW" : The Delaunay triangles are drawn as wire frame
-///   "TRI1" : The Delaunay triangles are painted with color levels. The edges
-///            of each triangles are painted with the current line color.
-///   "TRI2" : the Delaunay triangles are painted with color levels.
-///   "P"    : Draw a marker at each vertex
-///   "P0"   : Draw a circle at each vertex. Each circle background is white.
-///   "PCOL" : Draw a marker at each vertex. The color of each marker is
-///            defined according to its Z position.
-///   "CONT" : Draw contours
-///   "LINE" : Draw a 3D polyline
+///  - "TRI"  : The Delaunay triangles are drawn using filled area.
+///             An hidden surface drawing technique is used. The surface is
+///             painted with the current fill area color. The edges of each
+///             triangles are painted with the current line color.
+///  - "TRIW" : The Delaunay triangles are drawn as wire frame
+///  - "TRI1" : The Delaunay triangles are painted with color levels. The edges
+///             of each triangles are painted with the current line color.
+///  - "TRI2" : the Delaunay triangles are painted with color levels.
+///  - "P"    : Draw a marker at each vertex
+///  - "P0"   : Draw a circle at each vertex. Each circle background is white.
+///  - "PCOL" : Draw a marker at each vertex. The color of each marker is
+///             defined according to its Z position.
+///  - "CONT" : Draw contours
+///  - "LINE" : Draw a 3D polyline
 ///
 /// A TGraph2D can be also drawn with ANY options valid to draw a 2D histogram.
 ///
@@ -901,7 +887,7 @@ TFitResultPtr TGraph2D::Fit(const char *fname, Option_t *option, Option_t *)
 ///  mode = pcev  (default = 0111)
 ///    v = 1;  print name/values of parameters
 ///    e = 1;  print errors (if e=1, v must be 1)
-///    c = 1;  print Chisquare/Number of degress of freedom
+///    c = 1;  print Chisquare/Number of degrees of freedom
 ///    p = 1;  print Probability
 ///
 ///  For example: gStyle->SetOptFit(1011);
@@ -1046,7 +1032,7 @@ Double_t TGraph2D::GetErrorZ(Int_t) const
 /// drawn with markers only. In that particular case there is no need to
 /// find the Delaunay triangles.
 /// By default use the new interpolation routine based on Triangles
-/// If the option "old" the old interpolation is used 
+/// If the option "old" the old interpolation is used
 
 TH2D *TGraph2D::GetHistogram(Option_t *option)
 {
@@ -1065,7 +1051,7 @@ TH2D *TGraph2D::GetHistogram(Option_t *option)
    TString opt = option;
    opt.ToLower();
    Bool_t empty = opt.Contains("empty");
-   Bool_t oldInterp = opt.Contains("old"); 
+   Bool_t oldInterp = opt.Contains("old");
 
    if (fHistogram) {
       if (!empty && fHistogram->GetEntries() == 0) {
@@ -1076,11 +1062,11 @@ TH2D *TGraph2D::GetHistogram(Option_t *option)
       } else if (fHistogram->GetEntries() == 0)
       {;      }
          // check case if interpolation type has changed
-      else if ( (TestBit(kOldInterpolation) && !oldInterp) || ( !TestBit(kOldInterpolation) && oldInterp ) ) { 
+      else if ( (TestBit(kOldInterpolation) && !oldInterp) || ( !TestBit(kOldInterpolation) && oldInterp ) ) {
          delete fHistogram;
          fHistogram = 0;
       }
-      // normal case return existing histogram 
+      // normal case return existing histogram
       else {
          return fHistogram;
       }
@@ -1100,22 +1086,22 @@ TH2D *TGraph2D::GetHistogram(Option_t *option)
       hymin = ymin - fMargin * (ymax - ymin);
       hxmax = xmax + fMargin * (xmax - xmin);
       hymax = ymax + fMargin * (ymax - ymin);
-      if (hxmin==hxmax) {
-         if (hxmin==0) {
+      if (TMath::Abs(hxmax - hxmin) < 0.0001) {
+         if (TMath::Abs(hxmin) < 0.0001) {
             hxmin = -0.01;
             hxmax =  0.01;
          } else {
-            hxmin = hxmin-hxmin*0.01;
-            hxmax = hxmax+hxmax*0.01;
+            hxmin = hxmin-TMath::Abs(hxmin)*0.01;
+            hxmax = hxmax+TMath::Abs(hxmax)*0.01;
          }
       }
-      if (hymin==hymax) {
-         if (hxmin==0) {
+      if (TMath::Abs(hymax - hymin) < 0.0001) {
+         if (TMath::Abs(hymin) < 0.0001) {
             hymin = -0.01;
             hymax =  0.01;
          } else {
-            hymin = hymin-hymin*0.01;
-            hymax = hymax+hymax*0.01;
+            hymin = hymin-TMath::Abs(hymin)*0.01;
+            hymax = hymax+TMath::Abs(hymax)*0.01;
          }
       }
       if (fHistogram) {
@@ -1137,19 +1123,19 @@ TH2D *TGraph2D::GetHistogram(Option_t *option)
 
    // Add a TGraphDelaunay in the list of the fHistogram's functions
 
-   if (oldInterp) {      
+   if (oldInterp) {
       TGraphDelaunay *dt = new TGraphDelaunay(this);
       dt->SetMaxIter(fMaxIter);
       dt->SetMarginBinsContent(fZout);
       fDelaunay = dt;
-      SetBit(kOldInterpolation); 
+      SetBit(kOldInterpolation);
    }
    else {
       // new interpolation based on ROOT::Math::Delaunay
       TGraphDelaunay2D *dt = new TGraphDelaunay2D(this);
       dt->SetMarginBinsContent(fZout);
-      fDelaunay = dt; 
-      ResetBit(kOldInterpolation); 
+      fDelaunay = dt;
+      ResetBit(kOldInterpolation);
    }
    TList *hl = fHistogram->GetListOfFunctions();
    hl->Add(fDelaunay);
@@ -1188,7 +1174,7 @@ TH2D *TGraph2D::GetHistogram(Option_t *option)
       for (Int_t iy = 1; iy <= fNpy; iy++) {
          y  = hymin + (iy - 0.5) * dy;
          // do interpolation
-         if (oldInterp) 
+         if (oldInterp)
             z  = ((TGraphDelaunay*)fDelaunay)->ComputeZ(x, y);
          else
             z  = ((TGraphDelaunay2D*)fDelaunay)->ComputeZ(x, y);
@@ -1197,7 +1183,7 @@ TH2D *TGraph2D::GetHistogram(Option_t *option)
       }
    }
 
-      
+
    if (fMinimum != -1111) fHistogram->SetMinimum(fMinimum);
    if (fMaximum != -1111) fHistogram->SetMaximum(fMaximum);
 
@@ -1270,6 +1256,19 @@ Double_t TGraph2D::GetZmin() const
    return v;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Get x, y and z values for point number i.
+/// The function returns -1 in case of an invalid request or the point number otherwise
+
+Int_t TGraph2D::GetPoint(Int_t i, Double_t &x, Double_t &y, Double_t &z) const
+{
+   if (i < 0 || i >= fNpoints) return -1;
+   if (!fX || !fY || !fZ) return -1;
+   x = fX[i];
+   y = fY[i];
+   z = fZ[i];
+   return i;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Finds the z value at the position (x,y) thanks to
@@ -1283,19 +1282,19 @@ Double_t TGraph2D::Interpolate(Double_t x, Double_t y)
    }
 
    if (!fHistogram) GetHistogram("empty");
-   if (!fDelaunay) { 
+   if (!fDelaunay) {
       TList *hl = fHistogram->GetListOfFunctions();
       if (!TestBit(kOldInterpolation) ) {
          fDelaunay = hl->FindObject("TGraphDelaunay2D");
          if (!fDelaunay) fDelaunay =  hl->FindObject("TGraphDelaunay");
       }
       else {
-         // if using old inmplementation
+         // if using old implementation
          fDelaunay = hl->FindObject("TGraphDelaunay");
          if (!fDelaunay) fDelaunay =  hl->FindObject("TGraphDelaunay2D");
       }
    }
-   
+
    if (!fDelaunay) return TMath::QuietNaN();
 
    if (fDelaunay->IsA() == TGraphDelaunay2D::Class() )
@@ -1348,6 +1347,17 @@ void TGraph2D::Paint(Option_t *option)
    fHistogram->SetMarkerStyle(GetMarkerStyle());
    fHistogram->SetMarkerSize(GetMarkerSize());
    fHistogram->Paint(opt.Data());
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Print 2D graph values.
+
+void TGraph2D::Print(Option_t *) const
+{
+   for (Int_t i = 0; i < fNpoints; i++) {
+      printf("x[%d]=%g, y[%d]=%g, z[%d]=%g\n", i, fX[i], i, fY[i], i, fZ[i]);
+   }
 }
 
 
@@ -1516,7 +1526,10 @@ void TGraph2D::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
       out << "   graph2d->GetListOfFunctions()->Add(" << obj->GetName() << ");" << std::endl;
       if (obj->InheritsFrom("TPaveStats")) {
          out << "   ptstats->SetParent(graph2d->GetListOfFunctions());" << std::endl;
+      } else if (obj->InheritsFrom("TF1")) {
+         out << "   " << obj->GetName()  << "->SetParent(graph);\n";
       }
+
    }
 
    out << "   graph2d->Draw(" << quote << option << quote << ");" << std::endl;
@@ -1555,7 +1568,7 @@ void TGraph2D::SetDirectory(TDirectory *dir)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Sets the histogram to be filled.
-/// If the 2D graph needs to be save in a TFile the folllowing set should be
+/// If the 2D graph needs to be save in a TFile the following set should be
 /// followed to read it back:
 /// 1) Create TGraph2D
 /// 2) Call g->SetHistogram(h), and do whatever you need to do
@@ -1741,7 +1754,14 @@ void TGraph2D::SetPoint(Int_t n, Double_t x, Double_t y, Double_t z)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Sets graph title
+/// Sets the 2D graph title.
+///
+/// This method allows to change the global title and the axis' titles of a 2D
+/// graph. If `g` is the 2D graph one can do:
+///
+/// ~~~ {.cpp}
+/// g->SetTitle("Graph title; X axis title; Y axis title; Z axis title");
+/// ~~~
 
 void TGraph2D::SetTitle(const char* title)
 {

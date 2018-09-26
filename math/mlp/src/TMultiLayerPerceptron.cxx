@@ -244,7 +244,7 @@ In addition, the paw version of mlpfit had additional limitations on the number 
 #include "TObjString.h"
 #include <stdlib.h>
 
-ClassImp(TMultiLayerPerceptron)
+ClassImp(TMultiLayerPerceptron);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor
@@ -2392,7 +2392,7 @@ void TMultiLayerPerceptron::SetGammaDelta(TMatrixD & gamma, TMatrixD & delta,
       gamma[idx++][0] = -synapse->GetDEDw();
    }
    for (Int_t i = 0; i < els; i++)
-      delta[i] = buffer[i];
+      delta[i].Assign(buffer[i]);
    //delta.SetElements(buffer,"F");
    ComputeDEDw();
    idx = 0;

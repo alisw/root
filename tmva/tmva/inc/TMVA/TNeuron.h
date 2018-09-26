@@ -19,7 +19,7 @@
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
  * (http://tmva.sourceforge.net/LICENSE)                                          *
- **********************************************************************************/ 
+ **********************************************************************************/
 
 #ifndef ROOT_TMVA_TNeuron
 #define ROOT_TMVA_TNeuron
@@ -34,25 +34,13 @@
 
 #include <iostream>
 
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TObjArray
 #include "TObjArray.h"
-#endif
-#ifndef ROOT_TFormula
 #include "TFormula.h"
-#endif
 
-#ifndef ROOT_TMVA_TSynapse
 #include "TMVA/TSynapse.h"
-#endif
-#ifndef ROOT_TMVA_TActivation
 #include "TMVA/TActivation.h"
-#endif
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
 
 namespace TMVA {
 
@@ -102,7 +90,7 @@ namespace TMVA {
       // update the error fields and weights of all pre-synapses, sequential mode
       void UpdateSynapsesSequential();
 
-      // update the weights of the all pre-synapses, batch mode 
+      // update the weights of the all pre-synapses, batch mode
       //(call UpdateSynapsesBatch first)
       void AdjustSynapseWeights();
 
@@ -137,18 +125,19 @@ namespace TMVA {
 
    private:
 
-      // prviate helper functions
+      // private helper functions
       void InitNeuron();
       void DeleteLinksArray( TObjArray*& links );
       void PrintLinks      ( TObjArray* links ) const;
       void PrintMessage    ( EMsgType, TString message );
 
       // inlined helper functions
-      Int_t NumLinks(TObjArray* links) const { 
-         if (links == NULL) return 0; return links->GetEntriesFast(); 
+      Int_t NumLinks(TObjArray* links) const {
+         if (links == nullptr) return 0;
+         else return links->GetEntriesFast();
       }
-      void NullifyLinks(TObjArray*& links) { 
-         if (links != NULL) delete links; links = NULL; 
+      void NullifyLinks(TObjArray*& links) {
+         if (links != nullptr) { delete links; links = nullptr; }
       }
 
       // private member variables
@@ -165,7 +154,7 @@ namespace TMVA {
 
       MsgLogger& Log() const;
 
-      ClassDef(TNeuron,0) // Neuron class used by MethodANNBase derivative ANNs
+      ClassDef(TNeuron,0); // Neuron class used by MethodANNBase derivative ANNs
    };
 
 } // namespace TMVA

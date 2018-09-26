@@ -36,12 +36,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TList
 #include "TList.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 namespace TMVA {
 
@@ -51,15 +47,12 @@ namespace TMVA {
    class DataSetFactory; // DSMTEST
    class MsgLogger;
    class Factory;
-   class DataSetManager {
+   class Envelop;
+   class DataSetManager:public TObject {
       friend class Factory;
+      friend class Envelop;
+
    public:
-
-
-      // singleton class
-//      static DataSetManager& Instance();
-//      static void            CreateInstance( DataInputHandler& dataInput );
-//      static void            DestroyInstance();
 
       // private default constructor
       DataSetManager(); // DSMTEST
@@ -76,23 +69,20 @@ namespace TMVA {
 
    private:
 
-//      ~DataSetManager(); // DSMTEST moved to public
-
-//      static DataSetManager* fgDSManager; // removed DSMTEST
-
-      // private default constructor
-/*       DataSetManager(); */ // DSMTEST
-/*       DataSetManager( DataInputHandler& dataInput ); */ // DSMTEST
 
       TMVA::DataSetFactory* fDatasetFactory;
 
       // access to input data
-      DataInputHandler& DataInput() { return fDataInput; }
+      DataInputHandler& DataInput() { return *fDataInput; }
 
-      DataInputHandler&          fDataInput;             //! source of input data
-      TList                      fDataSetInfoCollection; //! all registered dataset definitions
-      MsgLogger*                 fLogger;   // message logger
-      MsgLogger& Log() const { return *fLogger; }    
+      DataInputHandler           *fDataInput;             // source of input data
+      TList                      fDataSetInfoCollection; // all registered dataset definitions
+      MsgLogger*                 fLogger;   //! message logger
+      MsgLogger& Log() const { return *fLogger; }
+   public:
+       
+       ClassDef(DataSetManager,1);
+       
    };
 }
 

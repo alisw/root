@@ -10,9 +10,11 @@
  *************************************************************************/
 
 /** \class TParameter
+\ingroup Base
+
 Named parameter, streamable and storable.
 */
 
 #include "TParameter.h"
 
-templateClassImp(TParameter)
+templateClassImp(TParameter);

@@ -22,9 +22,7 @@
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 
 class TContextMenu;
 class TObject;
@@ -45,7 +43,7 @@ protected:
 
 public:
    TContextMenuImp(TContextMenu *c=0) : fContextMenu(c) { }
-   virtual ~TContextMenuImp() { }
+   virtual ~TContextMenuImp();
 
    virtual TContextMenu *GetContextMenu() const { return fContextMenu; }
 

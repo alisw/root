@@ -1379,7 +1379,7 @@ static void gl2psDivideQuad(GL2PSprimitive *quad,
   (*t2)->verts[0] = quad->verts[0];
   (*t2)->verts[1] = quad->verts[2];
   (*t2)->verts[2] = quad->verts[3];
-  (*t2)->boundary = ((quad->boundary & 4) ? 2 : 0) | ((quad->boundary & 4) ? 2 : 0);
+  (*t2)->boundary = ((quad->boundary & 4) ? 2 : 0) | ((quad->boundary & 8) ? 4 : 0);
 }
 
 static int gl2psCompareDepth(const void *a, const void *b)
@@ -1537,12 +1537,12 @@ static GLboolean gl2psLess(GLfloat f1, GLfloat f2)
 
 static void gl2psBuildBspTree(GL2PSbsptree *tree, GL2PSlist *primitives)
 {
-  GL2PSprimitive *prim, *frontprim = NULL, *backprim = NULL;
+  GL2PSprimitive *prim = nullptr, *frontprim = nullptr, *backprim = nullptr;
   GL2PSlist *frontlist, *backlist;
   GLint i, index;
 
-  tree->front = NULL;
-  tree->back = NULL;
+  tree->front = nullptr;
+  tree->back = nullptr;
   tree->primitives = gl2psListCreate(1, 2, sizeof(GL2PSprimitive*));
   index = gl2psFindRoot(primitives, &prim);
   gl2psGetPlane(prim, tree->plane);

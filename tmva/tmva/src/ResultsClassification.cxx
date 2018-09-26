@@ -25,9 +25,15 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::ResultsClassification
+\ingroup TMVA
+Class that is the base-class for a vector of result
+*/
+
 #include "TMVA/ResultsClassification.h"
 
 #include "TMVA/MsgLogger.h"
+#include "TMVA/Results.h"
 #include "TMVA/Types.h"
 
 #include "TString.h"
@@ -37,10 +43,12 @@
 namespace TMVA {
    class DataSetInfo;
 }
+
+
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
 
-TMVA::ResultsClassification::ResultsClassification( const DataSetInfo* dsi, TString resultsName  ) 
+TMVA::ResultsClassification::ResultsClassification( const DataSetInfo* dsi, TString resultsName  )
    : Results( dsi,resultsName  ),
      fRet(1),
      fLogger( new MsgLogger(Form("ResultsClassification%s",resultsName.Data()) , kINFO) )
@@ -58,11 +66,8 @@ TMVA::ResultsClassification::~ResultsClassification()
 ////////////////////////////////////////////////////////////////////////////////
 /// set MVA response
 
-void TMVA::ResultsClassification::SetValue( Float_t value, Int_t ievt ) 
+void TMVA::ResultsClassification::SetValue( Float_t value, Int_t ievt )
 {
    if (ievt >= (Int_t)fMvaValues.size()) fMvaValues.resize( ievt+1 );
    fMvaValues[ievt] = value;
 }
-
-
-

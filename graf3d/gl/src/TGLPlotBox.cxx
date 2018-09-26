@@ -9,19 +9,20 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-#include <algorithm>
+#include "TGLPlotBox.h"
 
 #include "TColor.h"
-
 #include "TGLIncludes.h"
-#include "TGLPlotBox.h"
+
+#include <algorithm>
+
 
 /** \class TGLPlotBox
 \ingroup opengl
 Implementation of a box around a histogram/function for plot-painters.
 */
 
-ClassImp(TGLPlotBox)
+ClassImp(TGLPlotBox);
 
 const Int_t TGLPlotBox::fgFramePlanes[][4] =
    {

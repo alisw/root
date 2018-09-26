@@ -3,4 +3,11 @@
 
 #include "Rtypes.h"
 
-ClassImp(TMVA::IMethod)
+/*! \class TMVA::IMethod
+\ingroup TMVA
+
+Interface for all concrete MVA method implementations
+
+*/
+
+ClassImp(TMVA::IMethod);

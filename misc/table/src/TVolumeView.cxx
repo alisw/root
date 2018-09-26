@@ -46,7 +46,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-ClassImp(TVolumeView)
+ClassImp(TVolumeView);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -430,15 +430,13 @@ void TVolumeView::Browse(TBrowser *b)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*-*Compute distance from point px,py to a TVolumeView*-*-*-*-*-*
-///*-*                  ===========================================
-///*-*  Compute the closest distance of approach from point px,py to the position of
-///*-*  this node.
-///*-*  The distance is computed in pixels units.
-///*-*
-///*-*  It is restricted by 2 levels of TVolumes
-///*-*
-///*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+/// Compute distance from point px,py to a TVolumeView.
+///
+/// Compute the closest distance of approach from point px,py to the position of
+/// this node.
+/// The distance is computed in pixels units.
+///
+/// It is restricted by 2 levels of TVolumes.
 
 Int_t TVolumeView::DistancetoPrimitive(Int_t px, Int_t py)
 {
@@ -508,8 +506,7 @@ Int_t TVolumeView::DistancetoPrimitive(Int_t px, Int_t py)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*-*-*-*-*Draw Referenced node with current parameters*-*-*-*
-///*-*                   =============================================
+/// Draw Referenced node with current parameters.
 
 void TVolumeView::Draw(Option_t *option)
 {
@@ -529,9 +526,9 @@ void TVolumeView::Draw(Option_t *option)
 
    Int_t iopt = atoi(option);
    TDataSet *parent = 0;
-   char buffer[10];
+   char buffer[12];
    if (iopt < 0) {
-      snprintf(buffer,10,"%d",-iopt);
+      snprintf(buffer,12,"%d",-iopt);
       option = buffer;
       // select parent to draw
       parent = this;
@@ -743,15 +740,12 @@ Float_t *TVolumeView::Local2Master(const Float_t *local, Float_t *master,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*-*-*-*-*Paint Referenced node with current parameters*-*-*-*
-///*-*                   ==============================================
-///*-*
-///*-*  vis = 1  (default) shape is drawn
-///*-*  vis = 0  shape is not drawn but its sons may be not drawn
-///*-*  vis = -1 shape is not drawn. Its sons are not drawn
-///*-*  vis = -2 shape is drawn. Its sons are not drawn
-///*-*
-///*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+/// Paint Referenced node with current parameters.
+///
+///  - vis = 1  (default) shape is drawn
+///  - vis = 0  shape is not drawn but its sons may be not drawn
+///  - vis = -1 shape is not drawn. Its sons are not drawn
+///  - vis = -2 shape is drawn. Its sons are not drawn
 ///
 /// It draw the TVolumeView layers from the iFirst one (form the zero) till
 /// iLast one reached.
@@ -791,7 +785,7 @@ void TVolumeView::Paint(Option_t *option)
       PaintShape(option);
       if (thisNode)  thisNode->PaintShape(option);
    }
-////---   if ( thisNode->TestBit(kSonsInvisible) ) return;
+   // if ( thisNode->TestBit(kSonsInvisible) ) return;
 
 //*-*- Paint all sons
    TSeqCollection *nodes =  GetCollection();
@@ -967,8 +961,7 @@ void TVolumeView::SetVisibility(Int_t vis)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*Return total size of this 3-D Node with its attributes*-*-*
-///*-*          ==========================================================
+/// Return total size of this 3-D Node with its attributes.
 
 void TVolumeView::Sizeof3D() const
 {

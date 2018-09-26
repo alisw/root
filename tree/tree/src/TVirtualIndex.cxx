@@ -10,13 +10,15 @@
  *************************************************************************/
 
 /** \class TVirtualIndex
+\ingroup tree
+
 Abstract interface for Tree Index
 */
 
 #include "TVirtualIndex.h"
 #include "TTree.h"
 
-ClassImp(TVirtualIndex)
+ClassImp(TVirtualIndex);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for TVirtualIndex

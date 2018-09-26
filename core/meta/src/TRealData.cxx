@@ -12,9 +12,10 @@
 #include "TRealData.h"
 #include "TDataMember.h"
 #include "TClass.h"
+#include "TClassEdit.h"
 #include "TStreamer.h"
 
-ClassImp(TRealData)
+ClassImp(TRealData);
 
 /** \class TRealData
 The TRealData class manages the effective list of all data members
@@ -77,6 +78,22 @@ void TRealData::AdoptStreamer(TMemberStreamer *str)
 void TRealData::GetName(TString &output, TDataMember *dm)
 {
    output.Clear();
+   const char* dmType  = dm->GetTypeName();
+   if (TClassEdit::IsStdArray(dmType)) {
+      std::string typeNameBuf;
+      Int_t ndim = dm->GetArrayDim();
+      std::array<Int_t, 5> maxIndices; // 5 is the maximum supported in TStreamerElement::SetMaxIndex
+      TClassEdit::GetStdArrayProperties(dmType,
+                                        typeNameBuf,
+                                        maxIndices,
+                                        ndim);
+      output = dm->GetName();
+      for (Int_t idim = 0; idim < ndim; ++idim) {
+         output += TString::Format("[%d]",maxIndices[idim] );
+      }
+      return;
+   }
+
    // keep an empty name if data member is not found
    if (dm) output = dm->GetName();
    if (dm->IsaPointer())

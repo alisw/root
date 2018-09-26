@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TTreeResult
+\ingroup tree
+
 Class defining interface to a TTree query result with the same
 interface as for SQL databases. A TTreeResult is returned by
 TTree::Query() (actually TTreePlayer::Query()).
@@ -22,7 +24,7 @@ Related classes are TTreeRow.
 #include "TString.h"
 #include "TObjArray.h"
 
-ClassImp(TTreeResult)
+ClassImp(TTreeResult);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a query result object.

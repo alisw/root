@@ -12,9 +12,7 @@
 #ifndef ROOT_TGeoCone
 #define ROOT_TGeoCone
 
-#ifndef ROOT_TGeoBBox
 #include "TGeoBBox.h"
-#endif
 
 class TGeoCone : public TGeoBBox
 {
@@ -104,13 +102,13 @@ protected:
    Double_t              fPhi1;  // first phi limit
    Double_t              fPhi2;  // second phi limit
    // Transient trigonometric data
-   Double_t              fS1;    //!sin(phi1)
-   Double_t              fC1;    //!cos(phi1)
-   Double_t              fS2;    //!sin(phi2)
-   Double_t              fC2;    //!cos(phi2)
-   Double_t              fSm;    //!sin(0.5*(phi1+phi2))
-   Double_t              fCm;    //!cos(0.5*(phi1+phi2))
-   Double_t              fCdfi;  //!cos(0.5*(phi1-phi2))
+   Double_t              fS1;    // sin(phi1)
+   Double_t              fC1;    // cos(phi1)
+   Double_t              fS2;    // sin(phi2)
+   Double_t              fC2;    // cos(phi2)
+   Double_t              fSm;    // sin(0.5*(phi1+phi2))
+   Double_t              fCm;    // cos(0.5*(phi1+phi2))
+   Double_t              fCdfi;  // cos(0.5*(phi1-phi2))
 
    void                  InitTrigonometry();
 
@@ -176,7 +174,7 @@ public:
    virtual void          SetSegsAndPols(TBuffer3D &buffer) const;
    virtual void          Sizeof3D() const;
 
-   ClassDef(TGeoConeSeg, 1)         // conical tube segment class
+   ClassDef(TGeoConeSeg, 2)         // conical tube segment class
 };
 
 #endif

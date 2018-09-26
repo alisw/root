@@ -19,6 +19,7 @@
 #include "FormatToken.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Format/Format.h"
+#include "llvm/Support/Regex.h"
 #include <list>
 #include <stack>
 
@@ -47,6 +48,14 @@ struct UnwrappedLine {
   bool InPPDirective;
 
   bool MustBeDeclaration;
+
+  /// \brief If this \c UnwrappedLine closes a block in a sequence of lines,
+  /// \c MatchingOpeningBlockLineIndex stores the index of the corresponding
+  /// opening line. Otherwise, \c MatchingOpeningBlockLineIndex must be
+  /// \c kInvalidIndex.
+  size_t MatchingOpeningBlockLineIndex;
+
+  static const size_t kInvalidIndex = -1;
 };
 
 class UnwrappedLineConsumer {
@@ -65,8 +74,7 @@ public:
                       ArrayRef<FormatToken *> Tokens,
                       UnwrappedLineConsumer &Callback);
 
-  /// Returns true in case of a structural error.
-  bool parse();
+  void parse();
 
 private:
   void reset();
@@ -82,9 +90,11 @@ private:
   void parsePPElse();
   void parsePPEndIf();
   void parsePPUnknown();
+  void readTokenWithJavaScriptASI();
   void parseStructuralElement();
   bool tryToParseBracedList();
-  bool parseBracedList(bool ContinueOnSemicolons = false);
+  bool parseBracedList(bool ContinueOnSemicolons = false,
+                       tok::TokenKind ClosingBraceKind = tok::r_brace);
   void parseParens();
   void parseSquare();
   void parseIfThenElse();
@@ -95,24 +105,45 @@ private:
   void parseCaseLabel();
   void parseSwitch();
   void parseNamespace();
+  void parseNew();
   void parseAccessSpecifier();
-  void parseEnum();
+  bool parseEnum();
   void parseJavaEnumBody();
-  void parseRecord();
+  // Parses a record (aka class) as a top level element. If ParseAsExpr is true,
+  // parses the record as a child block, i.e. if the class declaration is an
+  // expression.
+  void parseRecord(bool ParseAsExpr = false);
   void parseObjCProtocolList();
   void parseObjCUntilAtEnd();
   void parseObjCInterfaceOrImplementation();
   void parseObjCProtocol();
+  void parseJavaScriptEs6ImportExport();
   bool tryToParseLambda();
   bool tryToParseLambdaIntroducer();
   void tryToParseJSFunction();
   void addUnwrappedLine();
   bool eof() const;
   void nextToken();
+  const FormatToken *getPreviousToken();
   void readToken();
+
+  // Decides which comment tokens should be added to the current line and which
+  // should be added as comments before the next token.
+  //
+  // Comments specifies the sequence of comment tokens to analyze. They get
+  // either pushed to the current line or added to the comments before the next
+  // token.
+  //
+  // NextTok specifies the next token. A null pointer NextTok is supported, and
+  // signifies either the absense of a next token, or that the next token
+  // shouldn't be taken into accunt for the analysis.
+  void distributeComments(const SmallVectorImpl<FormatToken *> &Comments,
+                          const FormatToken *NextTok);
+
+  // Adds the comment preceding the next token to unwrapped lines.
   void flushComments(bool NewlineBeforeNext);
   void pushToken(FormatToken *Tok);
-  void calculateBraceTypes();
+  void calculateBraceTypes(bool ExpectClassBody = false);
 
   // Marks a conditional compilation edge (for example, an '#if', '#ifdef',
   // '#else' or merge conflict marker). If 'Unreachable' is true, assumes
@@ -156,12 +187,10 @@ private:
   // whether we are in a compound statement or not.
   std::vector<bool> DeclarationScopeStack;
 
-  // Will be true if we encounter an error that leads to possibily incorrect
-  // indentation levels.
-  bool StructuralError;
-
   const FormatStyle &Style;
   const AdditionalKeywords &Keywords;
+
+  llvm::Regex CommentPragmasRegex;
 
   FormatTokenSource *Tokens;
   UnwrappedLineConsumer &Callback;
@@ -214,8 +243,8 @@ struct UnwrappedLineNode {
   SmallVector<UnwrappedLine, 0> Children;
 };
 
-inline UnwrappedLine::UnwrappedLine()
-    : Level(0), InPPDirective(false), MustBeDeclaration(false) {}
+inline UnwrappedLine::UnwrappedLine() : Level(0), InPPDirective(false),
+  MustBeDeclaration(false), MatchingOpeningBlockLineIndex(kInvalidIndex) {}
 
 } // end namespace format
 } // end namespace clang

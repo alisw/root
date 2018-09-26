@@ -26,7 +26,7 @@
 ///
 /// TFITS requires CFITSIO library to be installed on your system. It
 /// is currently maintained by NASA/GSFC and can be downloaded from
-/// http://fits.gsfc.nasa.gov, as well as documentation.
+/// [NASA/GSFC web site](http://fits.gsfc.nasa.gov), as well as documentation.
 ///
 /// Using this interface is easy and straightforward. There is only 1 class
 /// called "TFITSHDU" which has several methods to extract data from a
@@ -85,7 +85,8 @@ several methods to manage them.
 #include "fitsio.h"
 #include <stdlib.h>
 
-ClassImp(TFITSHDU)
+
+ClassImp(TFITSHDU);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Clean path from possible filter and put the result in 'dst'.
@@ -380,6 +381,7 @@ Bool_t TFITSHDU::LoadHDU(TString& filepath_filter)
 
       for (colnum = 0, cellindex = 0; colnum < fNColumns; colnum++) {
          fits_get_coltype(fp, colnum+1, &typecode, &repeat, &width, &status);
+
          if (status) goto ERR;
 
          if ((typecode == TDOUBLE) || (typecode == TSHORT) || (typecode == TLONG)
@@ -441,60 +443,89 @@ Bool_t TFITSHDU::LoadHDU(TString& filepath_filter)
 
                fColumnsInfo[colnum].fDim = (Int_t) repeat;
 
-               double *array;
+               double *array = 0;
+               char *arrayl = 0;
 
                if (repeat > 0) {
-                  array = new double [table_rows * repeat]; //Hope you got a big machine! Ask China otherwise :-)
-                  fits_read_col(fp, TDOUBLE, colnum+1, 1, 1, table_rows * repeat, &nulval, array, &anynul, &status);
 
-                  if (status) {
-                     delete [] array;
-                     goto ERR;
+                  if (typecode == TLOGICAL) {
+                     arrayl = new char[table_rows * repeat];
+                     fits_read_col(fp, TLOGICAL, colnum + 1, 1, 1, table_rows * repeat, &nulval, arrayl, &anynul,
+                                   &status);
+                     if (status) {
+                        delete[] arrayl;
+                        goto ERR;
+                     }
+                  } else {
+                     array = new double[table_rows * repeat]; // Hope you got a big machine! Ask China otherwise :-)
+                     fits_read_col(fp, TDOUBLE, colnum + 1, 1, 1, table_rows * repeat, &nulval, array, &anynul,
+                                   &status);
+                     if (status) {
+                        delete[] array;
+                        goto ERR;
+                     }
                   }
+
                } else {
-                  //No elements: set dummy
-                  array = new double [table_rows];
+                  // No elements: set dummy
+                  array = new double[table_rows];
                   for (long row = 0; row < table_rows; row++) {
                      array[row] = 0.0;
                   }
                }
 
-               //Save values
+               // Save values
                if (repeat == 1) {
-                  //Scalar
-                  for (long row = 0; row < table_rows; row++) {
-                     fCells[cellindex++].fRealNumber = array[row];
+                  // Scalar
+                  if (typecode == TLOGICAL) {
+                     for (long row = 0; row < table_rows; row++) {
+                        int temp = (signed char)arrayl[row];
+                        fCells[cellindex++].fRealNumber = (double)temp;
+                     }
+                     delete[] arrayl;
+                  } else {
+                     for (long row = 0; row < table_rows; row++) {
+                        fCells[cellindex++].fRealNumber = array[row];
+                     }
+                     delete[] array;
                   }
                } else if (repeat > 1) {
-                  //Vector
-                  for (long row = 0; row < table_rows; row++) {
-                     double *vec = new double [repeat];
-                     long offset = row * repeat;
-                     for (long component = 0; component < repeat; component++) {
-                        vec[component] = array[offset++];
+                  // Vector
+                  if (typecode == TLOGICAL) {
+                     for (long row = 0; row < table_rows; row++) {
+                        double *vec = new double[repeat];
+                        long offset = row * repeat;
+                        for (long component = 0; component < repeat; component++) {
+                           int temp = (signed char)arrayl[offset++];
+                           vec[component] = (double)temp;
+                        }
+                        fCells[cellindex++].fRealVector = vec;
                      }
-                     fCells[cellindex++].fRealVector = vec;
+                     delete[] arrayl;
+                  } else {
+                     for (long row = 0; row < table_rows; row++) {
+                        double *vec = new double[repeat];
+                        long offset = row * repeat;
+                        for (long component = 0; component < repeat; component++) {
+                           vec[component] = array[offset++];
+                        }
+                        fCells[cellindex++].fRealVector = vec;
+                     }
+                     delete[] array;
                   }
                }
-
-               delete [] array;
-
             }
-
          } else {
             Warning("LoadHDU", "error opening FITS file. Column type %d is currently not supported", typecode);
          }
       }
 
-
-
       if (hdutype == ASCII_TBL) {
-         //ASCII table
+         // ASCII table
 
       } else {
-         //Binary table
+         // Binary table
       }
-
    }
 
    // Close file

@@ -1,5 +1,5 @@
 // @(#):$Id$
-// Author: M.Gheata 
+// Author: M.Gheata
 /*************************************************************************
  * Copyright (C) 1995-2002, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
@@ -11,20 +11,8 @@
 #ifndef ROOT_TGeoParaEditor
 #define ROOT_TGeoParaEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoParaEditor                                                      //
-//                                                                      //
-//  Editor for a TGeoPara.                                              //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TGButton
 #include "TGWidget.h"
-#endif
-#ifndef ROOT_TGeoGedFrame
 #include "TGeoGedFrame.h"
-#endif
 
 class TGeoPara;
 class TGeoTabManager;
@@ -52,18 +40,18 @@ protected:
    Bool_t               fIsShapeEditable;   // Flag that the shape can be changed
 
    TGTextEntry         *fShapeName;         // Shape name text entry
-   TGNumberEntry       *fEDx;               // Number entry for  DX2 
+   TGNumberEntry       *fEDx;               // Number entry for  DX2
    TGNumberEntry       *fEDy;               // Number entry for  DY
    TGNumberEntry       *fEDz;               // Number entry for  DZ
    TGNumberEntry       *fEAlpha;            // Number entry for  Alpha
-   TGNumberEntry       *fETheta;            // Number entry for  Theta 
-   TGNumberEntry       *fEPhi  ;            // Number entry for  Theta 
+   TGNumberEntry       *fETheta;            // Number entry for  Theta
+   TGNumberEntry       *fEPhi  ;            // Number entry for  Theta
    TGTextButton        *fApply;             // Apply-Button to accept changes
    TGTextButton        *fUndo;              // Undo-Button
    TGCheckButton       *fDelayed;           // Check button for delayed draw
 
-   virtual void ConnectSignals2Slots();   // Connect the signals to the slots
-   Bool_t       IsDelayed() const;   
+   virtual void ConnectSignals2Slots();     // Connect the signals to the slots
+   Bool_t       IsDelayed() const;
 
 public:
    TGeoParaEditor(const TGWindow *p = 0,
@@ -83,8 +71,8 @@ public:
    void           DoName();
    void           DoApply();
    void           DoUndo();
-   
+
    ClassDef(TGeoParaEditor,0)   // TGeoPara editor
-};   
-  
-#endif                    
+};
+
+#endif

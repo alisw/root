@@ -12,15 +12,10 @@
 #ifndef ROOT_TDocInfo
 #define ROOT_TDocInfo
 
-#ifndef ROOT_TClass
 #include "TClass.h"
-#endif
-#ifndef ROOT_THashList
 #include "THashList.h"
-#endif
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
+#include "TROOT.h"
 #include <string>
 #include <set>
 
@@ -54,9 +49,13 @@ public:
       fDeclFileSysName(fsdecl), fImplFileSysName(fsimpl),
       fSelected(kTRUE) { }
 
-   virtual ~TClassDocInfo() {}
+   virtual ~TClassDocInfo()
+   {
+      // Required since we overload TObject::Hash.
+      ROOT::CallRecursiveRemoveIfNeeded(*this);
+   }
 
-           TDictionary*    GetClass() const { return fClass; }
+   TDictionary *GetClass() const { return fClass; }
    virtual const char*     GetName() const;
            const char*     GetHtmlFileName() const { return fHtmlFileName; }
            const char*     GetDeclFileName() const { return fDeclFileName; }
@@ -111,7 +110,7 @@ public:
       TNamed(name, doc), fSuper(super), fSub(0), fSelected(kTRUE) {
          if (super) super->GetSub().Add(this);
       }
-   virtual ~TModuleDocInfo() {}
+   virtual ~TModuleDocInfo() { fSub.Clear("nodelete"); fClasses.Clear("nodelete"); }
 
    void        SetDoc(const char* doc) { SetTitle(doc); }
    const char* GetDoc() const { return GetTitle(); }

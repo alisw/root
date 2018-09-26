@@ -39,12 +39,10 @@ instantiate objects.
 #include "RooGlobalFunc.h"
 #include "RooAbsPdf.h"
 #include <fstream>
-#include <vector>
-#include <string>
 
 using namespace std ;
 
-ClassImp(RooClassFactory)
+ClassImp(RooClassFactory);
 ;
 
 static Int_t init();
@@ -586,7 +584,7 @@ Bool_t RooClassFactory::makeClass(const char* baseName, const char* className, c
      << "#include \"TMath.h\" " << endl
      << endl
 
-     << "ClassImp(" << className << ") " << endl
+     << "ClassImp(" << className << "); " << endl
      << endl
 
      << " " << className << "::" << className << "(const char *name, const char *title, " << endl ;
@@ -783,7 +781,7 @@ std::string RooClassFactory::ClassFacIFace::create(RooFactoryWSTool& ft, const c
 	  varList.add(ft.asARG(args[i].c_str())) ;
 	}
       }
-    } catch (string err) {
+    } catch (const string &err) {
       throw string(Form("RooClassFactory::ClassFacIFace::create() ERROR: %s",err.c_str())) ;
     }
 

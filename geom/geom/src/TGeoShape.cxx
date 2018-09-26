@@ -41,12 +41,10 @@ composite shapes and the composition operation can be recursive (composition
 of composites). This allows the creation of a quite large number of different
 shape topologies and combinations.
 
-  Shapes are named objects and register themselves to the manager class at
-creation time. This is responsible for their final deletion. Shapes
-can be created without name if their retrieval by name is no needed. Generally
-shapes are objects that are useful only at geometry creation stage. The pointer
-to a shape is in fact needed only when referring to a given volume and it is
-always accessible at that level. A shape may be referenced by several volumes,
+  Named shapes register themselves to the manager class at creation time. The
+manager is responsible for their final deletion. Shapes can be created using their
+default constructor if their retrieval by name is not needed, but in this case 
+they are owned by the user. A shape may be referenced by several volumes,
 therefore its deletion is not possible once volumes were defined based on it.
 
 ### Creating shapes
@@ -156,7 +154,7 @@ are interpreted and which is their result inside specific shape classes.
 #include "TBuffer3DTypes.h"
 #include "TMath.h"
 
-ClassImp(TGeoShape)
+ClassImp(TGeoShape);
 
 TGeoMatrix *TGeoShape::fgTransform = NULL;
 Double_t    TGeoShape::fgEpsMch = 2.220446049250313e-16;
@@ -203,7 +201,7 @@ TGeoShape::~TGeoShape()
 ////////////////////////////////////////////////////////////////////////////////
 /// Test for shape navigation methods. Summary for test numbers:
 ///
-///  1: DistFromInside/Outside. Sample points inside the shape. Generate
+///  - 1: DistFromInside/Outside. Sample points inside the shape. Generate
 ///    directions randomly in cos(theta). Compute DistFromInside and move the
 ///    point with bigger distance. Compute DistFromOutside back from new point.
 ///    Plot d-(d1+d2)
@@ -498,7 +496,7 @@ Double_t TGeoShape::SafetySeg(Double_t r, Double_t z, Double_t r1, Double_t z1, 
    Double_t crossp = (z2-z1)*(r-r1)-(z-z1)*(r2-r1);
    crossp *= (outer) ? 1. : -1.;
    // Positive crossp means point on the requested side of the (1,2) segment
-   if (crossp < 0) {
+   if (crossp < -TGeoShape::Tolerance()) {
 //      if (((z-z1)*(z2-z)) > -1.E-10) return 0;
       if (outer) return TGeoShape::Big();
       else return 0.;

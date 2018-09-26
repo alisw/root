@@ -26,21 +26,27 @@
 #include "TThreadSlots.h"
 #include "TMethod.h"
 
+#include "TSpinLockGuard.h"
+
 Bool_t TDirectory::fgAddDirectory = kTRUE;
 
 const Int_t  kMaxLen = 2048;
 
 /** \class TDirectory
+\ingroup Base
+
 Describe directory structure in memory.
 */
 
-ClassImp(TDirectory)
+ClassImp(TDirectory);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Directory default constructor.
 
 TDirectory::TDirectory() : TNamed(), fMother(0),fList(0),fContext(0)
 {
+   // MSVC doesn't support fSpinLock=ATOMIC_FLAG_INIT; in the class definition
+   std::atomic_flag_clear( &fSpinLock );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,6 +65,9 @@ TDirectory::TDirectory() : TNamed(), fMother(0),fList(0),fContext(0)
 TDirectory::TDirectory(const char *name, const char *title, Option_t * /*classname*/, TDirectory* initMotherDir)
    : TNamed(name, title), fMother(0), fList(0),fContext(0)
 {
+   // MSVC doesn't support fSpinLock=ATOMIC_FLAG_INIT; in the class definition
+   std::atomic_flag_clear( &fSpinLock );
+
    if (initMotherDir==0) initMotherDir = gDirectory;
 
    if (strchr(name,'/')) {
@@ -73,8 +82,6 @@ TDirectory::TDirectory(const char *name, const char *title, Option_t * /*classna
    }
 
    Build(initMotherDir ? initMotherDir->GetFile() : 0, initMotherDir);
-
-   R__LOCKGUARD2(gROOTMutex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,6 +89,9 @@ TDirectory::TDirectory(const char *name, const char *title, Option_t * /*classna
 
 TDirectory::TDirectory(const TDirectory &directory) : TNamed(directory)
 {
+   // MSVC doesn't support fSpinLock=ATOMIC_FLAG_INIT; in the class definition
+   std::atomic_flag_clear( &fSpinLock );
+
    directory.Copy(*this);
 }
 
@@ -96,6 +106,9 @@ TDirectory::~TDirectory()
    }
 
    if (fList) {
+      if (!fList->IsUsingRWLock())
+         Fatal("~TDirectory","In %s:%p the fList (%p) is not using the RWLock\n",
+               GetName(),this,fList);
       fList->Delete("slow");
       SafeDelete(fList);
    }
@@ -111,6 +124,32 @@ TDirectory::~TDirectory()
    if (gDebug) {
       Info("~TDirectory", "dtor called for %s", GetName());
    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Destructor.
+///
+/// Reset the current directory to its previous state.
+
+TDirectory::TContext::~TContext()
+{
+   fActiveDestructor = true;
+   if (fDirectory) {
+      // UnregisterContext must not be virtual to allow
+      // this to work even with fDirectory set to nullptr.
+      (*fDirectory).UnregisterContext(this);
+      // While we were waiting for the lock, the TDirectory
+      // may have been deleted by another thread, so
+      // we need to recheck the value of fDirectory.
+      if (fDirectory)
+         (*fDirectory).cd();
+      else
+         CdNull();
+   } else {
+      CdNull();
+   }
+   fActiveDestructor = false;
+   while(fDirectoryWait);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -197,11 +236,14 @@ void TDirectory::Browse(TBrowser *b)
 
 void TDirectory::Build(TFile* /*motherFile*/, TDirectory* motherDir)
 {
-   if (motherDir && strlen(GetName()) != 0) motherDir->Append(this);
-
    fList       = new THashList(100,50);
+   fList->UseRWLock();
    fMother     = motherDir;
    SetBit(kCanDelete);
+
+   // Build is done and is the last part of the constructor (and is not
+   // being called from the derived classes) so we can publish.
+   if (motherDir && strlen(GetName()) != 0) motherDir->Append(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -209,9 +251,31 @@ void TDirectory::Build(TFile* /*motherFile*/, TDirectory* motherDir)
 
 void TDirectory::CleanTargets()
 {
-   while (fContext) {
-      fContext->fDirectory = 0;
-      fContext = fContext->fNext;
+   std::vector<TContext*> extraWait;
+
+   {
+      ROOT::Internal::TSpinLockGuard slg(fSpinLock);
+
+      while (fContext) {
+         const auto next = fContext->fNext;
+         const auto ctxt = fContext;
+         ctxt->fDirectoryWait = true;
+
+         ctxt->fDirectory = nullptr;
+
+         if (ctxt->fActiveDestructor) {
+            extraWait.push_back(fContext);
+         } else {
+            ctxt->fDirectoryWait = false;
+         }
+         fContext = next;
+      }
+   }
+   for(auto &&context : extraWait) {
+      // Wait until the TContext is done spinning
+      // over the lock.
+      while(context->fActiveDestructor);
+      context->fDirectoryWait = false;
    }
 
    if (gDirectory == this) {
@@ -238,7 +302,7 @@ static TBuffer* R__CreateBuffer()
    typedef void (*tcling_callfunc_Wrapper_t)(void*, int, void**, void*);
    static tcling_callfunc_Wrapper_t creator = 0;
    if (creator == 0) {
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       TClass *c = TClass::GetClass("TBufferFile");
       TMethod *m = c->GetMethodWithPrototype("TBufferFile","TBuffer::EMode,Int_t",kFALSE,ROOT::kExactMatch);
       creator = (tcling_callfunc_Wrapper_t)( m->InterfaceMethod() );
@@ -351,7 +415,7 @@ TDirectory *TDirectory::GetDirectory(const char *apath,
    char *s = (char*)strrchr(path, ':');
    if (s) {
       *s = '\0';
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
       TDirectory *f = (TDirectory *)gROOT->GetListOfFiles()->FindObject(path);
       if (!f && !strcmp(gROOT->GetName(), path)) f = gROOT;
       if (s) *s = ':';
@@ -513,8 +577,11 @@ void TDirectory::Clear(Option_t *)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Delete all objects from memory and directory structure itself.
-
-void TDirectory::Close(Option_t *)
+/// if option is "slow", iterate through the containers in a way to can handle
+///    'external' modification (induced by recursions)
+/// if option is "nodelete", write the TDirectory but do not delete the contained
+///    objects.
+void TDirectory::Close(Option_t *option)
 {
    if (!fList) {
       return;
@@ -523,19 +590,30 @@ void TDirectory::Close(Option_t *)
    // Save the directory key list and header
    Save();
 
-   Bool_t fast = kTRUE;
-   TObjLink *lnk = fList->FirstLink();
-   while (lnk) {
-      if (lnk->GetObject()->IsA() == TDirectory::Class()) {fast = kFALSE;break;}
-      lnk = lnk->Next();
+   Bool_t nodelete = option ? (!strcmp(option, "nodelete") ? kTRUE : kFALSE) : kFALSE;
+
+   if (!nodelete) {
+      Bool_t slow = option ? (!strcmp(option, "slow") ? kTRUE : kFALSE) : kFALSE;
+      if (!slow) {
+         // Check if it is wise to use the fast deletion path.
+         TObjLink *lnk = fList->FirstLink();
+         while (lnk) {
+            if (lnk->GetObject()->IsA() == TDirectory::Class()) {
+               slow = kTRUE;
+               break;
+            }
+            lnk = lnk->Next();
+         }
+      }
+
+      // Delete objects from directory list, this in turn, recursively closes all
+      // sub-directories (that were allocated on the heap)
+      // if this dir contains subdirs, we must use the slow option for Delete!
+      // we must avoid "slow" as much as possible, in particular Delete("slow")
+      // with a large number of objects (eg >10^5) would take for ever.
+      if (slow) fList->Delete("slow");
+      else      fList->Delete();
    }
-   // Delete objects from directory list, this in turn, recursively closes all
-   // sub-directories (that were allocated on the heap)
-   // if this dir contains subdirs, we must use the slow option for Delete!
-   // we must avoid "slow" as much as possible, in particular Delete("slow")
-   // with a large number of objects (eg >10^5) would take for ever.
-   if (fast) fList->Delete();
-   else      fList->Delete("slow");
 
    CleanTargets();
 }
@@ -935,19 +1013,20 @@ void TDirectory::FillFullPath(TString& buf) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Create a sub-directory and return a pointer to the created directory.
-/// Returns 0 in case of error.
-/// Returns 0 if a directory with the same name already exists.
-/// Note that the directory name may be of the form "a/b/c" to create a hierarchy of directories.
-/// In this case, the function returns the pointer to the "a" directory if the operation is successful.
+/// Create a sub-directory "a" or a hierarchy of sub-directories "a/b/c/...".
 ///
-/// For example the step to the steps to create first a/b/c and then a/b/d without receiving
-/// and errors are:
+/// Returns 0 in case of error or if a sub-directory (hierarchy) with the requested
+/// name already exists.
+/// Returns a pointer to the created sub-directory or to the top sub-directory of
+/// the hierarchy (in the above example, the returned TDirectory * always points
+/// to "a").
+/// In particular, the steps to create first a/b/c and then a/b/d without receiving
+/// errors are:
 /// ~~~ {.cpp}
 ///    TFile * file = new TFile("afile","RECREATE");
 ///    file->mkdir("a");
 ///    file->cd("a");
-///    gDirectory->mkdir("b");
+///    gDirectory->mkdir("b/c");
 ///    gDirectory->cd("b");
 ///    gDirectory->mkdir("d");
 /// ~~~
@@ -1094,6 +1173,10 @@ void TDirectory::rmdir(const char *name)
 /// If the operation is successful, it returns the number of bytes written to the file
 /// otherwise it returns 0.
 /// By default a message is printed. Use option "q" to not print the message.
+/// If filename contains ".json" extension, JSON representation of the object
+/// will be created and saved in the text file. Such file can be used in
+/// JavaScript ROOT (https://root.cern.ch/js/) to display object in web browser
+/// When creating JSON file, option string may contain compression level from 0 to 3 (default 0)
 
 Int_t TDirectory::SaveObjectAs(const TObject *obj, const char *filename, Option_t *option) const
 {
@@ -1104,8 +1187,11 @@ Int_t TDirectory::SaveObjectAs(const TObject *obj, const char *filename, Option_
       fname.Form("%s.root",obj->GetName());
    }
    TString cmd;
-   cmd.Form("TFile::Open(\"%s\",\"recreate\");",fname.Data());
-   {
+   if (fname.Index(".json") > 0) {
+      cmd.Form("TBufferJSON::ExportToFile(\"%s\",(TObject*) %s, \"%s\");", fname.Data(), TString::LLtoa((Long_t)obj, 10).Data(), (option ? option : ""));
+      nbytes = gROOT->ProcessLine(cmd);
+   } else {
+      cmd.Form("TFile::Open(\"%s\",\"recreate\");",fname.Data());
       TContext ctxt; // The TFile::Open will change the current directory.
       TDirectory *local = (TDirectory*)gROOT->ProcessLine(cmd);
       if (!local) return 0;
@@ -1177,9 +1263,13 @@ void TDirectory::DecodeNameCycle(const char *buffer, char *name, Short_t &cycle,
 
    if (*ni == '*')
       cycle = 10000;
-   else if (isdigit(*ni))
-      cycle = atoi(ni);
-   else
+   else if (isdigit(*ni)) {
+      long parsed = strtol(ni,nullptr,10);
+      if (parsed >= (long) std::numeric_limits<Short_t>::max())
+         cycle = 0;
+      else
+         cycle = (Short_t)parsed;
+   } else
       cycle = 9999;
 }
 
@@ -1187,7 +1277,8 @@ void TDirectory::DecodeNameCycle(const char *buffer, char *name, Short_t &cycle,
 /// Register a TContext pointing to this TDirectory object
 
 void TDirectory::RegisterContext(TContext *ctxt) {
-   R__LOCKGUARD2(gROOTMutex);
+   ROOT::Internal::TSpinLockGuard slg(fSpinLock);
+
    if (fContext) {
       TContext *current = fContext;
       while(current->fNext) {
@@ -1216,7 +1307,13 @@ Int_t TDirectory::WriteTObject(const TObject *obj, const char *name, Option_t * 
 /// UnRegister a TContext pointing to this TDirectory object
 
 void TDirectory::UnregisterContext(TContext *ctxt) {
-   R__LOCKGUARD2(gROOTMutex);
+
+   ROOT::Internal::TSpinLockGuard slg(fSpinLock);
+
+   // Another thread already unregistered the TContext.
+   if (ctxt->fDirectory == nullptr)
+      return;
+
    if (ctxt==fContext) {
       fContext = ctxt->fNext;
       if (fContext) fContext->fPrevious = 0;
@@ -1237,4 +1334,31 @@ void TDirectory::UnregisterContext(TContext *ctxt) {
 void TDirectory::TContext::CdNull()
 {
    gDirectory = 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// TDirectory Streamer.
+void TDirectory::Streamer(TBuffer &R__b)
+{
+   // Stream an object of class TDirectory.
+
+   UInt_t R__s, R__c;
+   if (R__b.IsReading()) {
+      Version_t R__v = R__b.ReadVersion(&R__s, &R__c); if (R__v) { }
+      TNamed::Streamer(R__b);
+      R__b >> fMother;
+      R__b >> fList;
+      fList->UseRWLock();
+      fUUID.Streamer(R__b);
+      R__b.StreamObject(&(fSpinLock),typeid(fSpinLock));
+      R__b.CheckByteCount(R__s, R__c, TDirectory::IsA());
+   } else {
+      R__c = R__b.WriteVersion(TDirectory::IsA(), kTRUE);
+      TNamed::Streamer(R__b);
+      R__b << fMother;
+      R__b << fList;
+      fUUID.Streamer(R__b);
+      R__b.StreamObject(&(fSpinLock),typeid(fSpinLock));
+      R__b.SetByteCount(R__c, kTRUE);
+   }
 }

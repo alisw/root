@@ -1,8 +1,17 @@
-#ifndef __CINT__
+/// \file
+/// \ingroup tutorial_sql
+/// Query example to MySQL test database.
+/// Example of query by using the test database made in MySQL, you need the
+/// database test installed in localhost, with user nobody without password.
+///
+/// \macro_code
+///
+/// \author Sergey Linev, Juan Fernando Jaramillo Botero
+
 #include <TSQLServer.h>
 #include <TSQLResult.h>
 #include <TSQLRow.h>
-#endif
+
 
 void sqlselect()
 {
@@ -49,8 +58,8 @@ void sqlselect()
    // query database and print results
    const char *sql = "select dataset,rawfilepath from test.runcatalog "
                      "WHERE tag&(1<<2) AND (run=490001 OR run=300122)";
-//   const char *sql = "select count(*) from test.runcatalog "
-//                     "WHERE tag&(1<<2)";
+   // const char *sql = "select count(*) from test.runcatalog "
+   //                   "WHERE tag&(1<<2)";
 
    res = db->Query(sql);
 

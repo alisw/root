@@ -31,7 +31,9 @@ namespace PyROOT {
    public:
       PyObject* fCallable;
 
-      TPythonCallback( PyObject* callable ) {
+      TPythonCallback( PyObject* callable ):
+         fCallable(nullptr)
+      {
          if ( !PyCallable_Check( callable ) ) {
             PyErr_SetString(PyExc_TypeError, "parameter must be callable");
             return;
@@ -212,6 +214,11 @@ namespace {
 
    // collect doc strings
       Int_t nMethods = methods.size();
+
+   // from template proxy with no instantiations 
+      if ( nMethods == 0 )
+         return NULL;
+
       PyObject* doc = methods[0]->GetDocString();
 
    // simple case

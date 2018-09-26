@@ -30,7 +30,7 @@
 Bool_t TMessage::fgEvolution = kFALSE;
 
 
-ClassImp(TMessage)
+ClassImp(TMessage);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a TMessage object for storing objects. The "what" integer
@@ -156,7 +156,14 @@ void TMessage::Forward()
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Remember that the StreamerInfo is being used in writing.
-
+///
+/// When support for schema evolution is enabled the list of TStreamerInfo
+/// used to stream this object is kept in fInfos. This information is used
+/// by TSocket::Send that sends this list through the socket. This list is in
+/// turn used by TSocket::Recv to store the TStreamerInfo objects in the
+/// relevant TClass in case the TClass does not know yet about a particular
+/// class version. This feature is implemented to support clients and servers
+/// with either different ROOT versions or different user classes versions.
 void TMessage::TagStreamerInfo(TVirtualStreamerInfo *info)
 {
    if (fgEvolution || fEvolution) {
@@ -179,6 +186,12 @@ void TMessage::Reset()
       fBufCompCur = 0;
       fCompPos    = 0;
    }
+
+   if (fgEvolution || fEvolution) {
+      if (fInfos)
+         fInfos->Clear();
+   }
+   fBitsPIDs.ResetAllBits();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -226,7 +239,7 @@ void TMessage::SetCompressionAlgorithm(Int_t algorithm)
    if (algorithm < 0 || algorithm >= ROOT::kUndefinedCompressionAlgorithm) algorithm = 0;
    Int_t newCompress;
    if (fCompress < 0) {
-      newCompress = 100 * algorithm + 1;
+      newCompress = 100 * algorithm + 4;
    } else {
       int level = fCompress % 100;
       newCompress = 100 * algorithm + level;
@@ -332,7 +345,8 @@ Int_t TMessage::Compress()
          bufmax = messlen - nzip;
       else
          bufmax = kMAXZIPBUF;
-      R__zipMultipleAlgorithm(compressionLevel, &bufmax, messbuf, &bufmax, bufcur, &nout, compressionAlgorithm);
+      R__zipMultipleAlgorithm(compressionLevel, &bufmax, messbuf, &bufmax, bufcur, &nout,
+                              static_cast<ROOT::ECompressionAlgorithm>(compressionAlgorithm));
       if (nout == 0 || nout >= messlen) {
          //this happens when the buffer cannot be compressed
          delete [] fBufComp;
@@ -403,29 +417,6 @@ Int_t TMessage::Uncompress()
    fCompress = 1;
 
    return 0;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Write object to message buffer.
-/// When support for schema evolution is enabled the list of TStreamerInfo
-/// used to stream this object is kept in fInfos. This information is used
-/// by TSocket::Send that sends this list through the socket. This list is in
-/// turn used by TSocket::Recv to store the TStreamerInfo objects in the
-/// relevant TClass in case the TClass does not know yet about a particular
-/// class version. This feature is implemented to support clients and servers
-/// with either different ROOT versions or different user classes versions.
-
-void TMessage::WriteObject(const TObject *obj)
-{
-   if (fgEvolution || fEvolution) {
-      if (fInfos)
-         fInfos->Clear();
-      else
-         fInfos = new TList();
-   }
-
-   fBitsPIDs.ResetAllBits();
-   WriteObjectAny(obj, TObject::Class());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

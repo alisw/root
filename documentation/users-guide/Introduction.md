@@ -41,27 +41,17 @@ because they stress the program in different ways. By now, after ten
 years, the age of ROOT is quite mature. Most likely, you will find the
 features you are looking for, and if you have found a hole, you are
 encouraged to participate in the dialog and post your suggestion or
-even implementation on `roottalk`, the ROOT mailing list.
+even implementation on the ROOT forum.
 
-## The ROOT Mailing Lists
-
-
-The `roottalk` was the very first active ROOT mailing list. mailing
-list People can subscribe to it by registering at the ROOT web site:
-<http://root.cern.ch/root/Registration.phtml>. The `RootTalk` Forum
-<http://root.cern.ch/phpBB3/> has been gradually replaced this
-mailing list since September 2003. The `RootTalk` Forum is a web-based
-news group with about 10 discussion sub-units.
+## The ROOT forum
 
 If you have a question, it is likely that it has been asked, answered,
-and stored in the `roottalk` or `RootTalk` Forum archives. Please use
+and stored in the ROOT Forum. Please use
 the search engine to see if your question has already been answered
-before sending a mail to the `roottalk` list or post a topic in the
+before posting a topic in the
 Forum.
 
-You can browse the `roottalk` archives at:
-<http://root.cern.ch/root/roottalk/AboutRootTalk.html>. You can send
-your question without subscribing to: <roottalk@cern.ch>
+You can access the ROOT forum at: <https://root-forum.cern.ch>.
 
 ## Contact Information
 
@@ -222,7 +212,7 @@ To install ROOT you will need to go to the ROOT website at:
 <http://root.cern.ch/root/Availability.html>. You have a choice to
 download the binaries or the source. The source is quicker to transfer
 since it is only \~22 MB, but you will need to compile and link it. The
-binaries compiled with no degug information range from \~35 MB to \~45
+binaries compiled with no debug information range from \~35 MB to \~45
 MB depending on the target platform.
 
 The installation and building of ROOT is described in Appendix A:
@@ -538,7 +528,7 @@ examples illustrating minimization/fitting `foam`: Random generator in
 multidimensional space `geom`: Examples of use of the geometry package
 (**`TGeo`** classes) `gl`: Visualisation with OpenGL `graphics`: Basic
 graphics `graphs`: Use of **`TGraph`**, **`TGraphErrors`**, etc.
-`gui`: Scripts to create Graphical User Interface `hist`: Histograming
+`gui`: Scripts to create Graphical User Interface `hist`: Histogramming
 `image`: Image Processing `io`: Input/Output `math`: Maths and
 Statistics functions `matrix`: Matrices (**`TMatrix`**) examples
 `mlp`: Neural networks with **`TMultiLayerPerceptron`** `net`: Network

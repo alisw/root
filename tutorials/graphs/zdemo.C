@@ -1,5 +1,6 @@
 /// \file
 /// \ingroup tutorial_graphs
+/// \notebook
 /// This macro is an example of graphs in log scales with annotations.
 ///
 /// The presented results are predictions of invariant cross-section
@@ -23,6 +24,10 @@
 #include "TLatex.h"
 #include "TGraph.h"
 #include "TFrame.h"
+
+#ifdef HZ
+#undef HZ
+#endif
 
 const Int_t NMAX = 20;
 Int_t NLOOP;

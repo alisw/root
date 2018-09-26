@@ -1,5 +1,5 @@
 // @(#):$Id$
-// Author: M.Gheata 
+// Author: M.Gheata
 
 /*************************************************************************
  * Copyright (C) 1995-2002, Rene Brun and Fons Rademakers.               *
@@ -9,21 +9,16 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoEltuEditor                                                      //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-//Begin_Html
-/*
-<img src="gif/eltu_pic.gif">
+/** \class TGeoEltuEditor
+\ingroup Geometry_builder
+
+Editor for a TGeoEltu.
+
+\image html geom_eltu_pic.png
+
+\image html geom_eltu_ed.png
+
 */
-//End_Html
-//Begin_Html
-/*
-<img src="gif/eltu_ed.jpg">
-*/
-//End_Html
 
 #include "TGeoEltuEditor.h"
 #include "TGeoTabManager.h"
@@ -39,7 +34,7 @@
 #include "TGNumberEntry.h"
 #include "TGLabel.h"
 
-ClassImp(TGeoEltuEditor)
+ClassImp(TGeoEltuEditor);
 
 enum ETGeoEltuWid {
    kELTU_NAME, kELTU_A, kELTU_B,  kELTU_DZ,
@@ -80,7 +75,7 @@ TGeoEltuEditor::TGeoEltuEditor(const TGWindow *p, Int_t width,
    fEA->Associate(this);
    f1->AddFrame(fEA, new TGLayoutHints(kLHintsRight, 2, 2, 4, 4));
    AddFrame(f1, new TGLayoutHints(kLHintsLeft, 2, 2, 4, 4));
-   
+
    // Number entry for B
    f1 = new TGCompositeFrame(this, 155, 10, kHorizontalFrame | kFixedWidth);
    f1->AddFrame(new TGLabel(f1, "B"), new TGLayoutHints(kLHintsLeft, 1, 1, 6, 0));
@@ -92,7 +87,7 @@ TGeoEltuEditor::TGeoEltuEditor(const TGWindow *p, Int_t width,
    fEB->Associate(this);
    f1->AddFrame(fEB, new TGLayoutHints(kLHintsRight, 2, 2, 4, 4));
    AddFrame(f1, new TGLayoutHints(kLHintsLeft, 2, 2, 4, 4));
-   
+
    // Number entry for dz
    f1 = new TGCompositeFrame(this, 155, 10, kHorizontalFrame | kFixedWidth);
    f1->AddFrame(new TGLabel(f1, "Dz"), new TGLayoutHints(kLHintsLeft, 1, 1, 6, 0));
@@ -100,16 +95,16 @@ TGeoEltuEditor::TGeoEltuEditor(const TGWindow *p, Int_t width,
    fEDz->SetNumAttr(TGNumberFormat::kNEAPositive);
    fEDz->Resize(100, fEDz->GetDefaultHeight());
    nef = (TGTextEntry*)fEDz->GetNumberEntry();
-   nef->SetToolTipText("Enter the half-lenth in Z");
+   nef->SetToolTipText("Enter the half-length in Z");
    fEDz->Associate(this);
    f1->AddFrame(fEDz, new TGLayoutHints(kLHintsRight, 2, 2, 4, 4));
    AddFrame(f1, new TGLayoutHints(kLHintsLeft, 2, 2, 4, 4));
- 
+
    // Delayed draw
    f1 = new TGCompositeFrame(this, 155, 10, kHorizontalFrame | kFixedWidth | kSunkenFrame);
    fDelayed = new TGCheckButton(f1, "Delayed draw");
    f1->AddFrame(fDelayed, new TGLayoutHints(kLHintsLeft , 2, 2, 4, 4));
-   AddFrame(f1,  new TGLayoutHints(kLHintsLeft, 6, 6, 4, 4));  
+   AddFrame(f1,  new TGLayoutHints(kLHintsLeft, 6, 6, 4, 4));
 
    // Buttons
    f1 = new TGCompositeFrame(this, 155, 10, kHorizontalFrame | kFixedWidth);
@@ -119,7 +114,7 @@ TGeoEltuEditor::TGeoEltuEditor(const TGWindow *p, Int_t width,
    fUndo = new TGTextButton(f1, "Undo");
    f1->AddFrame(fUndo, new TGLayoutHints(kLHintsRight , 2, 2, 4, 4));
    fUndo->Associate(this);
-   AddFrame(f1,  new TGLayoutHints(kLHintsLeft, 6, 6, 4, 4));  
+   AddFrame(f1,  new TGLayoutHints(kLHintsLeft, 6, 6, 4, 4));
    fUndo->SetSize(fApply->GetSize());
 }
 
@@ -131,10 +126,10 @@ TGeoEltuEditor::~TGeoEltuEditor()
    TGFrameElement *el;
    TIter next(GetList());
    while ((el = (TGFrameElement *)next())) {
-      if (el->fFrame->IsComposite()) 
+      if (el->fFrame->IsComposite())
          TGeoTabManager::Cleanup((TGCompositeFrame*)el->fFrame);
    }
-   Cleanup();   
+   Cleanup();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,8 +156,8 @@ void TGeoEltuEditor::SetModel(TObject* obj)
 {
    if (obj == 0 || (obj->IsA()!=TGeoEltu::Class())) {
       SetActive(kFALSE);
-      return;                 
-   } 
+      return;
+   }
    fShape = (TGeoEltu*)obj;
    fAi = fShape->GetA();
    fBi = fShape->GetB();
@@ -172,13 +167,13 @@ void TGeoEltuEditor::SetModel(TObject* obj)
    else {
       fShapeName->SetText(sname);
       fNamei = sname;
-   }   
+   }
    fEA->SetNumber(fAi);
    fEB->SetNumber(fBi);
    fEDz->SetNumber(fDzi);
    fApply->SetEnabled(kFALSE);
    fUndo->SetEnabled(kFALSE);
-   
+
    if (fInit) ConnectSignals2Slots();
    SetActive();
 }
@@ -207,8 +202,8 @@ void TGeoEltuEditor::DoApply()
    const char *name = fShapeName->GetText();
    if (strcmp(name,fShape->GetName())) fShape->SetName(name);
    Double_t a = fEA->GetNumber();
-   Double_t b = fEB->GetNumber(); 
-   Double_t z = fEDz->GetNumber();  
+   Double_t b = fEB->GetNumber();
+   Double_t z = fEDz->GetNumber();
    Double_t param[3];
    param[0] = a;
    param[1] = b;
@@ -227,9 +222,9 @@ void TGeoEltuEditor::DoApply()
             view->SetRange(-fShape->GetDX(), -fShape->GetDY(), -fShape->GetDZ(),
                            fShape->GetDX(), fShape->GetDY(), fShape->GetDZ());
             Update();
-         }                  
+         }
       } else Update();
-   }   
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -252,7 +247,7 @@ void TGeoEltuEditor::DoUndo()
    fUndo->SetEnabled(kFALSE);
    fApply->SetEnabled(kFALSE);
 }
-   
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Slot for A.
 
@@ -262,7 +257,7 @@ void TGeoEltuEditor::DoA()
    if (a <= 0) {
       a = 0.1;
       fEA->SetNumber(a);
-   }   
+   }
    DoModified();
    if (!IsDelayed()) DoApply();
 }
@@ -276,7 +271,7 @@ void TGeoEltuEditor::DoB()
    if (b <= 0) {
       b = 0.1;
       fEB->SetNumber(b);
-   }   
+   }
    DoModified();
    if (!IsDelayed()) DoApply();
 }
@@ -290,7 +285,7 @@ void TGeoEltuEditor::DoDz()
    if (z <= 0) {
       z = 0.1;
       fEDz->SetNumber(z);
-   }   
+   }
    DoModified();
    if (!IsDelayed()) DoApply();
 }

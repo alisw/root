@@ -76,10 +76,11 @@ extra libraries (Histogram, display, etc).
 #include "TVirtualMonitoring.h"
 #include "TTreeCache.h"
 #include "TStyle.h"
+#include "TVirtualMutex.h"
 
 #include "HFitInterface.h"
 #include "Foption.h"
-#include "Fit/DataVector.h"
+#include "Fit/BinData.h"
 #include "Fit/UnBinData.h"
 #include "Math/MinimizerOptions.h"
 
@@ -89,7 +90,7 @@ R__EXTERN Foption_t Foption;
 
 TVirtualFitter *tFitter=0;
 
-ClassImp(TTreePlayer)
+ClassImp(TTreePlayer);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default Tree constructor.
@@ -112,7 +113,10 @@ TTreePlayer::TTreePlayer()
    fInput->Add(new TNamed("varexp",""));
    fInput->Add(new TNamed("selection",""));
    fSelector->SetInputList(fInput);
-   gROOT->GetListOfCleanups()->Add(this);
+   {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfCleanups()->Add(this);
+   }
    TClass::GetClass("TRef")->AdoptReferenceProxy(new TRefProxy());
    TClass::GetClass("TRefArray")->AdoptReferenceProxy(new TRefArrayProxy());
 }
@@ -127,6 +131,7 @@ TTreePlayer::~TTreePlayer()
    DeleteSelectorFromFile();
    fInput->Delete();
    delete fInput;
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfCleanups()->Remove(this);
 }
 
@@ -140,7 +145,7 @@ TVirtualIndex *TTreePlayer::BuildIndex(const TTree *T, const char *majorname, co
       index = new TChainIndex(T, majorname, minorname);
       if (index->IsZombie()) {
          delete index;
-         Error("BuildIndex", "Creating a TChainIndex unsuccessfull - switching to TTreeIndex");
+         Error("BuildIndex", "Creating a TChainIndex unsuccessful - switching to TTreeIndex");
       }
       else
          return index;
@@ -326,7 +331,7 @@ Long64_t TTreePlayer::DrawScript(const char* wrapperPrefix,
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Draw expression varexp for specified entries that matches the selection.
-/// Returns -1 in case of error or number of selected events in case of succss.
+/// Returns -1 in case of error or number of selected events in case of success.
 ///
 /// See the documentation of TTree::Draw for the complete details.
 
@@ -341,6 +346,7 @@ Long64_t TTreePlayer::DrawSelect(const char *varexp0, const char *selection, Opt
    Ssiz_t dot_pos = possibleFilename.Last('.');
    if ( dot_pos != kNPOS
        && possibleFilename.Index("Alt$")<0 && possibleFilename.Index("Entries$")<0
+       && possibleFilename.Index("LocalEntries$")<0
        && possibleFilename.Index("Length$")<0  && possibleFilename.Index("Entry$")<0
        && possibleFilename.Index("LocalEntry$")<0
        && possibleFilename.Index("Min$")<0 && possibleFilename.Index("Max$")<0
@@ -360,6 +366,7 @@ Long64_t TTreePlayer::DrawSelect(const char *varexp0, const char *selection, Opt
    } else {
       possibleFilename = selection;
       if (possibleFilename.Index("Alt$")<0 && possibleFilename.Index("Entries$")<0
+          && possibleFilename.Index("LocalEntries$")<0
           && possibleFilename.Index("Length$")<0  && possibleFilename.Index("Entry$")<0
           && possibleFilename.Index("LocalEntry$")<0
           && possibleFilename.Index("Min$")<0 && possibleFilename.Index("Max$")<0
@@ -405,7 +412,6 @@ Long64_t TTreePlayer::DrawSelect(const char *varexp0, const char *selection, Opt
       }
    }
 
-
    // Do not process more than fMaxEntryLoop entries
    if (nentries > fTree->GetMaxEntryLoop()) nentries = fTree->GetMaxEntryLoop();
 
@@ -436,26 +442,24 @@ Long64_t TTreePlayer::DrawSelect(const char *varexp0, const char *selection, Opt
       if (sumh != 0) fHistogram->Scale(1./sumh);
    }
 
-   //if (!nrows && draw && drawflag && !opt.Contains("same")) {
-   //   if (gPad) gPad->Clear();
-   //   return 0;
-   //}
    if (drawflag) {
       if (gPad) {
-         gPad->DrawFrame(-1.,-1.,1.,1.);
-         TText *text_empty = new TText(0.,0.,"Empty");
-         text_empty->SetTextAlign(22);
-         text_empty->SetTextFont(42);
-         text_empty->SetTextSize(0.1);
-         text_empty->SetTextColor(1);
-         text_empty->Draw();
+         if (!opt.Contains("same") && !opt.Contains("goff")) {
+            gPad->DrawFrame(-1.,-1.,1.,1.);
+            TText *text_empty = new TText(0.,0.,"Empty");
+            text_empty->SetTextAlign(22);
+            text_empty->SetTextFont(42);
+            text_empty->SetTextSize(0.1);
+            text_empty->SetTextColor(1);
+            text_empty->Draw();
+         }
       } else {
          Warning("DrawSelect", "The selected TTree subset is empty.");
       }
    }
 
    //*-*- 1-D distribution
-   if (fDimension == 1) {
+   if (fDimension == 1 && !(optpara||optcandle)) {
       if (fSelector->GetVar1()->IsInteger()) fHistogram->LabelsDeflate("X");
       if (draw) fHistogram->Draw(opt.Data());
 
@@ -513,7 +517,7 @@ Long64_t TTreePlayer::DrawSelect(const char *varexp0, const char *selection, Opt
          if (draw) pm3d->Draw();
       }
    //*-*- Parallel Coordinates or Candle chart.
-   } else if (optpara || optcandle) {
+   } else if (fDimension > 1 && (optpara || optcandle)) {
       if (draw) {
          TObject* para = fSelector->GetObject();
          fTree->Draw(">>enlist",selection,"entrylist",nentries,firstentry);
@@ -522,7 +526,7 @@ Long64_t TTreePlayer::DrawSelect(const char *varexp0, const char *selection, Opt
                                      (ULong_t)para, (ULong_t)enlist));
       }
    //*-*- 5d with gl
-   } else if (optgl5d) {
+   } else if (fDimension == 5 && optgl5d) {
       gROOT->ProcessLineFast(Form("(new TGL5DDataSet((TTree *)0x%lx))->Draw(\"%s\");", (ULong_t)fTree, opt.Data()));
       gStyle->SetCanvasPreferGL(pgl);
    }
@@ -872,7 +876,7 @@ Int_t TTreePlayer::MakeClass(const char *classname, const char *option)
          blen[lenb-1] = 0;
          len = leaflen[l];
          if (len <= 0) len = 1;
-         fprintf(fp,"   const Int_t kMax%s = %d;\n",blen,len);
+         fprintf(fp,"   static constexpr Int_t kMax%s = %d;\n",blen,len);
       }
    }
    delete [] leaflen;
@@ -1886,11 +1890,12 @@ Int_t TTreePlayer::MakeCode(const char *filename)
 /// The default histogram is accessible via the variable named 'htemp'.
 ///
 /// If the library of the classes describing the data in the branch is
-/// loaded, the skeleton will add the needed #include statements and
+/// loaded, the skeleton will add the needed `include` statements and
 /// give the ability to access the object stored in the branches.
 ///
-/// To draw px using the file hsimple.root (generated by the
+/// To draw px using the file `hsimple.root (generated by the
 /// hsimple.C tutorial), we need a file named hsimple.cxx:
+///
 /// ~~~{.cpp}
 ///     double hsimple() {
 ///        return px;
@@ -1956,13 +1961,16 @@ Int_t TTreePlayer::MakeProxy(const char *proxyClassname,
 /// The generated code in classname.C includes empty functions defined above.
 ///
 /// To use this function:
-///    - connect your Tree file (eg: TFile f("myfile.root");)
-///    - T->MakeSelector("myselect");
-/// where T is the name of the Tree in file myfile.root
-/// and myselect.h, myselect.C the name of the files created by this function.
+///    - connect your Tree file (eg: `TFile f("myfile.root");`)
+///    - `T->MakeSelector("myselect");`
+///       where `T` is the name of the Tree in file `myfile.root`
+///       and `myselect.h`, `myselect.C` the name of the files created by this
+///       function.
+///
 /// In a ROOT session, you can do:
+/// ~~~ {.cpp}
 ///    root > T->Process("myselect.C")
-
+/// ~~~
 Int_t TTreePlayer::MakeReader(const char *classname, Option_t *option)
 {
    if (!classname) classname = fTree->GetName();
@@ -2340,10 +2348,10 @@ void TTreePlayer::RecursiveRemove(TObject *obj)
 /// Otherwise a columns selection can be made using "var1:var2:var3".
 /// The function returns the number of entries passing the selection.
 ///
-/// By default 50 rows are shown and you are asked for <CR>
+/// By default 50 rows are shown and you are asked for `<CR>`
 /// to see the next 50 rows.
 ///
-/// You can change the default number of rows to be shown before <CR>
+/// You can change the default number of rows to be shown before `<CR>`
 /// via  mytree->SetScanField(maxrows) where maxrows is 50 by default.
 /// if maxrows is set to 0 all rows of the Tree are shown.
 ///
@@ -2403,7 +2411,9 @@ void TTreePlayer::RecursiveRemove(TObject *obj)
 /// Will print 3 columns, the first 2 columns will be 30 characters long,
 /// the third columns will be 20 characters long.  The printing format used
 /// for the columns (assuming they are numbers) will be respectively:
-/// `%30.3g %30.3g %20.10g %#x %5ld`
+/// ~~~ {.cpp}
+/// %30.3g %30.3g %20.10g %#x %5ld
+/// ~~~
 
 Long64_t TTreePlayer::Scan(const char *varexp, const char *selection,
                            Option_t * option,
@@ -3043,13 +3053,13 @@ Int_t TTreePlayer::UnbinnedFit(const char *funcname ,const char *varexp, const c
    if (!opt.Contains("D")) fitOption.Nograph    = 1;  // what about 0
    // could add range and automatic normalization of functions and gradient
 
-   TString drawOpt = "goff para";
+   TString drawOpt = "goff";
    if (!fitOption.Nograph) drawOpt = "";
    Long64_t nsel = DrawSelect(varexp, selection,drawOpt, nentries, firstentry);
 
    if (!fitOption.Nograph  && GetSelectedRows() <= 0 && GetDimension() > 4) {
       Info("UnbinnedFit","Ignore option D with more than 4 variables");
-      nsel = DrawSelect(varexp, selection,"goff para", nentries, firstentry);
+      nsel = DrawSelect(varexp, selection,"goff", nentries, firstentry);
    }
 
    //if no selected entries return

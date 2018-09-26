@@ -21,17 +21,15 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TLeaf
 #include "TLeaf.h"
-#endif
 
 class TLeafB : public TLeaf {
 
 protected:
-   Char_t       fMinimum;         //Minimum value if leaf range is specified
-   Char_t       fMaximum;         //Maximum value if leaf range is specified
-   Char_t       *fValue;          //!Pointer to data buffer
-   Char_t       **fPointer;       //!Address of a pointer to data buffer!
+   Char_t       fMinimum;         ///<  Minimum value if leaf range is specified
+   Char_t       fMaximum;         ///<  Maximum value if leaf range is specified
+   Char_t       *fValue;          ///<! Pointer to data buffer
+   Char_t       **fPointer;       ///<! Address of a pointer to data buffer!
 
 public:
    TLeafB();
@@ -45,6 +43,7 @@ public:
    const char     *GetTypeName() const;
    Double_t        GetValue(Int_t i = 0) const { return IsUnsigned() ? (Double_t)((UChar_t) fValue[i]) : (Double_t)fValue[i]; }
    virtual void   *GetValuePointer() const { return fValue; }
+   virtual Bool_t  IncludeRange(TLeaf *);
    virtual void    Import(TClonesArray* list, Int_t n);
    virtual void    PrintValue(Int_t i = 0) const;
    virtual void    ReadBasket(TBuffer&);

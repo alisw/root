@@ -18,30 +18,18 @@
 #ifndef ROOT_Math_GenVector_RotationZYX
 #define ROOT_Math_GenVector_RotationZYX  1
 
-#ifndef ROOT_Math_Math
 #include "Math/Math.h"
-#endif
 
-#ifndef ROOT_Math_GenVector_Rotation3D
 #include "Math/GenVector/Rotation3D.h"
-#endif
 
 
-#ifndef ROOT_Math_GenVector_DisplacementVector3D
 #include "Math/GenVector/DisplacementVector3D.h"
-#endif
 
-#ifndef ROOT_Math_GenVector_PositionVector3D
 #include "Math/GenVector/PositionVector3D.h"
-#endif
 
-#ifndef ROOT_Math_GenVector_LorentzVector
 #include "Math/GenVector/LorentzVector.h"
-#endif
 
-#ifndef ROOT_Math_GenVector_3DConversions
 #include "Math/GenVector/3DConversions.h"
-#endif
 
 
 #include <algorithm>
@@ -58,11 +46,13 @@ namespace Math {
      Rotation class with the (3D) rotation represented by
      angles describing first a rotation of
      an angle phi (yaw) about the  Z axis,
-     followed by a rotation of an angle theta (pitch) about the new Y' axis,
-     followed by a third rotation of an angle psi (roll) about the final X'' axis.
-     This is  sometimes referred to as the Euler 321 sequence.
-     It has not to be confused with the typical Goldstein definition of the Euler Angles
-     (Z-X-Z or 313 sequence) which is used by the ROOT::Math::EulerAngles class.
+     followed by a rotation of an angle theta (pitch) about the Y axis,
+     followed by a third rotation of an angle psi (roll) about the X axis.
+     Note that the rotations are extrinsic rotations happening around a fixed coordinate system. 
+     This is  different than the convention of the ROOT::Math::EulerAngles class, where the rotation are intrinsic. 
+     Also it has not to be confused with the typical Goldstein definition of the Euler Angles
+     (Z-X-Z or 313 sequence) which is used by the ROOT::Math::EulerAngles class, while the sequence here is Z-Y-X or 321.
+     Applying a RotationZYX(phi, theta, psi)  to a vector is then equal to applying RotationX(psi) * RotationY(theta) * RotationZ(phi) to the same vector. 
 
 
      @ingroup GenVector

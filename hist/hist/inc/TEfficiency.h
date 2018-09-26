@@ -6,21 +6,16 @@
 #include <utility>
 
 //ROOT header
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
 
-#ifndef ROOT_TAttLine
 #include "TAttLine.h"
-#endif
 
-#ifndef ROOT_TAttFill
 #include "TAttFill.h"
-#endif
 
-#ifndef ROOT_TAttMarker
 #include "TAttMarker.h"
-#endif
+
+#include "TFitResultPtr.h"
+
 
 class TCollection;
 class TF1;
@@ -63,12 +58,12 @@ protected:
       TH1*          fTotalHistogram;         //histogram for total number of events
       Double_t      fWeight;                 //weight for all events (default = 1)
 
-      enum{
-         kIsBayesian       = BIT(14),              //bayesian statistics are used
-         kPosteriorMode    = BIT(15),              //use posterior mean for best estimate (Bayesian statistics)
-         kShortestInterval = BIT(16),              // use shortest interval
-         kUseBinPrior      = BIT(17),              // use a different prior for each bin
-         kUseWeights       = BIT(18)               // use weights
+      enum EStatusBits {
+         kIsBayesian       = BIT(14),  //bayesian statistics are used
+         kPosteriorMode    = BIT(15),  //use posterior mean for best estimate (Bayesian statistics)
+         kShortestInterval = BIT(16),  // use shortest interval
+         kUseBinPrior      = BIT(17),  // use a different prior for each bin
+         kUseWeights       = BIT(18)   // use weights
       };
 
       void          Build(const char* name,const char* title);
@@ -106,7 +101,7 @@ public:
       void          Fill(Bool_t bPassed,Double_t x,Double_t y=0,Double_t z=0);
       void          FillWeighted(Bool_t bPassed,Double_t weight,Double_t x,Double_t y=0,Double_t z=0);
       Int_t         FindFixBin(Double_t x,Double_t y=0,Double_t z=0) const;
-      Int_t         Fit(TF1* f1,Option_t* opt="");
+      TFitResultPtr Fit(TF1* f1,Option_t* opt="");
       // use trick of -1 to return global parameters
       Double_t      GetBetaAlpha(Int_t bin = -1) const {return (fBeta_bin_params.size() > (UInt_t)bin) ? fBeta_bin_params[bin].first : fBeta_alpha;}
       Double_t      GetBetaBeta(Int_t bin =  -1) const {return (fBeta_bin_params.size() > (UInt_t)bin) ? fBeta_bin_params[bin].second : fBeta_beta;}
@@ -156,7 +151,7 @@ public:
       void          SetTitle(const char* title);
       Bool_t        SetTotalEvents(Int_t bin,Int_t events);
       Bool_t        SetTotalHistogram(const TH1& rTotal,Option_t* opt);
-      void          SetUseWeightedEvents();
+      void          SetUseWeightedEvents(Bool_t on = kTRUE);
       void          SetWeight(Double_t weight);
       Bool_t        UsesBayesianStat() const {return TestBit(kIsBayesian);}
       Bool_t        UsesPosteriorMode() const   {return TestBit(kPosteriorMode) && TestBit(kIsBayesian);}
@@ -168,6 +163,7 @@ public:
       static Bool_t CheckBinning(const TH1& pass,const TH1& total);
       static Bool_t CheckConsistency(const TH1& pass,const TH1& total,Option_t* opt="");
       static Bool_t CheckEntries(const TH1& pass,const TH1& total,Option_t* opt="");
+      static Bool_t CheckWeights(const TH1& pass,const TH1& total);
       static Double_t Combine(Double_t& up,Double_t& low,Int_t n,const Int_t* pass,const Int_t* total,
                               Double_t alpha,Double_t beta,Double_t level=0.683,
                               const Double_t* w=0,Option_t* opt="");

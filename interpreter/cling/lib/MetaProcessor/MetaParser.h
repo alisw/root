@@ -47,6 +47,7 @@ namespace cling {
   //                 StoreStateCommand := 'storeState' "Ident"
   //                 CompareStateCommand := 'compareState' "Ident"
   //                 StatsCommand := 'stats' ['ast']
+  //                 traceCommand := 'trace' ['ast'] ["Ident"]
   //                 undoCommand := 'undo' [Constant]
   //                 DynamicExtensionsCommand := 'dynamicExtensions' [Constant]
   //                 HelpCommand := 'help'
@@ -63,7 +64,7 @@ namespace cling {
   //
   class MetaParser {
   private:
-    std::unique_ptr<MetaLexer> m_Lexer;
+    MetaLexer m_Lexer;
     std::unique_ptr<MetaSema> m_Actions;
     llvm::SmallVector<Token, 2> m_TokenCache;
     llvm::SmallVector<Token, 4> m_MetaSymbolCache;
@@ -92,13 +93,14 @@ namespace cling {
     bool isqCommand();
     bool isUCommand(MetaSema::ActionResult& actionResult);
     bool isICommand();
-    bool isOCommand();
+    bool isOCommand(MetaSema::ActionResult& actionResult);
     bool israwInputCommand();
     bool isdebugCommand();
     bool isprintDebugCommand();
     bool isstoreStateCommand();
     bool iscompareStateCommand();
     bool isstatsCommand();
+    bool istraceCommand();
     bool isundoCommand();
     bool isdynamicExtensionsCommand();
     bool ishelpCommand();

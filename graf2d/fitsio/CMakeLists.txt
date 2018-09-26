@@ -5,12 +5,9 @@
 
 include_directories(${CFITSIO_INCLUDE_DIR})
 
-ROOT_GENERATE_DICTIONARY(G__FITSIO *.h MODULE FITSIO LINKDEF LinkDef.h OPTIONS "-writeEmptyRootPCM")
-
-ROOT_LINKER_LIBRARY(FITSIO *.cxx G__FITSIO.cxx LIBRARIES ${CFITSIO_LIBRARIES} DEPENDENCIES Hist Gpad Graf Matrix)
-if(builtin_cfitsio)
-   ROOT_ADD_BUILTIN_DEPENDENCIES(FITSIO CFITSIO)
-endif()
-ROOT_INSTALL_HEADERS()
-
+ROOT_STANDARD_LIBRARY_PACKAGE(FITSIO
+                              HEADERS *.h
+                              DICTIONARY_OPTIONS "-writeEmptyRootPCM"
+                              LIBRARIES ${CFITSIO_LIBRARIES}
+                              DEPENDENCIES Hist Gpad Graf Matrix BUILTINS CFITSIO)
 

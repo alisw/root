@@ -12,15 +12,9 @@
 #ifndef ROOT_TParallelCoordVar
 #define ROOT_TParallelCoordVar
 
-#ifndef ROOT_TAttLine
 #include "TAttLine.h"
-#endif
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TAttFill
 #include "TAttFill.h"
-#endif
 
 class TParallelCoord;
 class TParallelCoordSelect;
@@ -29,10 +23,10 @@ class TH1F;
 
 class TParallelCoordVar : public TNamed, public TAttLine, public TAttFill {
 public:
-   enum {
-      kLogScale      =BIT(14),
-      kShowBox       =BIT(15),
-      kShowBarHisto  =BIT(16)
+   enum EStatusBits {
+      kLogScale      = BIT(14),
+      kShowBox       = BIT(15),
+      kShowBarHisto  = BIT(16)
    };
 private:
    Int_t             fNbins;        // Number of bins in fHistogram.

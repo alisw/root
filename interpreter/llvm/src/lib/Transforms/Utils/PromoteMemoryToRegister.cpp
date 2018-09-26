@@ -13,19 +13,8 @@
 // traversing the function in depth-first order to rewrite loads and stores as
 // appropriate.
 //
-// The algorithm used here is based on:
-//
-//   Sreedhar and Gao. A linear time algorithm for placing phi-nodes.
-//   In Proceedings of the 22nd ACM SIGPLAN-SIGACT Symposium on Principles of
-//   Programming Languages
-//   POPL '95. ACM, New York, NY, 62-73.
-//
-// It has been modified to not explicitly use the DJ graph data structure and to
-// directly compute pruned SSA using per-variable liveness information.
-//
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
@@ -33,7 +22,9 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasSetTracker.h"
+#include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/InstructionSimplify.h"
+#include "llvm/Analysis/IteratedDominanceFrontier.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
@@ -45,9 +36,10 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Local.h"
+#include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include <algorithm>
-#include <queue>
 using namespace llvm;
 
 #define DEBUG_TYPE "mem2reg"
@@ -214,10 +206,9 @@ public:
     // avoid gratuitus rescans.
     const BasicBlock *BB = I->getParent();
     unsigned InstNo = 0;
-    for (BasicBlock::const_iterator BBI = BB->begin(), E = BB->end(); BBI != E;
-         ++BBI)
-      if (isInterestingInstruction(BBI))
-        InstNumbers[BBI] = InstNo++;
+    for (const Instruction &BBI : *BB)
+      if (isInterestingInstruction(&BBI))
+        InstNumbers[&BBI] = InstNo++;
     It = InstNumbers.find(I);
 
     assert(It != InstNumbers.end() && "Didn't insert instruction?");
@@ -234,13 +225,10 @@ struct PromoteMem2Reg {
   std::vector<AllocaInst *> Allocas;
   DominatorTree &DT;
   DIBuilder DIB;
-
-  /// An AliasSetTracker object to update.  If null, don't update it.
-  AliasSetTracker *AST;
-
   /// A cache of @llvm.assume intrinsics used by SimplifyInstruction.
   AssumptionCache *AC;
 
+  const SimplifyQuery SQ;
   /// Reverse mapping of Allocas.
   DenseMap<AllocaInst *, unsigned> AllocaLookup;
 
@@ -274,18 +262,16 @@ struct PromoteMem2Reg {
   /// behavior.
   DenseMap<BasicBlock *, unsigned> BBNumbers;
 
-  /// Maps DomTreeNodes to their level in the dominator tree.
-  DenseMap<DomTreeNode *, unsigned> DomLevels;
-
   /// Lazily compute the number of predecessors a block has.
   DenseMap<const BasicBlock *, unsigned> BBNumPreds;
 
 public:
   PromoteMem2Reg(ArrayRef<AllocaInst *> Allocas, DominatorTree &DT,
-                 AliasSetTracker *AST, AssumptionCache *AC)
+                 AssumptionCache *AC)
       : Allocas(Allocas.begin(), Allocas.end()), DT(DT),
         DIB(*DT.getRoot()->getParent()->getParent(), /*AllowUnresolved*/ false),
-        AST(AST), AC(AC) {}
+        AC(AC), SQ(DT.getRoot()->getParent()->getParent()->getDataLayout(),
+                   nullptr, &DT, AC) {}
 
   void run();
 
@@ -303,8 +289,6 @@ private:
     return NP - 1;
   }
 
-  void DetermineInsertionPoint(AllocaInst *AI, unsigned AllocaNum,
-                               AllocaInfo &Info);
   void ComputeLiveInBlocks(AllocaInst *AI, AllocaInfo &Info,
                            const SmallPtrSetImpl<BasicBlock *> &DefBlocks,
                            SmallPtrSetImpl<BasicBlock *> &LiveInBlocks);
@@ -315,6 +299,18 @@ private:
 };
 
 } // end of anonymous namespace
+
+/// Given a LoadInst LI this adds assume(LI != null) after it.
+static void addAssumeNonNull(AssumptionCache *AC, LoadInst *LI) {
+  Function *AssumeIntrinsic =
+      Intrinsic::getDeclaration(LI->getModule(), Intrinsic::assume);
+  ICmpInst *LoadNotNull = new ICmpInst(ICmpInst::ICMP_NE, LI,
+                                       Constant::getNullValue(LI->getType()));
+  LoadNotNull->insertAfter(LI);
+  CallInst *CI = CallInst::Create(AssumeIntrinsic, {LoadNotNull});
+  CI->insertAfter(LoadNotNull);
+  AC->registerAssumption(CI);
+}
 
 static void removeLifetimeIntrinsicUsers(AllocaInst *AI) {
   // Knowing that this alloca is promotable, we know that it's safe to kill all
@@ -349,9 +345,8 @@ static void removeLifetimeIntrinsicUsers(AllocaInst *AI) {
 /// and thus must be phi-ed with undef. We fall back to the standard alloca
 /// promotion algorithm in that case.
 static bool rewriteSingleStoreAlloca(AllocaInst *AI, AllocaInfo &Info,
-                                     LargeBlockInfo &LBI,
-                                     DominatorTree &DT,
-                                     AliasSetTracker *AST) {
+                                     LargeBlockInfo &LBI, DominatorTree &DT,
+                                     AssumptionCache *AC) {
   StoreInst *OnlyStore = Info.OnlyStore;
   bool StoringGlobalVal = !isa<Instruction>(OnlyStore->getOperand(0));
   BasicBlock *StoreBB = OnlyStore->getParent();
@@ -402,9 +397,15 @@ static bool rewriteSingleStoreAlloca(AllocaInst *AI, AllocaInfo &Info,
     // code.
     if (ReplVal == LI)
       ReplVal = UndefValue::get(LI->getType());
+
+    // If the load was marked as nonnull we don't want to lose
+    // that information when we erase this Load. So we preserve
+    // it with an assume.
+    if (AC && LI->getMetadata(LLVMContext::MD_nonnull) &&
+        !llvm::isKnownNonNullAt(ReplVal, LI, &DT))
+      addAssumeNonNull(AC, LI);
+
     LI->replaceAllUsesWith(ReplVal);
-    if (AST && LI->getType()->isPointerTy())
-      AST->deleteValue(LI);
     LI->eraseFromParent();
     LBI.deleteValue(LI);
   }
@@ -416,8 +417,7 @@ static bool rewriteSingleStoreAlloca(AllocaInst *AI, AllocaInfo &Info,
   // Record debuginfo for the store and remove the declaration's
   // debuginfo.
   if (DbgDeclareInst *DDI = Info.DbgDeclare) {
-    DIBuilder DIB(*AI->getParent()->getParent()->getParent(),
-                  /*AllowUnresolved*/ false);
+    DIBuilder DIB(*AI->getModule(), /*AllowUnresolved*/ false);
     ConvertDebugDeclareToDebugValue(DDI, Info.OnlyStore, DIB);
     DDI->eraseFromParent();
     LBI.deleteValue(DDI);
@@ -426,8 +426,6 @@ static bool rewriteSingleStoreAlloca(AllocaInst *AI, AllocaInfo &Info,
   Info.OnlyStore->eraseFromParent();
   LBI.deleteValue(Info.OnlyStore);
 
-  if (AST)
-    AST->deleteValue(AI);
   AI->eraseFromParent();
   LBI.deleteValue(AI);
   return true;
@@ -439,16 +437,20 @@ static bool rewriteSingleStoreAlloca(AllocaInst *AI, AllocaInfo &Info,
 /// using the Alloca.
 ///
 /// If we cannot promote this alloca (because it is read before it is written),
-/// return true.  This is necessary in cases where, due to control flow, the
-/// alloca is potentially undefined on some control flow paths.  e.g. code like
-/// this is potentially correct:
-///
-///   for (...) { if (c) { A = undef; undef = B; } }
-///
-/// ... so long as A is not used before undef is set.
-static void promoteSingleBlockAlloca(AllocaInst *AI, const AllocaInfo &Info,
+/// return false.  This is necessary in cases where, due to control flow, the
+/// alloca is undefined only on some control flow paths.  e.g. code like
+/// this is correct in LLVM IR:
+///  // A is an alloca with no stores so far
+///  for (...) {
+///    int t = *A;
+///    if (!first_iteration)
+///      use(t);
+///    *A = 42;
+///  }
+static bool promoteSingleBlockAlloca(AllocaInst *AI, const AllocaInfo &Info,
                                      LargeBlockInfo &LBI,
-                                     AliasSetTracker *AST) {
+                                     DominatorTree &DT,
+                                     AssumptionCache *AC) {
   // The trickiest case to handle is when we have large blocks. Because of this,
   // this code is optimized assuming that large blocks happen.  This does not
   // significantly pessimize the small block case.  This uses LargeBlockInfo to
@@ -481,16 +483,26 @@ static void promoteSingleBlockAlloca(AllocaInst *AI, const AllocaInfo &Info,
                          std::make_pair(LoadIdx,
                                         static_cast<StoreInst *>(nullptr)),
                          less_first());
-
-    if (I == StoresByIndex.begin())
-      // If there is no store before this load, the load takes the undef value.
-      LI->replaceAllUsesWith(UndefValue::get(LI->getType()));
-    else
+    if (I == StoresByIndex.begin()) {
+      if (StoresByIndex.empty())
+        // If there are no stores, the load takes the undef value.
+        LI->replaceAllUsesWith(UndefValue::get(LI->getType()));
+      else
+        // There is no store before this load, bail out (load may be affected
+        // by the following stores - see main comment).
+        return false;
+    } else {
       // Otherwise, there was a store before this load, the load takes its value.
-      LI->replaceAllUsesWith(std::prev(I)->second->getOperand(0));
+      // Note, if the load was marked as nonnull we don't want to lose that
+      // information when we erase it. So we preserve it with an assume.
+      Value *ReplVal = std::prev(I)->second->getOperand(0);
+      if (AC && LI->getMetadata(LLVMContext::MD_nonnull) &&
+          !llvm::isKnownNonNullAt(ReplVal, LI, &DT))
+        addAssumeNonNull(AC, LI);
 
-    if (AST && LI->getType()->isPointerTy())
-      AST->deleteValue(LI);
+      LI->replaceAllUsesWith(ReplVal);
+    }
+
     LI->eraseFromParent();
     LBI.deleteValue(LI);
   }
@@ -500,16 +512,13 @@ static void promoteSingleBlockAlloca(AllocaInst *AI, const AllocaInfo &Info,
     StoreInst *SI = cast<StoreInst>(AI->user_back());
     // Record debuginfo for the store before removing it.
     if (DbgDeclareInst *DDI = Info.DbgDeclare) {
-      DIBuilder DIB(*AI->getParent()->getParent()->getParent(),
-                    /*AllowUnresolved*/ false);
+      DIBuilder DIB(*AI->getModule(), /*AllowUnresolved*/ false);
       ConvertDebugDeclareToDebugValue(DDI, SI, DIB);
     }
     SI->eraseFromParent();
     LBI.deleteValue(SI);
   }
 
-  if (AST)
-    AST->deleteValue(AI);
   AI->eraseFromParent();
   LBI.deleteValue(AI);
 
@@ -520,17 +529,17 @@ static void promoteSingleBlockAlloca(AllocaInst *AI, const AllocaInfo &Info,
   }
 
   ++NumLocalPromoted;
+  return true;
 }
 
 void PromoteMem2Reg::run() {
   Function &F = *DT.getRoot()->getParent();
 
-  if (AST)
-    PointerAllocaValues.resize(Allocas.size());
   AllocaDbgDeclares.resize(Allocas.size());
 
   AllocaInfo Info;
   LargeBlockInfo LBI;
+  ForwardIDFCalculator IDF(DT);
 
   for (unsigned AllocaNum = 0; AllocaNum != Allocas.size(); ++AllocaNum) {
     AllocaInst *AI = Allocas[AllocaNum];
@@ -543,8 +552,6 @@ void PromoteMem2Reg::run() {
 
     if (AI->use_empty()) {
       // If there are no uses of the alloca, just delete it now.
-      if (AST)
-        AST->deleteValue(AI);
       AI->eraseFromParent();
 
       // Remove the alloca from the Allocas list, since it has been processed
@@ -560,7 +567,7 @@ void PromoteMem2Reg::run() {
     // If there is only a single store to this value, replace any loads of
     // it that are directly dominated by the definition with the value stored.
     if (Info.DefiningBlocks.size() == 1) {
-      if (rewriteSingleStoreAlloca(AI, Info, LBI, DT, AST)) {
+      if (rewriteSingleStoreAlloca(AI, Info, LBI, DT, AC)) {
         // The alloca has been processed, move on.
         RemoveFromAllocasList(AllocaNum);
         ++NumSingleStore;
@@ -570,45 +577,20 @@ void PromoteMem2Reg::run() {
 
     // If the alloca is only read and written in one basic block, just perform a
     // linear sweep over the block to eliminate it.
-    if (Info.OnlyUsedInOneBlock) {
-      promoteSingleBlockAlloca(AI, Info, LBI, AST);
-
+    if (Info.OnlyUsedInOneBlock &&
+        promoteSingleBlockAlloca(AI, Info, LBI, DT, AC)) {
       // The alloca has been processed, move on.
       RemoveFromAllocasList(AllocaNum);
       continue;
-    }
-
-    // If we haven't computed dominator tree levels, do so now.
-    if (DomLevels.empty()) {
-      SmallVector<DomTreeNode *, 32> Worklist;
-
-      DomTreeNode *Root = DT.getRootNode();
-      DomLevels[Root] = 0;
-      Worklist.push_back(Root);
-
-      while (!Worklist.empty()) {
-        DomTreeNode *Node = Worklist.pop_back_val();
-        unsigned ChildLevel = DomLevels[Node] + 1;
-        for (DomTreeNode::iterator CI = Node->begin(), CE = Node->end();
-             CI != CE; ++CI) {
-          DomLevels[*CI] = ChildLevel;
-          Worklist.push_back(*CI);
-        }
-      }
     }
 
     // If we haven't computed a numbering for the BB's in the function, do so
     // now.
     if (BBNumbers.empty()) {
       unsigned ID = 0;
-      for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
-        BBNumbers[I] = ID++;
+      for (auto &BB : F)
+        BBNumbers[&BB] = ID++;
     }
-
-    // If we have an AST to keep updated, remember some pointer value that is
-    // stored into the alloca.
-    if (AST)
-      PointerAllocaValues[AllocaNum] = Info.AllocaPointerVal;
 
     // Remember the dbg.declare intrinsic describing this alloca, if any.
     if (Info.DbgDeclare)
@@ -621,7 +603,34 @@ void PromoteMem2Reg::run() {
     // the standard SSA construction algorithm.  Determine which blocks need PHI
     // nodes and see if we can optimize out some work by avoiding insertion of
     // dead phi nodes.
-    DetermineInsertionPoint(AI, AllocaNum, Info);
+
+
+    // Unique the set of defining blocks for efficient lookup.
+    SmallPtrSet<BasicBlock *, 32> DefBlocks;
+    DefBlocks.insert(Info.DefiningBlocks.begin(), Info.DefiningBlocks.end());
+
+    // Determine which blocks the value is live in.  These are blocks which lead
+    // to uses.
+    SmallPtrSet<BasicBlock *, 32> LiveInBlocks;
+    ComputeLiveInBlocks(AI, Info, DefBlocks, LiveInBlocks);
+
+    // At this point, we're committed to promoting the alloca using IDF's, and
+    // the standard SSA construction algorithm.  Determine which blocks need phi
+    // nodes and see if we can optimize out some work by avoiding insertion of
+    // dead phi nodes.
+    IDF.setLiveInBlocks(LiveInBlocks);
+    IDF.setDefiningBlocks(DefBlocks);
+    SmallVector<BasicBlock *, 32> PHIBlocks;
+    IDF.calculate(PHIBlocks);
+    if (PHIBlocks.size() > 1)
+      std::sort(PHIBlocks.begin(), PHIBlocks.end(),
+                [this](BasicBlock *A, BasicBlock *B) {
+                  return BBNumbers.lookup(A) < BBNumbers.lookup(B);
+                });
+
+    unsigned CurrentVersion = 0;
+    for (unsigned i = 0, e = PHIBlocks.size(); i != e; ++i)
+      QueuePhiNode(PHIBlocks[i], AllocaNum, CurrentVersion);
   }
 
   if (Allocas.empty())
@@ -641,7 +650,7 @@ void PromoteMem2Reg::run() {
   // and inserting the phi nodes we marked as necessary
   //
   std::vector<RenamePassData> RenamePassWorkList;
-  RenamePassWorkList.push_back(RenamePassData(F.begin(), nullptr, Values));
+  RenamePassWorkList.emplace_back(&F.front(), nullptr, std::move(Values));
   do {
     RenamePassData RPD;
     RPD.swap(RenamePassWorkList.back());
@@ -662,8 +671,6 @@ void PromoteMem2Reg::run() {
     // tree. Just delete the users now.
     if (!A->use_empty())
       A->replaceAllUsesWith(UndefValue::get(A->getType()));
-    if (AST)
-      AST->deleteValue(A);
     A->eraseFromParent();
   }
 
@@ -691,9 +698,7 @@ void PromoteMem2Reg::run() {
       PHINode *PN = I->second;
 
       // If this PHI node merges one value and/or undefs, get the value.
-      if (Value *V = SimplifyInstruction(PN, nullptr, nullptr, &DT, AC)) {
-        if (AST && PN->getType()->isPointerTy())
-          AST->deleteValue(PN);
+      if (Value *V = SimplifyInstruction(PN, SQ)) {
         PN->replaceAllUsesWith(V);
         PN->eraseFromParent();
         NewPhiNodes.erase(I++);
@@ -800,7 +805,8 @@ void PromoteMem2Reg::ComputeLiveInBlocks(
         // actually live-in here.
         LiveInBlockWorklist[i] = LiveInBlockWorklist.back();
         LiveInBlockWorklist.pop_back();
-        --i, --e;
+        --i;
+        --e;
         break;
       }
 
@@ -841,95 +847,6 @@ void PromoteMem2Reg::ComputeLiveInBlocks(
   }
 }
 
-/// At this point, we're committed to promoting the alloca using IDF's, and the
-/// standard SSA construction algorithm.  Determine which blocks need phi nodes
-/// and see if we can optimize out some work by avoiding insertion of dead phi
-/// nodes.
-void PromoteMem2Reg::DetermineInsertionPoint(AllocaInst *AI, unsigned AllocaNum,
-                                             AllocaInfo &Info) {
-  // Unique the set of defining blocks for efficient lookup.
-  SmallPtrSet<BasicBlock *, 32> DefBlocks;
-  DefBlocks.insert(Info.DefiningBlocks.begin(), Info.DefiningBlocks.end());
-
-  // Determine which blocks the value is live in.  These are blocks which lead
-  // to uses.
-  SmallPtrSet<BasicBlock *, 32> LiveInBlocks;
-  ComputeLiveInBlocks(AI, Info, DefBlocks, LiveInBlocks);
-
-  // Use a priority queue keyed on dominator tree level so that inserted nodes
-  // are handled from the bottom of the dominator tree upwards.
-  typedef std::pair<DomTreeNode *, unsigned> DomTreeNodePair;
-  typedef std::priority_queue<DomTreeNodePair, SmallVector<DomTreeNodePair, 32>,
-                              less_second> IDFPriorityQueue;
-  IDFPriorityQueue PQ;
-
-  for (BasicBlock *BB : DefBlocks) {
-    if (DomTreeNode *Node = DT.getNode(BB))
-      PQ.push(std::make_pair(Node, DomLevels[Node]));
-  }
-
-  SmallVector<std::pair<unsigned, BasicBlock *>, 32> DFBlocks;
-  SmallPtrSet<DomTreeNode *, 32> Visited;
-  SmallVector<DomTreeNode *, 32> Worklist;
-  while (!PQ.empty()) {
-    DomTreeNodePair RootPair = PQ.top();
-    PQ.pop();
-    DomTreeNode *Root = RootPair.first;
-    unsigned RootLevel = RootPair.second;
-
-    // Walk all dominator tree children of Root, inspecting their CFG edges with
-    // targets elsewhere on the dominator tree. Only targets whose level is at
-    // most Root's level are added to the iterated dominance frontier of the
-    // definition set.
-
-    Worklist.clear();
-    Worklist.push_back(Root);
-
-    while (!Worklist.empty()) {
-      DomTreeNode *Node = Worklist.pop_back_val();
-      BasicBlock *BB = Node->getBlock();
-
-      for (succ_iterator SI = succ_begin(BB), SE = succ_end(BB); SI != SE;
-           ++SI) {
-        DomTreeNode *SuccNode = DT.getNode(*SI);
-
-        // Quickly skip all CFG edges that are also dominator tree edges instead
-        // of catching them below.
-        if (SuccNode->getIDom() == Node)
-          continue;
-
-        unsigned SuccLevel = DomLevels[SuccNode];
-        if (SuccLevel > RootLevel)
-          continue;
-
-        if (!Visited.insert(SuccNode).second)
-          continue;
-
-        BasicBlock *SuccBB = SuccNode->getBlock();
-        if (!LiveInBlocks.count(SuccBB))
-          continue;
-
-        DFBlocks.push_back(std::make_pair(BBNumbers[SuccBB], SuccBB));
-        if (!DefBlocks.count(SuccBB))
-          PQ.push(std::make_pair(SuccNode, SuccLevel));
-      }
-
-      for (DomTreeNode::iterator CI = Node->begin(), CE = Node->end(); CI != CE;
-           ++CI) {
-        if (!Visited.count(*CI))
-          Worklist.push_back(*CI);
-      }
-    }
-  }
-
-  if (DFBlocks.size() > 1)
-    std::sort(DFBlocks.begin(), DFBlocks.end());
-
-  unsigned CurrentVersion = 0;
-  for (unsigned i = 0, e = DFBlocks.size(); i != e; ++i)
-    QueuePhiNode(DFBlocks[i].second, AllocaNum, CurrentVersion);
-}
-
 /// \brief Queue a phi-node to be added to a basic-block for a specific Alloca.
 ///
 /// Returns true if there wasn't already a phi-node for that variable
@@ -946,13 +863,9 @@ bool PromoteMem2Reg::QueuePhiNode(BasicBlock *BB, unsigned AllocaNo,
   // BasicBlock.
   PN = PHINode::Create(Allocas[AllocaNo]->getAllocatedType(), getNumPreds(BB),
                        Allocas[AllocaNo]->getName() + "." + Twine(Version++),
-                       BB->begin());
+                       &BB->front());
   ++NumPHIInsert;
   PhiToAllocaMap[PN] = AllocaNo;
-
-  if (AST && PN->getType()->isPointerTy())
-    AST->copyValue(PointerAllocaValues[AllocaNo], PN);
-
   return true;
 }
 
@@ -993,6 +906,8 @@ NextIteration:
 
         // The currently active variable for this block is now the PHI.
         IncomingVals[AllocaNo] = APN;
+        if (DbgDeclareInst *DDI = AllocaDbgDeclares[AllocaNo])
+          ConvertDebugDeclareToDebugValue(DDI, APN, DIB);
 
         // Get the next phi node.
         ++PNI;
@@ -1011,7 +926,7 @@ NextIteration:
     return;
 
   for (BasicBlock::iterator II = BB->begin(); !isa<TerminatorInst>(II);) {
-    Instruction *I = II++; // get the instruction, increment iterator
+    Instruction *I = &*II++; // get the instruction, increment iterator
 
     if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
       AllocaInst *Src = dyn_cast<AllocaInst>(LI->getPointerOperand());
@@ -1024,10 +939,15 @@ NextIteration:
 
       Value *V = IncomingVals[AI->second];
 
+      // If the load was marked as nonnull we don't want to lose
+      // that information when we erase this Load. So we preserve
+      // it with an assume.
+      if (AC && LI->getMetadata(LLVMContext::MD_nonnull) &&
+          !llvm::isKnownNonNullAt(V, LI, &DT))
+        addAssumeNonNull(AC, LI);
+
       // Anything using the load now uses the current value.
       LI->replaceAllUsesWith(V);
-      if (AST && LI->getType()->isPointerTy())
-        AST->deleteValue(LI);
       BB->getInstList().erase(LI);
     } else if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
       // Delete this instruction and mark the name as the current holder of the
@@ -1065,16 +985,16 @@ NextIteration:
 
   for (; I != E; ++I)
     if (VisitedSuccs.insert(*I).second)
-      Worklist.push_back(RenamePassData(*I, Pred, IncomingVals));
+      Worklist.emplace_back(*I, Pred, IncomingVals);
 
   goto NextIteration;
 }
 
 void llvm::PromoteMemToReg(ArrayRef<AllocaInst *> Allocas, DominatorTree &DT,
-                           AliasSetTracker *AST, AssumptionCache *AC) {
+                           AssumptionCache *AC) {
   // If there is nothing to do, bail out...
   if (Allocas.empty())
     return;
 
-  PromoteMem2Reg(Allocas, DT, AST, AC).run();
+  PromoteMem2Reg(Allocas, DT, AC).run();
 }

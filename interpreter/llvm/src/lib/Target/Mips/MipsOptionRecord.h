@@ -1,4 +1,4 @@
-//===-- MipsOptionRecord.h - Abstraction for storing information ----------===//
+//===- MipsOptionRecord.h - Abstraction for storing information -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -23,14 +23,16 @@
 #include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include <cstdint>
 
 namespace llvm {
+
 class MipsELFStreamer;
-class MCSubtargetInfo;
 
 class MipsOptionRecord {
 public:
-  virtual ~MipsOptionRecord(){};
+  virtual ~MipsOptionRecord() = default;
+
   virtual void EmitMipsOptionRecord() = 0;
 };
 
@@ -49,10 +51,12 @@ public:
     FGR64RegClass = &(TRI->getRegClass(Mips::FGR64RegClassID));
     AFGR64RegClass = &(TRI->getRegClass(Mips::AFGR64RegClassID));
     MSA128BRegClass = &(TRI->getRegClass(Mips::MSA128BRegClassID));
+    COP0RegClass = &(TRI->getRegClass(Mips::COP0RegClassID));
     COP2RegClass = &(TRI->getRegClass(Mips::COP2RegClassID));
     COP3RegClass = &(TRI->getRegClass(Mips::COP3RegClassID));
   }
-  ~MipsRegInfoRecord() {}
+
+  ~MipsRegInfoRecord() override = default;
 
   void EmitMipsOptionRecord() override;
   void SetPhysRegUsed(unsigned Reg, const MCRegisterInfo *MCRegInfo);
@@ -66,11 +70,14 @@ private:
   const MCRegisterClass *FGR64RegClass;
   const MCRegisterClass *AFGR64RegClass;
   const MCRegisterClass *MSA128BRegClass;
+  const MCRegisterClass *COP0RegClass;
   const MCRegisterClass *COP2RegClass;
   const MCRegisterClass *COP3RegClass;
   uint32_t ri_gprmask;
   uint32_t ri_cprmask[4];
   int64_t ri_gp_value;
 };
-} // namespace llvm
-#endif
+
+} // end namespace llvm
+
+#endif // LLVM_LIB_TARGET_MIPS_MIPSOPTIONRECORD_H

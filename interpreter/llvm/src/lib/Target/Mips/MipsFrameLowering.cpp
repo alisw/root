@@ -13,7 +13,6 @@
 
 #include "MipsFrameLowering.h"
 #include "MCTargetDesc/MipsBaseInfo.h"
-#include "MipsAnalyzeImmediate.h"
 #include "MipsInstrInfo.h"
 #include "MipsMachineFunction.h"
 #include "MipsTargetMachine.h"
@@ -24,7 +23,6 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetOptions.h"
 
 using namespace llvm;
@@ -90,44 +88,72 @@ const MipsFrameLowering *MipsFrameLowering::create(const MipsSubtarget &ST) {
 }
 
 // hasFP - Return true if the specified function should have a dedicated frame
-// pointer register.  This is true if the function has variable sized allocas or
-// if frame pointer elimination is disabled.
+// pointer register.  This is true if the function has variable sized allocas,
+// if it needs dynamic stack realignment, if frame pointer elimination is
+// disabled, or if the frame address is taken.
 bool MipsFrameLowering::hasFP(const MachineFunction &MF) const {
-  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const TargetRegisterInfo *TRI = STI.getRegisterInfo();
+
   return MF.getTarget().Options.DisableFramePointerElim(MF) ||
-      MFI->hasVarSizedObjects() || MFI->isFrameAddressTaken();
+      MFI.hasVarSizedObjects() || MFI.isFrameAddressTaken() ||
+      TRI->needsStackRealignment(MF);
+}
+
+bool MipsFrameLowering::hasBP(const MachineFunction &MF) const {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const TargetRegisterInfo *TRI = STI.getRegisterInfo();
+
+  return MFI.hasVarSizedObjects() && TRI->needsStackRealignment(MF);
 }
 
 uint64_t MipsFrameLowering::estimateStackSize(const MachineFunction &MF) const {
-  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetRegisterInfo &TRI = *STI.getRegisterInfo();
 
   int64_t Offset = 0;
 
   // Iterate over fixed sized objects.
-  for (int I = MFI->getObjectIndexBegin(); I != 0; ++I)
-    Offset = std::max(Offset, -MFI->getObjectOffset(I));
+  for (int I = MFI.getObjectIndexBegin(); I != 0; ++I)
+    Offset = std::max(Offset, -MFI.getObjectOffset(I));
 
   // Conservatively assume all callee-saved registers will be saved.
   for (const MCPhysReg *R = TRI.getCalleeSavedRegs(&MF); *R; ++R) {
-    unsigned Size = TRI.getMinimalPhysRegClass(*R)->getSize();
-    Offset = RoundUpToAlignment(Offset + Size, Size);
+    unsigned Size = TRI.getSpillSize(*TRI.getMinimalPhysRegClass(*R));
+    Offset = alignTo(Offset + Size, Size);
   }
 
-  unsigned MaxAlign = MFI->getMaxAlignment();
+  unsigned MaxAlign = MFI.getMaxAlignment();
 
   // Check that MaxAlign is not zero if there is a stack object that is not a
   // callee-saved spill.
-  assert(!MFI->getObjectIndexEnd() || MaxAlign);
+  assert(!MFI.getObjectIndexEnd() || MaxAlign);
 
   // Iterate over other objects.
-  for (unsigned I = 0, E = MFI->getObjectIndexEnd(); I != E; ++I)
-    Offset = RoundUpToAlignment(Offset + MFI->getObjectSize(I), MaxAlign);
+  for (unsigned I = 0, E = MFI.getObjectIndexEnd(); I != E; ++I)
+    Offset = alignTo(Offset + MFI.getObjectSize(I), MaxAlign);
 
   // Call frame.
-  if (MFI->adjustsStack() && hasReservedCallFrame(MF))
-    Offset = RoundUpToAlignment(Offset + MFI->getMaxCallFrameSize(),
-                                std::max(MaxAlign, getStackAlignment()));
+  if (MFI.adjustsStack() && hasReservedCallFrame(MF))
+    Offset = alignTo(Offset + MFI.getMaxCallFrameSize(),
+                     std::max(MaxAlign, getStackAlignment()));
 
-  return RoundUpToAlignment(Offset, getStackAlignment());
+  return alignTo(Offset, getStackAlignment());
+}
+
+// Eliminate ADJCALLSTACKDOWN, ADJCALLSTACKUP pseudo instructions
+MachineBasicBlock::iterator MipsFrameLowering::
+eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I) const {
+  unsigned SP = STI.getABI().IsN64() ? Mips::SP_64 : Mips::SP;
+
+  if (!hasReservedCallFrame(MF)) {
+    int64_t Amount = I->getOperand(0).getImm();
+    if (I->getOpcode() == Mips::ADJCALLSTACKDOWN)
+      Amount = -Amount;
+
+    STI.getInstrInfo()->adjustStackPtr(SP, Amount, MBB, I);
+  }
+
+  return MBB.erase(I);
 }

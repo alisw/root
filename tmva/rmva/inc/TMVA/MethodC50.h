@@ -21,9 +21,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMVA_RMethodBase
 #include "TMVA/RMethodBase.h"
-#endif
 
 namespace TMVA {
 
@@ -39,12 +37,10 @@ namespace TMVA {
       MethodC50(const TString &jobName,
                 const TString &methodTitle,
                 DataSetInfo &theData,
-                const TString &theOption = "",
-                TDirectory *theTargetDir = NULL);
+                const TString &theOption = "");
 
       MethodC50(DataSetInfo &dsi,
-                const TString &theWeightFile,
-                TDirectory *theTargetDir = NULL);
+                const TString &theWeightFile);
 
 
       ~MethodC50(void);
@@ -70,11 +66,14 @@ namespace TMVA {
       virtual void     MakeClass(const TString &classFileName = TString("")) const;  //required for model persistence
       using MethodBase::ReadWeightsFromStream;
       // the actual "weights"
-      virtual void AddWeightsXMLTo(void *parent) const {}        // = 0;
-      virtual void ReadWeightsFromXML(void *wghtnode) {}    // = 0;
+      virtual void AddWeightsXMLTo(void * /*parent*/) const {} // = 0;
+      virtual void ReadWeightsFromXML(void * /*weight*/) {} // = 0;
       virtual void ReadWeightsFromStream(std::istream &) {} //= 0;       // backward compatibility
 
-      void ReadStateFromFile();
+      // signal/background classification response for all current set of data 
+      virtual std::vector<Double_t> GetMvaValues(Long64_t firstEvt = 0, Long64_t lastEvt = -1, Bool_t logProgress = false);
+
+      void ReadModelFromFile();
    private :
       DataSetManager    *fDataSetManager;     // DSMTEST
       friend class Factory;                   // DSMTEST

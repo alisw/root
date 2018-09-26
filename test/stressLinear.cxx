@@ -807,7 +807,8 @@ void mstress_binary_ebe_op(Int_t rsize, Int_t csize)
   ok &= VerifyMatrixValue(m1,pattern,gVerbose,EPSILON);
   if (gVerbose)
     std::cout << "  subtracting the matrix from itself" << std::endl;
-  m1 -= m1;
+  // Hiding the self-subtraction from the compiler, causing warning by -Wself-assign-overloaded in clang 7.0
+  m1 -= static_cast<TMatrixD&>(m1);
   ok &= VerifyMatrixValue(m1,0.,gVerbose,EPSILON);
   if (gVerbose)
     std::cout << "  adding two matrices together" << std::endl;
@@ -828,7 +829,8 @@ void mstress_binary_ebe_op(Int_t rsize, Int_t csize)
   ok &= VerifyMatrixIdentity(m,m1,gVerbose,EPSILON);
   if (gVerbose)
     std::cout << "   clear both m and m1, by subtracting from itself and via add()" << std::endl;
-  m1 -= m1;
+  // Hiding the self-subtraction from the compiler, causing warning by -Wself-assign-overloaded in clang 7.0
+  m1 -= static_cast<TMatrixD&>(m1);
   Add(m,-3.,mp);
   ok &= VerifyMatrixIdentity(m,m1,gVerbose,EPSILON);
 
@@ -1237,7 +1239,7 @@ void mstress_determinant(Int_t msize)
     if (gVerbose)
       std::cout << "\nswap two rows/cols of a matrix through method 1 and watch det's sign" << std::endl;
     m.UnitMatrix();
-    TMatrixDRow(m,3) = pattern;
+    TMatrixDRow(m,3).Assign(pattern);
     Double_t d1,d2;
     m.Determinant(d1,d2);
     TMatrixDRow row1(m,1);
@@ -1268,7 +1270,7 @@ void mstress_determinant(Int_t msize)
     if (gVerbose)
       std::cout << "\nswap two rows/cols of a matrix through method 2 and watch det's sign" << std::endl;
     m.UnitMatrix();
-    TMatrixDRow(m,3) = pattern;
+    TMatrixDRow(m,3).Assign(pattern);
     Double_t d1,d2;
     m.Determinant(d1,d2);
 
@@ -2249,11 +2251,11 @@ void spstress_matrix_fill(Int_t rsize,Int_t csize)
 {
   Bool_t ok = kTRUE;
 
-  if (csize < 4) {
-    Error("spstress_matrix_fill","rsize should be >= 4");
-    ok = kFALSE;
-    StatusPrint(2,"Filling, Inserting, Using",ok);
-    return;
+  if (rsize < 4) {
+     Error("spstress_matrix_fill", "rsize should be >= 4");
+     ok = kFALSE;
+     StatusPrint(2, "Filling, Inserting, Using", ok);
+     return;
   }
 
   if (csize < 4) {
@@ -2589,7 +2591,8 @@ void spstress_binary_ebe_op(Int_t rsize, Int_t csize)
   ok &= VerifyMatrixValue(m1,pattern,gVerbose,EPSILON);
   if (gVerbose)
     std::cout << "  subtracting the matrix from itself" << std::endl;
-  m1 -= m1;
+  // Hiding the self-subtraction from the compiler, causing warning by -Wself-assign-overloaded in clang 7.0
+  m1 -= static_cast<TMatrixDSparse&>(m1);
   ok &= VerifyMatrixValue(m1,0.,gVerbose,EPSILON);
   m1.SetSparseIndex(m_d);
 
@@ -2607,7 +2610,8 @@ void spstress_binary_ebe_op(Int_t rsize, Int_t csize)
   ok &= VerifyMatrixIdentity(m,m1,gVerbose,EPSILON);
   if (gVerbose)
     std::cout << "   clear both m and m1, by subtracting from itself and via add()" << std::endl;
-  m1 -= m1;
+  // Hiding the self-subtraction from the compiler, causing warning by -Wself-assign-overloaded in clang 7.0
+  m1 -= static_cast<TMatrixDSparse&>(m1);
   Add(m,-3.,mp);
   ok &= VerifyMatrixIdentity(m,m1,gVerbose,EPSILON);
 
@@ -2981,7 +2985,7 @@ void spstress_vm_multiplications()
       TMatrixD vm(msize,1);
       TMatrixDColumn(vm,0) = vb;
       TMatrixD hilbert_with_zeros = THilbertMatrixD(0,msize,0,msize-1);
-      TMatrixDRow   (hilbert_with_zeros,3) = 0.0;
+      TMatrixDRow   (hilbert_with_zeros,3).Assign(0.0);
       TMatrixDColumn(hilbert_with_zeros,3) = 0.0;
       const TMatrixDSparse m = hilbert_with_zeros;
       vb *= m;
@@ -3444,7 +3448,8 @@ void vstress_binary_op(Int_t vsize)
   ok &= VerifyVectorValue(v1,pattern,gVerbose,EPSILON);
   if (gVerbose)
     std::cout << "  subtracting the vector from itself" << std::endl;
-  v1 -= v1;
+  // Hiding the self-subtraction from the compiler, causing warning by -Wself-assign-overloaded in clang 7.0
+  v1 -= static_cast<TVectorD&>(v1);
   ok &= VerifyVectorValue(v1,0.,gVerbose,EPSILON);
   if (gVerbose)
     std::cout << "  adding two vectors together" << std::endl;
@@ -3473,7 +3478,8 @@ void vstress_binary_op(Int_t vsize)
   ok &= VerifyVectorIdentity(v,v1,gVerbose,epsilon);
   if (gVerbose)
     std::cout << "   clear both v and v1, by subtracting from itself and via add()" << std::endl;
-  v1 -= v1;
+  // Hiding the self-subtraction from the compiler, causing warning by -Wself-assign-overloaded in clang 7.0
+  v1 -= static_cast<TVectorD&>(v1);
   Add(v,-3.,vp);
   ok &= VerifyVectorIdentity(v,v1,gVerbose,epsilon);
 
@@ -3648,7 +3654,7 @@ void vstress_matrix_slices(Int_t vsize)
   m = pattern;
   ok &= ( m == pattern ) ? kTRUE : kFALSE;
   for (i = m.GetRowLwb(); i <= m.GetRowUpb(); i++) {
-    TMatrixDRow(m,i) = pattern+2;
+     TMatrixDRow(m,i).Assign(pattern+2);
     ok &= ( !( m == pattern ) && !( m != pattern ) ) ? kTRUE : kFALSE;
     vr = TMatrixDRow(m,i);
     ok &= VerifyVectorValue(vr,pattern+2,gVerbose,EPSILON);
@@ -3712,7 +3718,7 @@ void vstress_matrix_slices(Int_t vsize)
               m.GetColLwb(),TMath::Max(m.GetRowUpb(),m.GetColUpb()));
   TVectorD vc1(vc),vc2(vc);
   for (i = m.GetRowLwb(); i < m.GetRowUpb(); i++)
-    TMatrixDRow(m,i) = pattern+i;      // Make a multiplicand
+     TMatrixDRow(m,i).Assign(pattern+i);      // Make a multiplicand
   mm = m;                          // Save it
 
   m1 = pattern+10;

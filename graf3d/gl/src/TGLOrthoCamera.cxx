@@ -28,7 +28,7 @@ arbitrary ortho projections along any axis/orientation with free
 rotations about them.
 */
 
-ClassImp(TGLOrthoCamera)
+ClassImp(TGLOrthoCamera);
 
 UInt_t   TGLOrthoCamera::fgZoomDeltaSens = 500;
 
@@ -119,6 +119,13 @@ void TGLOrthoCamera::Reset()
       {
          // Z -> X, Y -> Y, X -> Z
          fDefXSize = e.Z(); fDefYSize = e.Y();
+         break;
+      }
+      case kZOX:
+      case kZnOX:
+      {
+         // Z -> X, X -> Y, Y -> Z
+         fDefXSize = e.Z(); fDefYSize = e.X();
          break;
       }
    }

@@ -23,26 +23,15 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef __CINT__
-#include <string.h>
-#include <stdio.h>
-#endif
-
-#ifndef ROOT_Riosfwd
-#include "Riosfwd.h"
-#endif
-
-#ifndef ROOT_TMathBase
 #include "TMathBase.h"
-#endif
 
+#include "ROOT/RStringView.hxx"
+#include "ROOT/TypeTraits.hxx"
+
+#include <iosfwd>
 #include <stdarg.h>
+#include <stdio.h>
 #include <string>
-#include <RStringView.h>
-
-#ifdef R__GLOBALSTL
-namespace std { using ::string; }
-#endif
 
 class TRegexp;
 class TPRegexp;
@@ -56,21 +45,26 @@ TString operator+(const TString &s1, const TString &s2);
 TString operator+(const TString &s,  const char *cs);
 TString operator+(const char *cs, const TString &s);
 TString operator+(const TString &s, char c);
-TString operator+(const TString &s, Long_t i);
-TString operator+(const TString &s, ULong_t i);
-TString operator+(const TString &s, Long64_t i);
-TString operator+(const TString &s, ULong64_t i);
 TString operator+(char c, const TString &s);
-TString operator+(Long_t i, const TString &s);
-TString operator+(ULong_t i, const TString &s);
-TString operator+(Long64_t i, const TString &s);
-TString operator+(ULong64_t i, const TString &s);
 Bool_t  operator==(const TString &s1, const TString &s2);
 Bool_t  operator==(const TString &s1, const char *s2);
 Bool_t  operator==(const TSubString &s1, const TSubString &s2);
 Bool_t  operator==(const TSubString &s1, const TString &s2);
 Bool_t  operator==(const TSubString &s1, const char *s2);
+/*
+template<class T>
+struct is_signed_numeral : std::integral_constant<bool,
+   std::is_integral<T>::value && std::is_signed<T>::value
+> {};
 
+template<class T>
+struct is_unsigned_numeral : std::integral_constant<bool,
+   std::is_integral<T>::value && !std::is_signed<T>::value
+> {};
+
+template<class T>
+using is_float_numeral = std::is_floating_point<T>;
+*/
 
 //////////////////////////////////////////////////////////////////////////
 //                                                                      //
@@ -114,7 +108,7 @@ public:
    char          operator[](Ssiz_t i) const;     // Index with bounds checking
 
    operator std::string_view() const { return std::string_view(Data(),fExtent); }
-   operator std::string() const { return std::string_view(Data(),fExtent).to_string(); }
+   operator std::string() const { return std::string(Data(),fExtent); }
 
    const char   *Data() const;
    Ssiz_t        Length() const          { return fExtent; }
@@ -144,15 +138,27 @@ friend TString operator+(const TString &s1, const TString &s2);
 friend TString operator+(const TString &s,  const char *cs);
 friend TString operator+(const char *cs, const TString &s);
 friend TString operator+(const TString &s, char c);
-friend TString operator+(const TString &s, Long_t i);
-friend TString operator+(const TString &s, ULong_t i);
-friend TString operator+(const TString &s, Long64_t i);
-friend TString operator+(const TString &s, ULong64_t i);
 friend TString operator+(char c, const TString &s);
-friend TString operator+(Long_t i, const TString &s);
-friend TString operator+(ULong_t i, const TString &s);
-friend TString operator+(Long64_t i, const TString &s);
-friend TString operator+(ULong64_t i, const TString &s);
+
+template<class T>
+friend typename std::enable_if<ROOT::TypeTraits::IsSignedNumeral<T>::value,TString>::type
+operator+(TString s, T i);
+template<class T>
+friend typename std::enable_if<ROOT::TypeTraits::IsUnsignedNumeral<T>::value,TString>::type
+operator+(TString s, T u);
+template<class T>
+friend typename std::enable_if<ROOT::TypeTraits::IsFloatNumeral<T>::value,TString>::type
+operator+(TString s, T f);
+template<class T>
+friend typename std::enable_if<ROOT::TypeTraits::IsSignedNumeral<T>::value,TString>::type
+operator+(T i, const TString &s);
+template<class T>
+friend typename std::enable_if<ROOT::TypeTraits::IsUnsignedNumeral<T>::value,TString>::type
+operator+(T u, const TString &s);
+template<class T>
+friend typename std::enable_if<ROOT::TypeTraits::IsFloatNumeral<T>::value,TString>::type
+operator+(T f, const TString &s);
+
 friend Bool_t  operator==(const TString &s1, const TString &s2);
 friend Bool_t  operator==(const TString &s1, const char *s2);
 
@@ -260,7 +266,7 @@ public:
    TString();                           // Null string
    explicit TString(Ssiz_t ic);         // Suggested capacity
    TString(const TString &s);           // Copy constructor
-   TString(TString &&s);                // Move constructor
+   TString(TString &&s) noexcept;       // Move constructor
    TString(const char *s);              // Copy to embedded null
    TString(const char *s, Ssiz_t n);    // Copy past any embedded nulls
    TString(const std::string &s);
@@ -287,28 +293,37 @@ public:
 
    // Type conversion
    operator const char*() const { return GetPointer(); }
+#if (__cplusplus >= 201700L) && (!defined(__clang_major__) || __clang_major__ > 5)
+   // Clang 5.0 support for explicit conversion is still inadequate even in c++17 mode.
+   // (It leads to extraneous ambiguous overload errors)
+   explicit operator std::string() const { return std::string(GetPointer(),Length()); }
+   explicit operator ROOT::Internal::TStringView() const { return ROOT::Internal::TStringView(GetPointer(),Length()); }
    operator std::string_view() const { return std::string_view(GetPointer(),Length()); }
+#else
+   operator ROOT::Internal::TStringView() const { return ROOT::Internal::TStringView(GetPointer(),Length()); }
+#endif
 
    // Assignment
    TString    &operator=(char s);                // Replace string
    TString    &operator=(const char *s);
    TString    &operator=(const TString &s);
+   TString    &operator=(TString &&s) noexcept;
    TString    &operator=(const std::string &s);
    TString    &operator=(const std::string_view &s);
    TString    &operator=(const TSubString &s);
    TString    &operator+=(const char *s);        // Append string
    TString    &operator+=(const TString &s);
    TString    &operator+=(char c);
-   TString    &operator+=(Short_t i);
-   TString    &operator+=(UShort_t i);
-   TString    &operator+=(Int_t i);
-   TString    &operator+=(UInt_t i);
-   TString    &operator+=(Long_t i);
-   TString    &operator+=(ULong_t i);
-   TString    &operator+=(Float_t f);
-   TString    &operator+=(Double_t f);
-   TString    &operator+=(Long64_t i);
-   TString    &operator+=(ULong64_t i);
+
+   template<class T>
+   typename std::enable_if<ROOT::TypeTraits::IsSignedNumeral<T>::value,TString>::type
+              &operator+=(T i);
+   template<class T>
+   typename std::enable_if<ROOT::TypeTraits::IsUnsignedNumeral<T>::value,TString>::type
+              &operator+=(T u);
+   template<class T>
+   typename std::enable_if<ROOT::TypeTraits::IsFloatNumeral<T>::value,TString>::type
+              &operator+=(T f);
 
    // Indexing operators
    char         &operator[](Ssiz_t i);         // Indexing with bounds checking
@@ -421,6 +436,7 @@ public:
    void         ToUpper();                              // Change self to upper-case
    TObjArray   *Tokenize(const TString &delim) const;
    Bool_t       Tokenize(TString &tok, Ssiz_t &from, const char *delim = " ") const;
+   std::string_view View() const { return std::string_view(GetPointer(),Length()); }
 
    // Static member functions
    static UInt_t  Hash(const void *txt, Int_t ntxt);    // Calculates hash index from any char string.
@@ -452,6 +468,12 @@ template <>
 #endif
 TBuffer  &operator>>(TBuffer &buf,       TString *&sp);
 TBuffer  &operator<<(TBuffer &buf, const TString * sp);
+
+// Conversion operator (per se).
+inline std::string& operator+=(std::string &left, const TString &right)
+{
+   return left.append(right.Data());
+}
 
 TString ToLower(const TString &s);    // Return lower-case version of argument
 TString ToUpper(const TString &s);    // Return upper-case version of argument
@@ -489,6 +511,51 @@ extern int strncasecmp(const char *str1, const char *str2, Ssiz_t n);
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsSignedNumeral<T>::value,TString>::type
+operator+(TString s, T i)
+{ return s += i; }
+
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsUnsignedNumeral<T>::value,TString>::type
+operator+(TString s, T u)
+{ return s += u; }
+
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsFloatNumeral<T>::value,TString>::type
+operator+(TString s, T f)
+{ return s += f; }
+
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsSignedNumeral<T>::value,TString>::type
+operator+(T i, const TString &s)
+{
+    char buffer[32];
+    // coverity[secure_coding] Buffer is large enough (2^64 = 20 digits).
+    snprintf(buffer, sizeof(buffer), "%lld", static_cast<Long64_t>(i));
+    return TString(buffer, strlen(buffer), s.Data(), s.Length());
+}
+
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsUnsignedNumeral<T>::value,TString>::type
+operator+(T u, const TString &s)
+{
+    char buffer[32];
+    // coverity[secure_coding] Buffer is large enough (2^64 = 20 digits).
+    snprintf(buffer, sizeof(buffer), "%llu", static_cast<ULong64_t>(u));
+    return TString(buffer, strlen(buffer), s.Data(), s.Length());
+}
+
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsFloatNumeral<T>::value,TString>::type
+operator+(T f, const TString &s)
+{
+    char buffer[32];
+    // coverity[secure_coding] Buffer is large enough: width specified in format
+    snprintf(buffer, sizeof(buffer), "%.17Lg", static_cast<LongDouble_t>(f));
+    return TString(buffer, strlen(buffer), s.Data(), s.Length());
+}
+
 inline TString &TString::Append(const char *cs)
 { return Replace(Length(), 0, cs, cs ? strlen(cs) : 0); }
 
@@ -510,49 +577,34 @@ inline TString &TString::operator+=(const TString &s)
 inline TString &TString::operator+=(char c)
 { return Append(c); }
 
-inline TString &TString::operator+=(Long_t i)
-{ char s[32]; sprintf(s, "%ld", i); return operator+=(s); }
-
-inline TString &TString::operator+=(ULong_t i)
-{ char s[32]; sprintf(s, "%lu", i); return operator+=(s); }
-
-inline TString &TString::operator+=(Short_t i)
-{ return operator+=((Long_t) i); }
-
-inline TString &TString::operator+=(UShort_t i)
-{ return operator+=((ULong_t) i); }
-
-inline TString &TString::operator+=(Int_t i)
-{ return operator+=((Long_t) i); }
-
-inline TString &TString::operator+=(UInt_t i)
-{ return operator+=((ULong_t) i); }
-
-inline TString &TString::operator+=(Double_t f)
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsSignedNumeral<T>::value,TString>::type
+&TString::operator+=(T i)
 {
-   char s[32];
+   char buffer[32];
+   // coverity[secure_coding] Buffer is large enough (2^64 = 20 digits).
+   snprintf(buffer, sizeof(buffer), "%lld", static_cast<Long64_t>(i));
+   return operator+=(buffer);
+}
+
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsUnsignedNumeral<T>::value,TString>::type
+&TString::operator+=(T u)
+{
+   char buffer[32];
+   // coverity[secure_coding] Buffer is large enough (2^64 = 20 digits).
+   snprintf(buffer, sizeof(buffer), "%llu", static_cast<ULong64_t>(u));
+   return operator+=(buffer);
+}
+
+template<class T>
+inline typename std::enable_if<ROOT::TypeTraits::IsFloatNumeral<T>::value,TString>::type
+&TString::operator+=(T f)
+{
+   char buffer[32];
    // coverity[secure_coding] Buffer is large enough: width specified in format
-   sprintf(s, "%.17g", f);
-   return operator+=(s);
-}
-
-inline TString &TString::operator+=(Float_t f)
-{ return operator+=((Double_t) f); }
-
-inline TString &TString::operator+=(Long64_t l)
-{
-   char s[32];
-   // coverity[secure_coding] Buffer is large enough (2^64 = 20 digits).
-   sprintf(s, "%lld", l);
-   return operator+=(s);
-}
-
-inline TString &TString::operator+=(ULong64_t ul)
-{
-   char s[32];
-   // coverity[secure_coding] Buffer is large enough (2^64 = 20 digits).
-   sprintf(s, "%llu", ul);
-   return operator+=(s);
+   snprintf(buffer, sizeof(buffer), "%.17Lg", static_cast<LongDouble_t>(f));
+   return operator+=(buffer);
 }
 
 inline Bool_t TString::BeginsWith(const char *s, ECaseCompare cmp) const
@@ -777,14 +829,27 @@ inline Bool_t operator!=(const TString &s1, const TSubString &s2)
 inline Bool_t operator!=(const char *s1, const TSubString &s2)
 { return !(s2 == s1); }
 
+#ifndef WIN32
+// To avoid ambiguities.
+inline Bool_t operator==(const char *s1, const std::string_view &s2)
+{
+  return std::string_view(s1) == s2;
+}
+
+inline Bool_t operator==(const std::string_view &s1, const char *s2)
+{
+  return s1 == std::string_view(s2);
+}
+#endif
+
 namespace llvm {
    class raw_ostream;
 }
 
 namespace cling {
-  std::string printValue(const TString &val);
-  std::string printValue(const TSubString &val);
-  std::string printValue(const std::string_view &val);
+  std::string printValue(const TString* val);
+  std::string printValue(const TSubString* val);
+  std::string printValue(const std::string_view* val);
 }
 
 #endif

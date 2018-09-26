@@ -34,16 +34,11 @@
 #include <iosfwd>
 #include <vector>
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
-#ifndef ROOT_ThreadLocalStorage
 #include "ThreadLocalStorage.h"
-#endif
-#ifndef ROOT_TMVA_Types
 #include "TMVA/Types.h"
-#endif
 
+#include "TObject.h"
 
 
 class TCut;
@@ -54,7 +49,7 @@ namespace TMVA {
 
    std::ostream& operator<<( std::ostream& os, const Event& event );
 
-   class Event {
+   class Event:public TObject {
 
       friend std::ostream& operator<<( std::ostream& os, const Event& event );
 
@@ -90,12 +85,13 @@ namespace TMVA {
       UInt_t   GetNSpectators()       const;
 
       Float_t  GetValue( UInt_t ivar) const;
+      Float_t  GetValueFast(UInt_t ivar) const { return fDynamic ? *(*fValuesDynamic)[ivar] : fValues[ivar]; }
       std::vector<Float_t>& GetValues() 
-      {
-	  //For a detailed explanation, please see the heading "Avoid Duplication in const and Non-const Member Function," on p. 23, in Item 3 "Use const whenever possible," in Effective C++, 3d ed by Scott Meyers, ISBN-13: 9780321334879.
-	  // http://stackoverflow.com/questions/123758/how-do-i-remove-code-duplication-between-similar-const-and-non-const-member-func
-	  return const_cast<std::vector<Float_t>&>( static_cast<const Event&>(*this).GetValues() );
-      }
+         {
+            //For a detailed explanation, please see the heading "Avoid Duplication in const and Non-const Member Function," on p. 23, in Item 3 "Use const whenever possible," in Effective C++, 3d ed by Scott Meyers, ISBN-13: 9780321334879.
+            // http://stackoverflow.com/questions/123758/how-do-i-remove-code-duplication-between-similar-const-and-non-const-member-func
+            return const_cast<std::vector<Float_t>&>( static_cast<const Event&>(*this).GetValues() );
+         }
       const std::vector<Float_t>& GetValues() const;
 
       Float_t  GetTarget( UInt_t itgt ) const { return fTargets.at(itgt); }
@@ -119,10 +115,12 @@ namespace TMVA {
       static void ClearDynamicVariables() {}
 
       void     CopyVarValues( const Event& other );
+      using TObject::Print;
       void     Print        ( std::ostream & o ) const;
 
       static   void SetIsTraining(Bool_t);
       static   void SetIgnoreNegWeightsInTraining(Bool_t);
+
    private:
 
       static   Bool_t          fgIsTraining;    // mark if we are in an actual training or "evaluation/testing" phase --> ignoreNegWeights only in actual training !
@@ -132,16 +130,20 @@ namespace TMVA {
       mutable std::vector<Float_t>   fValues;          // the event values ; mutable, to be able to copy the dynamic values in there
 
       mutable std::vector<Float_t>   fValuesRearranged;   // the event values ; mutable, to be able to copy the dynamic values in there
-      mutable std::vector<Float_t*>* fValuesDynamic;   // the event values
-      std::vector<Float_t>   fTargets;         // target values for regression
+      mutable std::vector<Float_t*> *fValuesDynamic;   //! the event values
+      std::vector<Float_t>           fTargets;         // target values for regression
       mutable std::vector<Float_t>   fSpectators;      // "visisting" variables not used in MVAs ; mutable, to be able to copy the dynamic values in there
-      mutable std::vector<UInt_t>*   fVariableArrangement;  // needed for MethodCategories, where we can train on other than the main variables
+      mutable std::vector<UInt_t>    fVariableArrangement;  // needed for MethodCategories, where we can train on other than the main variables
 
       UInt_t                         fClass;           // class number
       Double_t                       fWeight;          // event weight (product of global and individual weights)
       mutable Double_t               fBoostWeight;     // internal weight to be set by boosting algorithm
       Bool_t                         fDynamic;         // is set when the dynamic values are taken
       mutable Bool_t                 fDoNotBoost;       // mark event as not to be boosted (used to compensate for events with negative event weights
+   public:
+       
+       ClassDef(Event,1);
+       
    };
 }
 

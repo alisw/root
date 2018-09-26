@@ -10,6 +10,8 @@
  *************************************************************************/
 
 /** \class TBase64
+\ingroup Base
+
 This code implements the Base64 encoding and decoding.
 
 Base64 encoded messages are typically used in authentication
@@ -18,7 +20,7 @@ protocols and to pack binary data in HTTP messages.
 
 #include "TBase64.h"
 
-ClassImp(TBase64)
+ClassImp(TBase64);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Base64 encoding of 3 bytes from in.

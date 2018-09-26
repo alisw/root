@@ -23,9 +23,9 @@
 #include "TMutex.h"
 #include "TThreadFactory.h"
 #include <errno.h>
+#include "TError.h"
 
-
-ClassImp(TMutex)
+ClassImp(TMutex);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a mutex lock. The actual mutex implementation will be

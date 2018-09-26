@@ -17,7 +17,7 @@
 #include "TClass.h"
 #include "TMath.h"
 
-ClassImp(TPave)
+ClassImp(TPave);
 
 /** \class TPave
 \ingroup BasicGraphics
@@ -81,6 +81,11 @@ TPave::TPave(Double_t x1, Double_t y1,Double_t x2, Double_t  y2,
    fName         = "";
    fInit         = 0;
    fCornerRadius = 0;
+   fX1NDC        = 0;
+   fY1NDC        = 0;
+   fX2NDC        = 0;
+   fY2NDC        = 0;
+
    if (fOption == "NDC" || fOption == "ndc") fOption = "brNDC";
 
    SetFillColor(gStyle->GetFillColor());
@@ -96,6 +101,8 @@ TPave::TPave(Double_t x1, Double_t y1,Double_t x2, Double_t  y2,
 
 TPave::~TPave()
 {
+   // Required since we overload TObject::Hash.
+   ROOT::CallRecursiveRemoveIfNeeded(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

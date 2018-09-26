@@ -16,6 +16,7 @@
 #include "CGObjCRuntime.h"
 #include "CGRecordLayout.h"
 #include "CodeGenModule.h"
+#include "TargetInfo.h"
 #include "clang/AST/APValue.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/RecordLayout.h"
@@ -33,6 +34,7 @@ using namespace CodeGen;
 //===----------------------------------------------------------------------===//
 
 namespace {
+class ConstExprEmitter;
 class ConstStructBuilder {
   CodeGenModule &CGM;
   CodeGenFunction *CGF;
@@ -42,6 +44,10 @@ class ConstStructBuilder {
   CharUnits LLVMStructAlignment;
   SmallVector<llvm::Constant *, 32> Elements;
 public:
+  static llvm::Constant *BuildStruct(CodeGenModule &CGM, CodeGenFunction *CFG,
+                                     ConstExprEmitter *Emitter,
+                                     llvm::ConstantStruct *Base,
+                                     InitListExpr *Updater);
   static llvm::Constant *BuildStruct(CodeGenModule &CGM, CodeGenFunction *CGF,
                                      InitListExpr *ILE);
   static llvm::Constant *BuildStruct(CodeGenModule &CGM, CodeGenFunction *CGF,
@@ -68,6 +74,8 @@ private:
   void ConvertStructToPacked();
 
   bool Build(InitListExpr *ILE);
+  bool Build(ConstExprEmitter *Emitter, llvm::ConstantStruct *Base,
+             InitListExpr *Updater);
   void Build(const APValue &Val, const RecordDecl *RD, bool IsPrimaryBase,
              const CXXRecordDecl *VTableClass, CharUnits BaseOffset);
   llvm::Constant *Finalize(QualType Ty);
@@ -104,7 +112,7 @@ AppendBytes(CharUnits FieldOffsetInChars, llvm::Constant *InitCst) {
 
   // Round up the field offset to the alignment of the field type.
   CharUnits AlignedNextFieldOffsetInChars =
-      NextFieldOffsetInChars.RoundUpToAlignment(FieldAlignment);
+      NextFieldOffsetInChars.alignTo(FieldAlignment);
 
   if (AlignedNextFieldOffsetInChars < FieldOffsetInChars) {
     // We need to append padding.
@@ -114,7 +122,7 @@ AppendBytes(CharUnits FieldOffsetInChars, llvm::Constant *InitCst) {
            "Did not add enough padding!");
 
     AlignedNextFieldOffsetInChars =
-        NextFieldOffsetInChars.RoundUpToAlignment(FieldAlignment);
+        NextFieldOffsetInChars.alignTo(FieldAlignment);
   }
 
   if (AlignedNextFieldOffsetInChars > FieldOffsetInChars) {
@@ -155,8 +163,8 @@ void ConstStructBuilder::AppendBitField(const FieldDecl *Field,
   if (FieldOffset > NextFieldOffsetInBits) {
     // We need to add padding.
     CharUnits PadSize = Context.toCharUnitsFromBits(
-      llvm::RoundUpToAlignment(FieldOffset - NextFieldOffsetInBits, 
-                               Context.getTargetInfo().getCharAlign()));
+        llvm::alignTo(FieldOffset - NextFieldOffsetInBits,
+                      Context.getTargetInfo().getCharAlign()));
 
     AppendPadding(PadSize);
   }
@@ -193,7 +201,7 @@ void ConstStructBuilder::AppendBitField(const FieldDecl *Field,
       unsigned NewFieldWidth = FieldSize - BitsInPreviousByte;
 
       if (CGM.getDataLayout().isBigEndian()) {
-        Tmp = Tmp.lshr(NewFieldWidth);
+        Tmp.lshrInPlace(NewFieldWidth);
         Tmp = Tmp.trunc(BitsInPreviousByte);
 
         // We want the remaining high bits.
@@ -202,7 +210,7 @@ void ConstStructBuilder::AppendBitField(const FieldDecl *Field,
         Tmp = Tmp.trunc(BitsInPreviousByte);
 
         // We want the remaining low bits.
-        FieldValue = FieldValue.lshr(BitsInPreviousByte);
+        FieldValue.lshrInPlace(BitsInPreviousByte);
         FieldValue = FieldValue.trunc(NewFieldWidth);
       }
     }
@@ -265,7 +273,7 @@ void ConstStructBuilder::AppendBitField(const FieldDecl *Field,
       // We want the low bits.
       Tmp = FieldValue.trunc(CharWidth);
 
-      FieldValue = FieldValue.lshr(CharWidth);
+      FieldValue.lshrInPlace(CharWidth);
     }
 
     Elements.push_back(llvm::ConstantInt::get(CGM.getLLVMContext(), Tmp));
@@ -327,7 +335,7 @@ void ConstStructBuilder::ConvertStructToPacked() {
     CharUnits ElementAlign = CharUnits::fromQuantity(
       CGM.getDataLayout().getABITypeAlignment(C->getType()));
     CharUnits AlignedElementOffsetInChars =
-      ElementOffsetInChars.RoundUpToAlignment(ElementAlign);
+        ElementOffsetInChars.alignTo(ElementAlign);
 
     if (AlignedElementOffsetInChars > ElementOffsetInChars) {
       // We need some padding.
@@ -361,7 +369,14 @@ bool ConstStructBuilder::Build(InitListExpr *ILE) {
 
   unsigned FieldNo = 0;
   unsigned ElementNo = 0;
-  
+
+  // Bail out if we have base classes. We could support these, but they only
+  // arise in C++1z where we will have already constant folded most interesting
+  // cases. FIXME: There are still a few more cases we can handle this way.
+  if (auto *CXXRD = dyn_cast<CXXRecordDecl>(RD))
+    if (CXXRD->getNumBases())
+      return false;
+
   for (RecordDecl::field_iterator Field = RD->field_begin(),
        FieldEnd = RD->field_end(); Field != FieldEnd; ++Field, ++FieldNo) {
     // If this is a union, skip all the fields that aren't being initialized.
@@ -383,14 +398,19 @@ bool ConstStructBuilder::Build(InitListExpr *ILE) {
 
     if (!EltInit)
       return false;
-    
+
     if (!Field->isBitField()) {
       // Handle non-bitfield members.
       AppendField(*Field, Layout.getFieldOffset(FieldNo), EltInit);
     } else {
       // Otherwise we have a bitfield.
-      AppendBitField(*Field, Layout.getFieldOffset(FieldNo),
-                     cast<llvm::ConstantInt>(EltInit));
+      if (auto *CI = dyn_cast<llvm::ConstantInt>(EltInit)) {
+        AppendBitField(*Field, Layout.getFieldOffset(FieldNo), CI);
+      } else {
+        // We are trying to initialize a bitfield with a non-trivial constant,
+        // this must require run-time code.
+        return false;
+      }
     }
   }
 
@@ -496,13 +516,12 @@ llvm::Constant *ConstStructBuilder::Finalize(QualType Ty) {
   } else {
     // Append tail padding if necessary.
     CharUnits LLVMSizeInChars =
-        NextFieldOffsetInChars.RoundUpToAlignment(LLVMStructAlignment);
+        NextFieldOffsetInChars.alignTo(LLVMStructAlignment);
 
     if (LLVMSizeInChars != LayoutSizeInChars)
       AppendTailPadding(LayoutSizeInChars);
 
-    LLVMSizeInChars =
-        NextFieldOffsetInChars.RoundUpToAlignment(LLVMStructAlignment);
+    LLVMSizeInChars = NextFieldOffsetInChars.alignTo(LLVMStructAlignment);
 
     // Check if we need to convert the struct to a packed struct.
     if (NextFieldOffsetInChars <= LayoutSizeInChars &&
@@ -514,8 +533,7 @@ llvm::Constant *ConstStructBuilder::Finalize(QualType Ty) {
              "Converting to packed did not help!");
     }
 
-    LLVMSizeInChars =
-        NextFieldOffsetInChars.RoundUpToAlignment(LLVMStructAlignment);
+    LLVMSizeInChars = NextFieldOffsetInChars.alignTo(LLVMStructAlignment);
 
     assert(LayoutSizeInChars == LLVMSizeInChars &&
            "Tail padding mismatch!");
@@ -534,10 +552,22 @@ llvm::Constant *ConstStructBuilder::Finalize(QualType Ty) {
 
   llvm::Constant *Result = llvm::ConstantStruct::get(STy, Elements);
 
-  assert(NextFieldOffsetInChars.RoundUpToAlignment(getAlignment(Result)) ==
-         getSizeInChars(Result) && "Size mismatch!");
+  assert(NextFieldOffsetInChars.alignTo(getAlignment(Result)) ==
+             getSizeInChars(Result) &&
+         "Size mismatch!");
 
   return Result;
+}
+
+llvm::Constant *ConstStructBuilder::BuildStruct(CodeGenModule &CGM,
+                                                CodeGenFunction *CGF,
+                                                ConstExprEmitter *Emitter,
+                                                llvm::ConstantStruct *Base,
+                                                InitListExpr *Updater) {
+  ConstStructBuilder Builder(CGM, CGF);
+  if (!Builder.Build(Emitter, Base, Updater))
+    return nullptr;
+  return Builder.Finalize(Updater->getType());
 }
 
 llvm::Constant *ConstStructBuilder::BuildStruct(CodeGenModule &CGM,
@@ -613,6 +643,8 @@ public:
   }
 
   llvm::Constant *VisitCastExpr(CastExpr* E) {
+    if (const auto *ECE = dyn_cast<ExplicitCastExpr>(E))
+      CGM.EmitExplicitCastExprType(ECE, CGF);
     Expr *subExpr = E->getSubExpr();
     llvm::Constant *C = CGM.EmitConstantExpr(subExpr, subExpr->getType(), CGF);
     if (!C) return nullptr;
@@ -658,6 +690,9 @@ public:
     case CK_NoOp:
     case CK_ConstructorConversion:
       return C;
+
+    case CK_IntToOCLSampler:
+      llvm_unreachable("global sampler variables are not generated");
 
     case CK_Dependent: llvm_unreachable("saw dependent cast!");
 
@@ -710,6 +745,7 @@ public:
     case CK_PointerToBoolean:
     case CK_NullToPointer:
     case CK_IntegralCast:
+    case CK_BooleanToSignedIntegral:
     case CK_IntegralToPointer:
     case CK_IntegralToBoolean:
     case CK_IntegralToFloating:
@@ -717,6 +753,7 @@ public:
     case CK_FloatingToBoolean:
     case CK_FloatingCast:
     case CK_ZeroToOCLEvent:
+    case CK_ZeroToOCLQueue:
       return nullptr;
     }
     llvm_unreachable("Invalid CastKind");
@@ -732,14 +769,17 @@ public:
     return Visit(DIE->getExpr());
   }
 
+  llvm::Constant *VisitExprWithCleanups(ExprWithCleanups *E) {
+    if (!E->cleanupsHaveSideEffects())
+      return Visit(E->getSubExpr());
+    return nullptr;
+  }
+
   llvm::Constant *VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr *E) {
     return Visit(E->GetTemporaryExpr());
   }
 
   llvm::Constant *EmitArrayInitialization(InitListExpr *ILE) {
-    if (ILE->isStringLiteralInit())
-      return Visit(ILE->getInit(0));
-
     llvm::ArrayType *AType =
         cast<llvm::ArrayType>(ConvertType(ILE->getType()));
     llvm::Type *ElemTy = AType->getElementType();
@@ -804,6 +844,9 @@ public:
   }
 
   llvm::Constant *VisitInitListExpr(InitListExpr *ILE) {
+    if (ILE->isTransparent())
+      return Visit(ILE->getInit(0));
+
     if (ILE->getType()->isArrayType())
       return EmitArrayInitialization(ILE);
 
@@ -812,6 +855,82 @@ public:
 
     return nullptr;
   }
+
+  llvm::Constant *EmitDesignatedInitUpdater(llvm::Constant *Base,
+                                            InitListExpr *Updater) {
+    QualType ExprType = Updater->getType();
+
+    if (ExprType->isArrayType()) {
+      llvm::ArrayType *AType = cast<llvm::ArrayType>(ConvertType(ExprType));
+      llvm::Type *ElemType = AType->getElementType();
+
+      unsigned NumInitElements = Updater->getNumInits();
+      unsigned NumElements = AType->getNumElements();
+      
+      std::vector<llvm::Constant *> Elts;
+      Elts.reserve(NumElements);
+
+      if (llvm::ConstantDataArray *DataArray =
+            dyn_cast<llvm::ConstantDataArray>(Base))
+        for (unsigned i = 0; i != NumElements; ++i)
+          Elts.push_back(DataArray->getElementAsConstant(i));
+      else if (llvm::ConstantArray *Array =
+                 dyn_cast<llvm::ConstantArray>(Base))
+        for (unsigned i = 0; i != NumElements; ++i)
+          Elts.push_back(Array->getOperand(i));
+      else
+        return nullptr; // FIXME: other array types not implemented
+
+      llvm::Constant *fillC = nullptr;
+      if (Expr *filler = Updater->getArrayFiller())
+        if (!isa<NoInitExpr>(filler))
+          fillC = CGM.EmitConstantExpr(filler, filler->getType(), CGF);
+      bool RewriteType = (fillC && fillC->getType() != ElemType);
+
+      for (unsigned i = 0; i != NumElements; ++i) {
+        Expr *Init = nullptr;
+        if (i < NumInitElements)
+          Init = Updater->getInit(i);
+
+        if (!Init && fillC)
+          Elts[i] = fillC;
+        else if (!Init || isa<NoInitExpr>(Init))
+          ; // Do nothing.
+        else if (InitListExpr *ChildILE = dyn_cast<InitListExpr>(Init))
+          Elts[i] = EmitDesignatedInitUpdater(Elts[i], ChildILE);
+        else
+          Elts[i] = CGM.EmitConstantExpr(Init, Init->getType(), CGF);
+ 
+       if (!Elts[i])
+          return nullptr;
+        RewriteType |= (Elts[i]->getType() != ElemType);
+      }
+
+      if (RewriteType) {
+        std::vector<llvm::Type *> Types;
+        Types.reserve(NumElements);
+        for (unsigned i = 0; i != NumElements; ++i)
+          Types.push_back(Elts[i]->getType());
+        llvm::StructType *SType = llvm::StructType::get(AType->getContext(),
+                                                        Types, true);
+        return llvm::ConstantStruct::get(SType, Elts);
+      }
+
+      return llvm::ConstantArray::get(AType, Elts);
+    }
+
+    if (ExprType->isRecordType())
+      return ConstStructBuilder::BuildStruct(CGM, CGF, this,
+                 dyn_cast<llvm::ConstantStruct>(Base), Updater);
+
+    return nullptr;
+  }
+
+  llvm::Constant *VisitDesignatedInitUpdateExpr(DesignatedInitUpdateExpr *E) {
+    return EmitDesignatedInitUpdater(
+               CGM.EmitConstantExpr(E->getBase(), E->getType(), CGF),
+               E->getUpdater());
+  }  
 
   llvm::Constant *VisitCXXConstructExpr(CXXConstructExpr *E) {
     if (!E->getConstructor()->isTrivial())
@@ -878,43 +997,52 @@ public:
   }
 
 public:
-  llvm::Constant *EmitLValue(APValue::LValueBase LVBase) {
+  ConstantAddress EmitLValue(APValue::LValueBase LVBase) {
     if (const ValueDecl *Decl = LVBase.dyn_cast<const ValueDecl*>()) {
       if (Decl->hasAttr<WeakRefAttr>())
         return CGM.GetWeakRefReference(Decl);
       if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(Decl))
-        return CGM.GetAddrOfFunction(FD);
+        return ConstantAddress(CGM.GetAddrOfFunction(FD), CharUnits::One());
       if (const VarDecl* VD = dyn_cast<VarDecl>(Decl)) {
         // We can never refer to a variable with local storage.
         if (!VD->hasLocalStorage()) {
+          CharUnits Align = CGM.getContext().getDeclAlign(VD);
           if (VD->isFileVarDecl() || VD->hasExternalStorage())
-            return CGM.GetAddrOfGlobalVar(VD);
-          else if (VD->isLocalVarDecl())
-            return CGM.getOrCreateStaticVarDecl(
+            return ConstantAddress(CGM.GetAddrOfGlobalVar(VD), Align);
+          else if (VD->isLocalVarDecl()) {
+            auto Ptr = CGM.getOrCreateStaticVarDecl(
                 *VD, CGM.getLLVMLinkageVarDefinition(VD, /*isConstant=*/false));
+            return ConstantAddress(Ptr, Align);
+          }
         }
       }
-      return nullptr;
+      return ConstantAddress::invalid();
     }
 
     Expr *E = const_cast<Expr*>(LVBase.get<const Expr*>());
     switch (E->getStmtClass()) {
     default: break;
     case Expr::CompoundLiteralExprClass: {
-      // Note that due to the nature of compound literals, this is guaranteed
-      // to be the only use of the variable, so we just generate it here.
       CompoundLiteralExpr *CLE = cast<CompoundLiteralExpr>(E);
+      CharUnits Align = CGM.getContext().getTypeAlignInChars(E->getType());
+      if (llvm::GlobalVariable *Addr =
+              CGM.getAddrOfConstantCompoundLiteralIfEmitted(CLE))
+        return ConstantAddress(Addr, Align);
+
       llvm::Constant* C = CGM.EmitConstantExpr(CLE->getInitializer(),
                                                CLE->getType(), CGF);
       // FIXME: "Leaked" on failure.
-      if (C)
-        C = new llvm::GlobalVariable(CGM.getModule(), C->getType(),
+      if (!C) return ConstantAddress::invalid();
+
+      auto GV = new llvm::GlobalVariable(CGM.getModule(), C->getType(),
                                      E->getType().isConstant(CGM.getContext()),
                                      llvm::GlobalValue::InternalLinkage,
                                      C, ".compoundliteral", nullptr,
                                      llvm::GlobalVariable::NotThreadLocal,
                           CGM.getContext().getTargetAddressSpace(E->getType()));
-      return C;
+      GV->setAlignment(Align.getQuantity());
+      CGM.setAddrOfConstantCompoundLiteral(CLE, GV);
+      return ConstantAddress(GV, Align);
     }
     case Expr::StringLiteralClass:
       return CGM.GetAddrOfConstantStringFromLiteral(cast<StringLiteral>(E));
@@ -922,15 +1050,15 @@ public:
       return CGM.GetAddrOfConstantStringFromObjCEncode(cast<ObjCEncodeExpr>(E));
     case Expr::ObjCStringLiteralClass: {
       ObjCStringLiteral* SL = cast<ObjCStringLiteral>(E);
-      llvm::Constant *C =
+      ConstantAddress C =
           CGM.getObjCRuntime().GenerateConstantString(SL->getString());
-      return llvm::ConstantExpr::getBitCast(C, ConvertType(E->getType()));
+      return C.getElementBitCast(ConvertType(E->getType()));
     }
     case Expr::PredefinedExprClass: {
       unsigned Type = cast<PredefinedExpr>(E)->getIdentType();
       if (CGF) {
         LValue Res = CGF->EmitPredefinedLValue(cast<PredefinedExpr>(E));
-        return cast<llvm::Constant>(Res.getAddress());
+        return cast<ConstantAddress>(Res.getAddress());
       } else if (Type == PredefinedExpr::PrettyFunction) {
         return CGM.GetAddrOfConstantCString("top level", ".tmp");
       }
@@ -941,7 +1069,8 @@ public:
       assert(CGF && "Invalid address of label expression outside function.");
       llvm::Constant *Ptr =
         CGF->GetAddrOfLabel(cast<AddrLabelExpr>(E)->getLabel());
-      return llvm::ConstantExpr::getBitCast(Ptr, ConvertType(E->getType()));
+      Ptr = llvm::ConstantExpr::getBitCast(Ptr, ConvertType(E->getType()));
+      return ConstantAddress(Ptr, CharUnits::One());
     }
     case Expr::CallExprClass: {
       CallExpr* CE = cast<CallExpr>(E);
@@ -961,13 +1090,16 @@ public:
       return CGM.GetAddrOfConstantCFString(Literal);
     }
     case Expr::BlockExprClass: {
-      std::string FunctionName;
+      StringRef FunctionName;
       if (CGF)
         FunctionName = CGF->CurFn->getName();
       else
         FunctionName = "global";
 
-      return CGM.GetAddrOfGlobalBlock(cast<BlockExpr>(E), FunctionName.c_str());
+      // This is not really an l-value.
+      llvm::Constant *Ptr =
+        CGM.GetAddrOfGlobalBlock(cast<BlockExpr>(E), FunctionName);
+      return ConstantAddress(Ptr, CGM.getPointerAlign());
     }
     case Expr::CXXTypeidExprClass: {
       CXXTypeidExpr *Typeid = cast<CXXTypeidExpr>(E);
@@ -976,7 +1108,8 @@ public:
         T = Typeid->getTypeOperand(CGM.getContext());
       else
         T = Typeid->getExprOperand()->getType();
-      return CGM.GetAddrOfRTTIDescriptor(T);
+      return ConstantAddress(CGM.GetAddrOfRTTIDescriptor(T),
+                             CGM.getPointerAlign());
     }
     case Expr::CXXUuidofExprClass: {
       return CGM.GetAddrOfUuidDescriptor(cast<CXXUuidofExpr>(E));
@@ -992,11 +1125,80 @@ public:
     }
     }
 
-    return nullptr;
+    return ConstantAddress::invalid();
   }
 };
 
 }  // end anonymous namespace.
+
+bool ConstStructBuilder::Build(ConstExprEmitter *Emitter,
+                               llvm::ConstantStruct *Base,
+                               InitListExpr *Updater) {
+  assert(Base && "base expression should not be empty");
+
+  QualType ExprType = Updater->getType();
+  RecordDecl *RD = ExprType->getAs<RecordType>()->getDecl();
+  const ASTRecordLayout &Layout = CGM.getContext().getASTRecordLayout(RD);
+  const llvm::StructLayout *BaseLayout = CGM.getDataLayout().getStructLayout(
+                                           Base->getType());
+  unsigned FieldNo = -1;
+  unsigned ElementNo = 0;
+
+  // Bail out if we have base classes. We could support these, but they only
+  // arise in C++1z where we will have already constant folded most interesting
+  // cases. FIXME: There are still a few more cases we can handle this way.
+  if (auto *CXXRD = dyn_cast<CXXRecordDecl>(RD))
+    if (CXXRD->getNumBases())
+      return false;
+
+  for (FieldDecl *Field : RD->fields()) {
+    ++FieldNo;
+
+    if (RD->isUnion() && Updater->getInitializedFieldInUnion() != Field)
+      continue;
+
+    // Skip anonymous bitfields.
+    if (Field->isUnnamedBitfield())
+      continue;
+
+    llvm::Constant *EltInit = Base->getOperand(ElementNo);
+
+    // Bail out if the type of the ConstantStruct does not have the same layout
+    // as the type of the InitListExpr.
+    if (CGM.getTypes().ConvertType(Field->getType()) != EltInit->getType() ||
+        Layout.getFieldOffset(ElementNo) !=
+          BaseLayout->getElementOffsetInBits(ElementNo))
+      return false;
+
+    // Get the initializer. If we encounter an empty field or a NoInitExpr,
+    // we use values from the base expression.
+    Expr *Init = nullptr;
+    if (ElementNo < Updater->getNumInits())
+      Init = Updater->getInit(ElementNo);
+
+    if (!Init || isa<NoInitExpr>(Init))
+      ; // Do nothing.
+    else if (InitListExpr *ChildILE = dyn_cast<InitListExpr>(Init))
+      EltInit = Emitter->EmitDesignatedInitUpdater(EltInit, ChildILE);
+    else
+      EltInit = CGM.EmitConstantExpr(Init, Field->getType(), CGF);
+
+    ++ElementNo;
+
+    if (!EltInit)
+      return false;
+
+    if (!Field->isBitField())
+      AppendField(Field, Layout.getFieldOffset(FieldNo), EltInit);
+    else if (llvm::ConstantInt *CI = dyn_cast<llvm::ConstantInt>(EltInit))
+      AppendBitField(Field, Layout.getFieldOffset(FieldNo), CI);
+    else
+      // Initializing a bitfield with a non-trivial constant?
+      return false;
+  }
+
+  return true;
+}
 
 llvm::Constant *CodeGenModule::EmitConstantInit(const VarDecl &D,
                                                 CodeGenFunction *CGF) {
@@ -1064,6 +1266,10 @@ llvm::Constant *CodeGenModule::EmitConstantExpr(const Expr *E,
   return C;
 }
 
+llvm::Constant *CodeGenModule::getNullPointer(llvm::PointerType *T, QualType QT) {
+  return getTargetCodeGenInfo().getNullPointer(*this, T, QT);
+}
+
 llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
                                                  QualType DestType,
                                                  CodeGenFunction *CGF) {
@@ -1094,7 +1300,8 @@ llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
     llvm::Constant *Offset =
       llvm::ConstantInt::get(Int64Ty, Value.getLValueOffset().getQuantity());
 
-    llvm::Constant *C;
+    llvm::Constant *C = nullptr;
+
     if (APValue::LValueBase LVBase = Value.getLValueBase()) {
       // An array can be represented as an lvalue referring to the base.
       if (isa<llvm::ArrayType>(DestTy)) {
@@ -1103,14 +1310,14 @@ llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
           const_cast<Expr*>(LVBase.get<const Expr*>()));
       }
 
-      C = ConstExprEmitter(*this, CGF).EmitLValue(LVBase);
+      C = ConstExprEmitter(*this, CGF).EmitLValue(LVBase).getPointer();
 
       // Apply offset if necessary.
       if (!Offset->isNullValue()) {
         unsigned AS = C->getType()->getPointerAddressSpace();
         llvm::Type *CharPtrTy = Int8Ty->getPointerTo(AS);
         llvm::Constant *Casted = llvm::ConstantExpr::getBitCast(C, CharPtrTy);
-        Casted = llvm::ConstantExpr::getGetElementPtr(Casted, Offset);
+        Casted = llvm::ConstantExpr::getGetElementPtr(Int8Ty, Casted, Offset);
         C = llvm::ConstantExpr::getPointerCast(Casted, C->getType());
       }
 
@@ -1125,8 +1332,16 @@ llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
 
       // Convert to the appropriate type; this could be an lvalue for
       // an integer.
-      if (isa<llvm::PointerType>(DestTy))
+      if (auto PT = dyn_cast<llvm::PointerType>(DestTy)) {
+        if (Value.isNullPointer())
+          return getNullPointer(PT, DestType);
+        // Convert the integer to a pointer-sized integer before converting it
+        // to a pointer.
+        C = llvm::ConstantExpr::getIntegerCast(
+            C, getDataLayout().getIntPtrType(DestTy),
+            /*isSigned=*/false);
         return llvm::ConstantExpr::getIntToPtr(C, DestTy);
+      }
 
       // If the types don't match this should only be a truncate.
       if (C->getType() != DestTy)
@@ -1146,14 +1361,13 @@ llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
                                         Value.getComplexIntImag());
 
     // FIXME: the target may want to specify that this is packed.
-    llvm::StructType *STy = llvm::StructType::get(Complex[0]->getType(),
-                                                  Complex[1]->getType(),
-                                                  nullptr);
+    llvm::StructType *STy =
+        llvm::StructType::get(Complex[0]->getType(), Complex[1]->getType());
     return llvm::ConstantStruct::get(STy, Complex);
   }
   case APValue::Float: {
     const llvm::APFloat &Init = Value.getFloat();
-    if (&Init.getSemantics() == &llvm::APFloat::IEEEhalf &&
+    if (&Init.getSemantics() == &llvm::APFloat::IEEEhalf() &&
         !Context.getLangOpts().NativeHalfType &&
         !Context.getLangOpts().HalfArgsAndReturns)
       return llvm::ConstantInt::get(VMContext, Init.bitcastToAPInt());
@@ -1169,21 +1383,22 @@ llvm::Constant *CodeGenModule::EmitConstantValue(const APValue &Value,
                                        Value.getComplexFloatImag());
 
     // FIXME: the target may want to specify that this is packed.
-    llvm::StructType *STy = llvm::StructType::get(Complex[0]->getType(),
-                                                  Complex[1]->getType(),
-                                                  nullptr);
+    llvm::StructType *STy =
+        llvm::StructType::get(Complex[0]->getType(), Complex[1]->getType());
     return llvm::ConstantStruct::get(STy, Complex);
   }
   case APValue::Vector: {
-    SmallVector<llvm::Constant *, 4> Inits;
     unsigned NumElts = Value.getVectorLength();
+    SmallVector<llvm::Constant *, 4> Inits(NumElts);
 
-    for (unsigned i = 0; i != NumElts; ++i) {
-      const APValue &Elt = Value.getVectorElt(i);
+    for (unsigned I = 0; I != NumElts; ++I) {
+      const APValue &Elt = Value.getVectorElt(I);
       if (Elt.isInt())
-        Inits.push_back(llvm::ConstantInt::get(VMContext, Elt.getInt()));
+        Inits[I] = llvm::ConstantInt::get(VMContext, Elt.getInt());
+      else if (Elt.isFloat())
+        Inits[I] = llvm::ConstantFP::get(VMContext, Elt.getFloat());
       else
-        Inits.push_back(llvm::ConstantFP::get(VMContext, Elt.getFloat()));
+        llvm_unreachable("unsupported vector element type");
     }
     return llvm::ConstantVector::get(Inits);
   }
@@ -1277,7 +1492,19 @@ CodeGenModule::EmitConstantValueForMemory(const APValue &Value,
   return C;
 }
 
-llvm::Constant *
+llvm::GlobalVariable *CodeGenModule::getAddrOfConstantCompoundLiteralIfEmitted(
+    const CompoundLiteralExpr *E) {
+  return EmittedCompoundLiterals.lookup(E);
+}
+
+void CodeGenModule::setAddrOfConstantCompoundLiteral(
+    const CompoundLiteralExpr *CLE, llvm::GlobalVariable *GV) {
+  bool Ok = EmittedCompoundLiterals.insert(std::make_pair(CLE, GV)).second;
+  (void)Ok;
+  assert(Ok && "CLE has already been emitted!");
+}
+
+ConstantAddress
 CodeGenModule::GetAddrOfConstantCompoundLiteral(const CompoundLiteralExpr *E) {
   assert(E->isFileScope() && "not a file-scope compound literal expr");
   return ConstExprEmitter(*this, nullptr).EmitLValue(E);
@@ -1291,7 +1518,7 @@ CodeGenModule::getMemberPointerConstant(const UnaryOperator *uo) {
 
   // A member function pointer.
   if (const CXXMethodDecl *method = dyn_cast<CXXMethodDecl>(decl))
-    return getCXXABI().EmitMemberPointer(method);
+    return getCXXABI().EmitMemberFunctionPointer(method);
 
   // Otherwise, a member data pointer.
   uint64_t fieldOffset = getContext().getFieldOffset(decl);
@@ -1304,7 +1531,7 @@ static llvm::Constant *EmitNullConstantForBase(CodeGenModule &CGM,
                                                const CXXRecordDecl *base);
 
 static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
-                                        const CXXRecordDecl *record,
+                                        const RecordDecl *record,
                                         bool asCompleteObject) {
   const CGRecordLayout &layout = CGM.getTypes().getCGRecordLayout(record);
   llvm::StructType *structure =
@@ -1314,24 +1541,29 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
   unsigned numElements = structure->getNumElements();
   std::vector<llvm::Constant *> elements(numElements);
 
+  auto CXXR = dyn_cast<CXXRecordDecl>(record);
   // Fill in all the bases.
-  for (const auto &I : record->bases()) {
-    if (I.isVirtual()) {
-      // Ignore virtual bases; if we're laying out for a complete
-      // object, we'll lay these out later.
-      continue;
+  if (CXXR) {
+    for (const auto &I : CXXR->bases()) {
+      if (I.isVirtual()) {
+        // Ignore virtual bases; if we're laying out for a complete
+        // object, we'll lay these out later.
+        continue;
+      }
+
+      const CXXRecordDecl *base =
+        cast<CXXRecordDecl>(I.getType()->castAs<RecordType>()->getDecl());
+
+      // Ignore empty bases.
+      if (base->isEmpty() ||
+          CGM.getContext().getASTRecordLayout(base).getNonVirtualSize()
+              .isZero())
+        continue;
+
+      unsigned fieldIndex = layout.getNonVirtualBaseLLVMFieldNo(base);
+      llvm::Type *baseType = structure->getElementType(fieldIndex);
+      elements[fieldIndex] = EmitNullConstantForBase(CGM, baseType, base);
     }
-
-    const CXXRecordDecl *base = 
-      cast<CXXRecordDecl>(I.getType()->castAs<RecordType>()->getDecl());
-
-    // Ignore empty bases.
-    if (base->isEmpty())
-      continue;
-    
-    unsigned fieldIndex = layout.getNonVirtualBaseLLVMFieldNo(base);
-    llvm::Type *baseType = structure->getElementType(fieldIndex);
-    elements[fieldIndex] = EmitNullConstantForBase(CGM, baseType, base);
   }
 
   // Fill in all the fields.
@@ -1344,13 +1576,19 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
     }
 
     // For unions, stop after the first named field.
-    if (record->isUnion() && Field->getDeclName())
-      break;
+    if (record->isUnion()) {
+      if (Field->getIdentifier())
+        break;
+      if (const auto *FieldRD =
+              dyn_cast_or_null<RecordDecl>(Field->getType()->getAsTagDecl()))
+        if (FieldRD->findFirstNamedDataMember())
+          break;
+    }
   }
 
   // Fill in the virtual bases, if we're working with the complete object.
-  if (asCompleteObject) {
-    for (const auto &I : record->vbases()) {
+  if (CXXR && asCompleteObject) {
+    for (const auto &I : CXXR->vbases()) {
       const CXXRecordDecl *base = 
         cast<CXXRecordDecl>(I.getType()->castAs<RecordType>()->getDecl());
 
@@ -1392,6 +1630,10 @@ static llvm::Constant *EmitNullConstantForBase(CodeGenModule &CGM,
 }
 
 llvm::Constant *CodeGenModule::EmitNullConstant(QualType T) {
+  if (T->getAs<PointerType>())
+    return getNullPointer(
+        cast<llvm::PointerType>(getTypes().ConvertTypeForMem(T)), T);
+
   if (getTypes().isZeroInitializable(T))
     return llvm::Constant::getNullValue(getTypes().ConvertTypeForMem(T));
     
@@ -1403,21 +1645,14 @@ llvm::Constant *CodeGenModule::EmitNullConstant(QualType T) {
 
     llvm::Constant *Element = EmitNullConstant(ElementTy);
     unsigned NumElements = CAT->getSize().getZExtValue();
-    
-    if (Element->isNullValue())
-      return llvm::ConstantAggregateZero::get(ATy);
-    
     SmallVector<llvm::Constant *, 8> Array(NumElements, Element);
     return llvm::ConstantArray::get(ATy, Array);
   }
 
-  if (const RecordType *RT = T->getAs<RecordType>()) {
-    const CXXRecordDecl *RD = cast<CXXRecordDecl>(RT->getDecl());
-    return ::EmitNullConstant(*this, RD, /*complete object*/ true);
-  }
+  if (const RecordType *RT = T->getAs<RecordType>())
+    return ::EmitNullConstant(*this, RT->getDecl(), /*complete object*/ true);
 
-  assert(T->isMemberPointerType() && "Should only see member pointers here!");
-  assert(!T->getAs<MemberPointerType>()->getPointeeType()->isFunctionType() &&
+  assert(T->isMemberDataPointerType() &&
          "Should only see pointers to data members here!");
 
   return getCXXABI().EmitNullMemberPointer(T->castAs<MemberPointerType>());

@@ -2,6 +2,8 @@
 // Author Lukasz Janyst <ljanyst@cern.ch>  23/01/2008
 
 /** \class TBranchSTL
+\ingroup tree
+
 A Branch handling STL collection of pointers (vectors, lists, queues,
 sets and multisets) while storing them in split mode.
 */
@@ -18,7 +20,7 @@ sets and multisets) while storing them in split mode.
 
 #include "TError.h"
 
-ClassImp(TBranchSTL)
+ClassImp(TBranchSTL);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
@@ -69,8 +71,7 @@ TBranchSTL::TBranchSTL( TTree *tree, const char *name,
 
    //---------------------------------------------------------------------------
    // Allocate and initialize the basket control arrays
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    fBasketBytes = new Int_t[fMaxBaskets];
    fBasketEntry = new Long64_t[fMaxBaskets];
    fBasketSeek = new Long64_t[fMaxBaskets];
@@ -115,8 +116,7 @@ TBranchSTL::TBranchSTL( TBranch* parent, const char* name,
 
    //---------------------------------------------------------------------------
    // Allocate and initialize the basket control arrays
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    fBasketBytes = new Int_t[fMaxBaskets];
    fBasketEntry = new Long64_t[fMaxBaskets];
    fBasketSeek = new Long64_t[fMaxBaskets];
@@ -142,7 +142,7 @@ TBranchSTL::~TBranchSTL()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Browse a STL branch.
+/// Browse an STL branch.
 
 void TBranchSTL::Browse( TBrowser *b )
 {
@@ -158,32 +158,33 @@ void TBranchSTL::Browse( TBrowser *b )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Cleanup after revious fill.
+/// Fill an STL branch.
 
-Int_t TBranchSTL::Fill()
+Int_t TBranchSTL::FillImpl(ROOT::Internal::TBranchIMTHelper *imtHelper)
 {
+   //---------------------------------------------------------------------------
+   // Cleanup after previous fill
+   //---------------------------------------------------------------------------
    BranchMap_t::iterator brIter;
    for( brIter = fBranchMap.begin(); brIter != fBranchMap.end(); ++brIter )
       (*brIter).second.fPointers->clear();
 
    //---------------------------------------------------------------------------
    // Check if we're dealing with the null pointer here
-   /////////////////////////////////////////////////////////////////////////////
-   ///------------------------------------------------------------------------
-   /// We have received a zero pointer - treat it as an empty collection
-   ///------------------------------------------------------------------------
-
+   //---------------------------------------------------------------------------
    if( fAddress != fObject ) {
+      //------------------------------------------------------------------------
+      // We have received a zero pointer - treat it as an empty collection
+      //------------------------------------------------------------------------
       if( fObject == 0 ) {
          Int_t bytes      = 0;
          Int_t totalBytes = 0;
 
          //---------------------------------------------------------------------
          // Store the indices
-         ///////////////////////////////////////////////////////////////////////
-
+         //---------------------------------------------------------------------
          fInd.SetNumItems( 0 );
-         bytes = TBranch::Fill();
+         bytes = TBranch::FillImpl(imtHelper);
 
          if( bytes < 0 ) {
             Error( "Fill", "The IO error while writing the indices!");
@@ -193,11 +194,10 @@ Int_t TBranchSTL::Fill()
 
          //---------------------------------------------------------------------
          // Store the branches
-         ///////////////////////////////////////////////////////////////////////
-
+         //---------------------------------------------------------------------
          for( Int_t i = 0; i < fBranches.GetEntriesFast(); ++i ) {
             TBranch *br = (TBranch *)fBranches.UncheckedAt(i);
-            bytes = br->Fill();
+            bytes = br->FillImpl(imtHelper);
             if( bytes < 0 ) {
                Error( "Fill", "The IO error while writing the branch %s!", br->GetName() );
                return -1;
@@ -210,15 +210,13 @@ Int_t TBranchSTL::Fill()
 
    //---------------------------------------------------------------------------
    // Set upt the collection proxy
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    TVirtualCollectionProxy::TPushPop helper( fCollProxy, fObject );
    UInt_t size = fCollProxy->Size();
 
    //---------------------------------------------------------------------------
    // Set up the container of indices
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    if( fInd.GetCapacity() < size )
       fInd.ClearAndResize( size );
 
@@ -226,8 +224,7 @@ Int_t TBranchSTL::Fill()
 
    //---------------------------------------------------------------------------
    // Loop over the elements and create branches as needed
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    TClass*               cl         = fCollProxy->GetValueClass();
    TClass*               actClass   = 0;
    TClass*               vectClass  = 0;
@@ -245,8 +242,7 @@ Int_t TBranchSTL::Fill()
    for( UInt_t i = 0; i < size; ++i ) {
       //------------------------------------------------------------------------
       // Determine the actual class of current element
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       element = *(char**)fCollProxy->At( i );
       if( !element ) {
          fInd.At(i) = 0;
@@ -259,12 +255,11 @@ Int_t TBranchSTL::Fill()
 
       //------------------------------------------------------------------------
       // The branch was not found - create a new one
-      //////////////////////////////////////////////////////////////////////////
-      ///---------------------------------------------------------------------
-      /// Find the dictionary for vector of pointers to this class
-      ///---------------------------------------------------------------------
-
+      //------------------------------------------------------------------------
       if( brIter == fBranchMap.end() ) {
+         //---------------------------------------------------------------------
+         // Find the dictionary for vector of pointers to this class
+         //---------------------------------------------------------------------
          std::string vectClName("vector<");
          vectClName += actClass->GetName() + std::string("*>");
          vectClass = TClass::GetClass( vectClName.c_str() );
@@ -276,11 +271,10 @@ Int_t TBranchSTL::Fill()
          //---------------------------------------------------------------------
          // Create the vector of pointers to objects of this type and new branch
          // for it
-         ///////////////////////////////////////////////////////////////////////
-         /// The top level branch already has a trailing dot.
-
+         //---------------------------------------------------------------------
          elPointers = new std::vector<void*>();//vectClass->GetCollectionProxy()->New();
          if (fName.Length() && fName[fName.Length()-1]=='.') {
+            // The top level branch already has a trailing dot.
             brName.Form( "%s%s", GetName(), actClass->GetName() );
          } else {
             brName.Form( "%s.%s", GetName(), actClass->GetName() );
@@ -305,8 +299,7 @@ Int_t TBranchSTL::Fill()
       }
       //------------------------------------------------------------------------
       // The branch for this type already exists - set up the pointers
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       else {
          elPointers = (*brIter).second.fPointers;
          elBranch   = (*brIter).second.fBranch;
@@ -316,17 +309,15 @@ Int_t TBranchSTL::Fill()
 
       //-------------------------------------------------------------------------
       // Add the element to the appropriate vector
-      //////////////////////////////////////////////////////////////////////////
-
+      //-------------------------------------------------------------------------
       elPointers->push_back( element + elOffset );
       fInd.At(i) = elID;
    }
 
    //----------------------------------------------------------------------------
    // Store the indices
-   /////////////////////////////////////////////////////////////////////////////
-
-   bytes = TBranch::Fill();
+   //----------------------------------------------------------------------------
+   bytes = TBranch::FillImpl(nullptr);
    if( bytes < 0 ) {
       Error( "Fill", "The IO error while writing the indices!");
       return -1;
@@ -335,8 +326,7 @@ Int_t TBranchSTL::Fill()
 
    //----------------------------------------------------------------------------
    // Fill the branches
-   /////////////////////////////////////////////////////////////////////////////
-
+   //----------------------------------------------------------------------------
    for( Int_t i = 0; i < fBranches.GetEntriesFast(); ++i ) {
       TBranch *br = (TBranch *)fBranches.UncheckedAt(i);
       bytes = br->Fill();
@@ -351,10 +341,13 @@ Int_t TBranchSTL::Fill()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Check if we should be doing this at all.
+/// Get entry.
 
 Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 {
+   //---------------------------------------------------------------------------
+   // Check if we should be doing this at all
+   //---------------------------------------------------------------------------
    if( TestBit( kDoNotProcess ) && !getall )
       return 0;
 
@@ -366,8 +359,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
    //---------------------------------------------------------------------------
    // Set up the collection proxy
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    if( !fCollProxy ) {
       TClass *cl = TClass::GetClass( fContName );
 
@@ -385,8 +377,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
    //---------------------------------------------------------------------------
    // Get the indices
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    Int_t totalBytes = 0;
    Int_t bytes = TBranch::GetEntry( entry, getall );
    totalBytes += bytes;
@@ -403,8 +394,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
    //---------------------------------------------------------------------------
    // Set up vector pointers
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    UInt_t nBranches = fBranches.GetEntriesFast();
    TClass*               elClass   = fCollProxy->GetValueClass();
    TClass*               tmpClass  = 0;
@@ -414,8 +404,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
    //---------------------------------------------------------------------------
    // Create the object
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    if( fAddress != fObject ) {
       *((void **)fAddress) = fCollProxy->New();
       fObject = *(char**)fAddress;
@@ -425,8 +414,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
    //---------------------------------------------------------------------------
    // Process entries
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    UChar_t             index      = 0;
    void**              element    = 0;
    std::vector<void*>* elemVect   = 0;
@@ -438,8 +426,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
       //------------------------------------------------------------------------
       // The case of zero pointers
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       if( index == 0 ) {
          *element = 0;
          continue;
@@ -447,8 +434,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
       //-------------------------------------------------------------------------
       // Index out of range!
-      //////////////////////////////////////////////////////////////////////////
-
+      //-------------------------------------------------------------------------
       if( index > nBranches ) {
          Error( "GetEntry", "Index %d out of range, unable to find the branch, setting pointer to 0",
                 index );
@@ -458,8 +444,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
       //------------------------------------------------------------------------
       // Load unloaded branch
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       index--;
       elemVect = fBranchVector[index].fPointers;
       if( !elemVect ) {
@@ -486,8 +471,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
          //---------------------------------------------------------------------
          // Calculate the base class offset
-         ///////////////////////////////////////////////////////////////////////
-
+         //---------------------------------------------------------------------
          TVirtualCollectionProxy *proxy = elemBranch->GetCollectionProxy();
          if (!proxy) {
             proxy =  TClass::GetClass(elemBranch->GetClassName())->GetCollectionProxy();
@@ -507,8 +491,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
       //------------------------------------------------------------------------
       // Set up the element
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       *element =  ((char*)(*elemVect)[fBranchVector[index].fPosition++])
         - fBranchVector[index].fBaseOffset;
 
@@ -518,8 +501,7 @@ Int_t TBranchSTL::GetEntry( Long64_t entry, Int_t getall )
 
    //---------------------------------------------------------------------------
    // Cleanup
-   /////////////////////////////////////////////////////////////////////////////
-
+   //---------------------------------------------------------------------------
    for( UInt_t i = 0; i < fBranchVector.size(); ++i ) {
       delete fBranchVector[i].fPointers;
       fBranchVector[i].fPointers = 0;
@@ -561,31 +543,31 @@ Int_t TBranchSTL::GetExpectedType(TClass *&expectedClass,EDataType &expectedType
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Check if we don't have the streamer info.
+/// Get streamer info.
 
 TStreamerInfo* TBranchSTL::GetInfo() const
 {
+   //---------------------------------------------------------------------------
+   // Check if we don't have the streamer info
+   //---------------------------------------------------------------------------
    if( !fInfo ) {
       //------------------------------------------------------------------------
       // Get the class info
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       TClass *cl = TClass::GetClass( fClassName );
 
       //------------------------------------------------------------------------
       // Get unoptimized streamer info
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       fInfo = (TStreamerInfo*)cl->GetStreamerInfo( fClassVersion );
 
       //------------------------------------------------------------------------
       // If the checksum is there and we're dealing with the foreign class
-      //////////////////////////////////////////////////////////////////////////
-      ///---------------------------------------------------------------------
-      /// Loop over the infos
-      ///---------------------------------------------------------------------
-
+      //------------------------------------------------------------------------
       if( fClCheckSum && !cl->IsVersioned() ) {
+         //---------------------------------------------------------------------
+         // Loop over the infos
+         //---------------------------------------------------------------------
          Int_t ninfos = cl->GetStreamerInfos()->GetEntriesFast() - 1;
          for( Int_t i = -1; i < ninfos; ++i ) {
             TVirtualStreamerInfo* info = (TVirtualStreamerInfo*) cl->GetStreamerInfos()->UncheckedAt(i);
@@ -594,8 +576,7 @@ TStreamerInfo* TBranchSTL::GetInfo() const
 
             //------------------------------------------------------------------
             // If the checksum matches then retriev the info
-            ////////////////////////////////////////////////////////////////////
-
+            //------------------------------------------------------------------
             if( info->GetCheckSum() == fClCheckSum ) {
                fClassVersion = i;
                fInfo = (TStreamerInfo*)cl->GetStreamerInfo( fClassVersion );
@@ -675,29 +656,30 @@ void TBranchSTL::FillLeavesImpl( TBuffer& b )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// We are the top level branch.
+/// Set Address.
 
 void TBranchSTL::SetAddress( void* addr )
 {
+   //---------------------------------------------------------------------------
+   // We are the top level branch
+   //---------------------------------------------------------------------------
    if( fID < 0 ) {
       fAddress = (char*)addr;
       fObject  = *(char**)addr;
    }
    //---------------------------------------------------------------------------
    // We are a data member of some other class
-   /////////////////////////////////////////////////////////////////////////////
-   ///------------------------------------------------------------------------
-   /// Get the appropriate streamer element
-   ///------------------------------------------------------------------------
-
+   //---------------------------------------------------------------------------
    else {
+      //------------------------------------------------------------------------
+      // Get the appropriate streamer element
+      //------------------------------------------------------------------------
       GetInfo();
       TStreamerElement *el = (TStreamerElement*)fInfo->GetElements()->At( fID );
 
       //------------------------------------------------------------------------
       // Set up the addresses
-      //////////////////////////////////////////////////////////////////////////
-
+      //------------------------------------------------------------------------
       if( el->IsaPointer() ) {
          fAddress = (char*)addr+el->GetOffset();
          fObject  = *(char**)fAddress;

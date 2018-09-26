@@ -223,6 +223,7 @@ namespace cling {
                                       clang::CXXDependentScopeMemberExpr* Node);
     ASTNodeInfo VisitExpr(clang::Expr* Node);
     ASTNodeInfo VisitBinaryOperator(clang::BinaryOperator* Node);
+    ASTNodeInfo VisitArraySubscriptExpr(clang::ArraySubscriptExpr* ASE);
     ASTNodeInfo VisitCallExpr(clang::CallExpr* E);
     ASTNodeInfo VisitDeclRefExpr(clang::DeclRefExpr* DRE);
     ASTNodeInfo VisitDependentScopeDeclRefExpr(
@@ -267,18 +268,15 @@ namespace cling {
                                       bool ValuePrinterReq = false);
 
     ///\brief Creates const char* expression from given value.
-    clang::Expr* ConstructConstCharPtrExpr(const char* Val);
+    clang::Expr* ConstructConstCharPtrExpr(llvm::StringRef Val);
 
     ///\brief Checks if the given node is marked as dependent by us.
     ///
     bool IsArtificiallyDependent(clang::Expr* Node);
 
-    ///\brief Checks if the given declaration should be examined. It checks
-    /// whether a declaration context marked as dependent contains the
-    /// declaration or the declaration type is not one of those we are looking
-    /// for.
+    ///\brief Checks if the function might contain dynamically scoped Decls.
     ///
-    bool ShouldVisit(clang::Decl* D);
+    bool ShouldVisit(clang::FunctionDecl* D);
 
     /// \brief Gets all children of a given node.
     ///
@@ -287,7 +285,7 @@ namespace cling {
     /// \brief Creates unique name (eg. of a variable). Used internally for
     /// AST node synthesis.
     ///
-    void createUniqueName(std::string& out);
+    std::string createUniqueName();
     /// @}
   };
 } // end namespace cling

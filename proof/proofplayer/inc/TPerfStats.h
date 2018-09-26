@@ -22,21 +22,11 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
-#ifndef ROOT_TObjArray
 #include "TObjArray.h"
-#endif
-#ifndef ROOT_TTimeStamp
 #include "TTimeStamp.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TVirtualPerfStats
 #include "TVirtualPerfStats.h"
-#endif
 
 
 class TDSet;
@@ -140,6 +130,17 @@ public:
    Long64_t GetBytesRead() const;
    void SetNumEvents(Long64_t num) { fNumEvents = num; }
    Long64_t GetNumEvents() const { return fNumEvents; }
+
+   void        PrintBasketInfo(Option_t * = "") const {}
+   void        SetLoaded(TBranch *, size_t) {}
+   void        SetLoaded(size_t, size_t) {}
+   void        SetLoadedMiss(TBranch *, size_t) {}
+   void        SetLoadedMiss(size_t, size_t) {}
+   void        SetMissed(TBranch *, size_t) {}
+   void        SetMissed(size_t, size_t) {}
+   void        SetUsed(TBranch *, size_t) {}
+   void        SetUsed(size_t, size_t) {}
+   void        UpdateBranchIndices(TObjArray *) {}
 
    static void Start(TList *input, TList *output);
    static void Stop();

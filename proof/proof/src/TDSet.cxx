@@ -54,8 +54,8 @@ See TDSet.
 #include "TVirtualStreamerInfo.h"
 #include "TClassRef.h"
 
-ClassImp(TDSetElement)
-ClassImp(TDSet)
+ClassImp(TDSetElement);
+ClassImp(TDSet);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor
@@ -150,6 +150,25 @@ TDSetElement::~TDSetElement()
       fAssocObjList->SetOwner(kTRUE);
       SafeDelete(fAssocObjList);
    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Reset TDSet element.
+
+void TDSetElement::Reset()
+{
+   fFirst = 0;
+   fNum   = -1;
+   fTDSetOffset = 0;
+   fEntryList   = 0;
+   fValid       = kFALSE;
+   fEntries     = -1;
+   fMaxProcTime = -1.;
+
+   ResetBit(kHasBeenLookedUp);
+   ResetBit(kEmpty);
+   ResetBit(kNewRun);
+   ResetBit(kNewPacket);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -579,8 +598,11 @@ Int_t TDSetElement::Lookup(Bool_t force)
 
 void TDSetElement::SetEntryList(TObject *aList, Long64_t first, Long64_t num)
 {
-   if (!aList)
+   if (!aList) {
+      // Nothing to do, except making sure to disable any previous setting
+      fEntryList = 0;
       return;
+   }
 
    // Link the proper object
    TEventList *evl = 0;
@@ -1871,8 +1893,19 @@ void TDSet::SetWriteV3(Bool_t on)
 
 void TDSet::SetEntryList(TObject *aList)
 {
-   if (!aList)
+   if (!aList) {
+      // Nothing to do, except making sure to disable any previous setting
+      fEntryList = 0;
+      // Reset the element lists
+      // TEntryList
+      TIter next(fElements);
+      TDSetElement *el=0;
+      while ((el=(TDSetElement*)next())){
+         el->SetEntryList(aList);
+         el->Reset();
+      }
       return;
+   }
 
    if (TestBit(TDSet::kMultiDSet)) {
 

@@ -333,7 +333,7 @@ void GetTreeVarsAndCuts(TGComboBox* dataSet, TString& variablesStr, TString& cut
 }
 
 
-ClassImp(TFitEditor)
+ClassImp(TFitEditor);
 
 TFitEditor *TFitEditor::fgFitDialog = 0;
 
@@ -372,7 +372,8 @@ TFitEditor::TFitEditor(TVirtualPad* pad, TObject *obj) :
    fZaxis       (0),
    fSumFunc     (0),
    fConvFunc    (0),
-   fFuncPars    (0)
+   fFuncPars    (0),
+   fChangedParams (kFALSE)
 {
    fType = kObjectHisto;
    SetCleanup(kDeepCleanup);
@@ -529,8 +530,8 @@ TFitEditor::~TFitEditor()
    delete fLayoutAdd;
    delete fLayoutConv;
 
-   if (fConvFunc) delete fConvFunc; 
-   if (fSumFunc) delete fSumFunc; 
+   if (fConvFunc) delete fConvFunc;
+   if (fSumFunc) delete fSumFunc;
 
    // Set the singleton reference to null
    fgFitDialog = 0;
@@ -572,13 +573,13 @@ void TFitEditor::CreateFunctionGroup()
 
    TGCompositeFrame *tf1 = new TGCompositeFrame(gf1, 350, 26,  kHorizontalFrame);
    TGHButtonGroup *bgr   = new TGHButtonGroup(tf1, "Operation");
-   
+
    bgr      -> SetRadioButtonExclusive();
    fNone    = new TGRadioButton(bgr, "Nop", kFP_NONE);
    fAdd     = new TGRadioButton(bgr, "Add", kFP_ADD);
    fNormAdd = new TGRadioButton(bgr, "NormAdd", kFP_NORMADD);
    fConv    = new TGRadioButton(bgr, "Conv", kFP_CONV);
-   
+
    fNone    -> SetToolTipText("No operation defined");
    fNone    -> SetState(kButtonDown, kFALSE);
    fAdd     -> SetToolTipText("Addition");
@@ -587,19 +588,19 @@ void TFitEditor::CreateFunctionGroup()
    //fNormAdd -> SetState(kButtonDown, kFALSE);
    fConv    -> SetToolTipText("Convolution");
    //fConv    -> SetState(kButtonDown, kTRUE);
-   
+
    fLayoutNone    = new TGLayoutHints(kLHintsLeft,0 ,5,3,-10);
    fLayoutAdd     = new TGLayoutHints(kLHintsLeft,10,5,3,-10);
    fLayoutNormAdd = new TGLayoutHints(kLHintsLeft,10,5,3,-10);
    fLayoutConv    = new TGLayoutHints(kLHintsLeft,10,5,3,-10);
-   
+
    bgr -> SetLayoutHints(fLayoutNone,   fNone);
    bgr -> SetLayoutHints(fLayoutAdd,    fAdd);
    bgr -> SetLayoutHints(fLayoutNormAdd,fNormAdd);
    bgr -> SetLayoutHints(fLayoutConv,   fConv);
    bgr -> Show();
    bgr -> ChangeOptions(kFitWidth | kHorizontalFrame);
-   
+
    tf1 -> AddFrame(bgr, new TGLayoutHints(kLHintsExpandX, 0, 0, 3, 0));
    gf1 -> AddFrame(tf1, new TGLayoutHints(kLHintsExpandX));
 
@@ -1130,7 +1131,7 @@ void TFitEditor::DisconnectSlots()
    fAdd         -> Disconnect("Toggled(Bool_t)");
    // fNormAdd     -> Disconnect("Toggled(Bool_t)");
    // fConv        -> Disconnect("Toggled(Bool_t)");
-   
+
    // fit options
    fAllWeights1      -> Disconnect("Toggled(Bool_t)");
    fEmptyBinsWghts1  -> Disconnect("Toggled(Bool_t)");
@@ -1215,6 +1216,8 @@ void TFitEditor::Hide()
    if (fParentPad) {
       fParentPad->Disconnect("RangeAxisChanged()");
       DoReset();
+      TQObject::Disconnect("TCanvas", "Selected(TVirtualPad *, TObject *, Int_t)",
+                           this, "SetFitObject(TVirtualPad *, TObject *, Int_t)");
    }
    fParentPad = 0;
    fFitObject = 0;
@@ -1839,14 +1842,19 @@ void TFitEditor::FillDataSetList()
    std::vector<TObject*> objects;
 
    // Get all the objects registered in gDirectory
-   TIter next(gDirectory->GetList());
-   TObject* obj = NULL;
-   while ( (obj = (TObject*) next()) ) {
-      // But only if they are of a type recognized by the FitPanel
-      if ( dynamic_cast<TH1*>(obj) ||
-           dynamic_cast<TGraph2D*>(obj) ||
-           dynamic_cast<TTree*>(obj) ) {
-         objects.push_back(obj);
+   if (gDirectory) {
+      TList * l = gDirectory->GetList();
+      if (l) { 
+         TIter next(l);
+         TObject* obj = NULL;
+         while ( (obj = (TObject*) next()) ) {
+            // But only if they are of a type recognized by the FitPanel
+            if ( dynamic_cast<TH1*>(obj) ||
+                 dynamic_cast<TGraph2D*>(obj) ||
+                 dynamic_cast<TTree*>(obj) ) {
+               objects.push_back(obj);
+            }
+         }
       }
    }
 
@@ -2022,11 +2030,12 @@ void TFitEditor::DoFit()
    // ROOT's garbage collector will do the job for us.
    static TF1 *fitFunc = 0;
    if ( fitFunc ) {
+      //std::cout << "TFitEditor::DoFit - deleting fit function " << fitFunc->GetName() << "  " << fitFunc << std::endl;
       delete fitFunc;
    }
    fitFunc = GetFitFunction();
 
-   //std::cout << "dofit: using function " << fitFunc << std::endl;
+   std::cout << "TFitEditor::DoFit - using function " << fitFunc->GetName() << "  " << fitFunc << std::endl;
    // This assert
    if (!fitFunc) {
       Error("DoFit","This should have never happend, the fitfunc pointer is NULL! - Please Report" );
@@ -2098,7 +2107,7 @@ void TFitEditor::DoFit()
          // These method calls are just to set up everything for the
          // fitting. It's taken from another script.
          gROOT->ls();
-         tree->Draw(variables,cuts,"goff candle");
+         tree->Draw(variables,cuts,"goff");
 
          TTreePlayer * player = (TTreePlayer*) tree->GetPlayer();
          if ( !player ) {
@@ -2289,7 +2298,8 @@ void TFitEditor::DoNormAddition(Bool_t on)
    } else {
       first = kFALSE;
    }*/
-   if (on) std::cout << "DoNormAddition" << std::endl;
+
+   if (on) Info("DoNormAddition","Normalized addition is selected");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2312,7 +2322,8 @@ void TFitEditor::DoConvolution(Bool_t on)
       }
    } else
       first = kFALSE;*/
-   if (on) std::cout << "DoConvolution" << std::endl;
+   
+   if (on) Info("DoConvolution","Convolution is selected");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2415,7 +2426,7 @@ void TFitEditor::DoFunction(Int_t selected)
    // check that selected passesd value is the correct one in the TextEntry
    R__ASSERT( selected == te->EntryId());
    //std::cout << "calling do function " << selected << "  " << te->GetTitle() << " function " << te->EntryId() << std::endl;
-   //selected = te->EntryId(); 
+   //selected = te->EntryId();
 
    bool editable = false;
    if (fNone -> GetState() == kButtonDown || fNone->GetState() == kButtonDisabled)
@@ -2528,12 +2539,16 @@ void TFitEditor::DoFunction(Int_t selected)
    ((TGCompositeFrame *)fSelLabel->GetParent())->Layout();
 
    // reset function parameters if the number of parameters of the new
-   // function is different from the old one!
+   // function is different from the old one!   
    TF1* fitFunc = GetFitFunction();
+   //std::cout << "TFitEditor::DoFunction - using function " << fitFunc->GetName() << "  " << fitFunc << std::endl;
 
    if ( fitFunc && (unsigned int) fitFunc->GetNpar() != fFuncPars.size() )
       fFuncPars.clear();
-   if ( fitFunc ) delete fitFunc;
+   if ( fitFunc ) {
+      //std::cout << "TFitEditor::DoFunction - deleting function " << fitFunc->GetName() << "  " << fitFunc << std::endl;
+      delete fitFunc;
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2717,6 +2732,7 @@ void TFitEditor::DoSetParameters()
 {
    // Get the function.
    TF1* fitFunc = GetFitFunction();
+   //std::cout << "TFitEditor::DoSetParameters - using function " << fitFunc->GetName() << "  " << fitFunc << std::endl;
 
    if (!fitFunc) { Error("DoSetParameters","NUll function"); return; }
 
@@ -2753,15 +2769,24 @@ void TFitEditor::DoSetParameters()
 
    if ( fParentPad ) fParentPad->Disconnect("RangeAxisChanged()");
    Int_t ret = 0;
+   /// fit parameter dialog willbe deleted automatically when closed 
    new TFitParametersDialog(gClient->GetDefaultRoot(), GetMainFrame(),
                             fitFunc, fParentPad, &ret);
 
    // Once the parameters are set in the fitfunction, save them.
    GetParameters(fFuncPars, fitFunc);
 
+   // check return code to see if parameters settings have been modified
+   // in this case we need to set the B option when fitting
+   if (ret) fChangedParams = kTRUE; 
+
+
    if ( fParentPad ) fParentPad->Connect("RangeAxisChanged()", "TFitEditor", this, "UpdateGUI()");
 
-   if ( fNone->GetState() != kButtonDisabled ) delete fitFunc;
+   if ( fNone->GetState() != kButtonDisabled ) {
+      //std::cout << "TFitEditor::DoSetParameters - deleting function " << fitFunc->GetName() << "  " << fitFunc << std::endl;
+      delete fitFunc;
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3117,7 +3142,7 @@ void TFitEditor::DoLibrary(Bool_t on)
                if ( fLibGSL->GetState() != kButtonDisabled )
                   fLibGSL->SetState(kButtonUp);
                if ( fLibGenetics->GetState() != kButtonDisabled )
-               fLibGenetics->SetState(kButtonUp);
+                  fLibGenetics->SetState(kButtonUp);
                fStatusBar->SetText("LIB Minuit", 1);
             }
 
@@ -3311,7 +3336,7 @@ TF1* TFitEditor::HasFitFunction()
 ////////////////////////////////////////////////////////////////////////////////
 /// Retrieve the fitting options from all the widgets.
 
-void TFitEditor::RetrieveOptions(Foption_t& fitOpts, TString& drawOpts, ROOT::Math::MinimizerOptions& minOpts, Int_t npar)
+void TFitEditor::RetrieveOptions(Foption_t& fitOpts, TString& drawOpts, ROOT::Math::MinimizerOptions& minOpts, Int_t /*npar */)
 {
    drawOpts = "";
 
@@ -3331,13 +3356,20 @@ void TFitEditor::RetrieveOptions(Foption_t& fitOpts, TString& drawOpts, ROOT::Ma
         (tmpStr.Contains("pol") || tmpStr.Contains("++")) )
       fitOpts.Minuit = 1;
 
-   if ( (int) fFuncPars.size() == npar )
-      for ( Int_t i = 0; i < npar; ++i )
-         if ( fFuncPars[i][PAR_MIN] != fFuncPars[i][PAR_MAX] )
-         {
-            fitOpts.Bound = 1;
-            break;
-         }
+   // if ( (int) fFuncPars.size() == npar )
+   //    for ( Int_t i = 0; i < npar; ++i )
+   //       if ( fFuncPars[i][PAR_MIN] != fFuncPars[i][PAR_MAX] )
+   // 
+            
+   //          //fitOpts.Bound = 1;
+   //          break;
+   //       }
+
+   if (fChangedParams) {
+      //std::cout << "Params have changed setting the Bound option " << std::endl;
+      fitOpts.Bound = 1;
+      fChangedParams = kFALSE;  // reset
+   }
 
    //fitOpts.Nochisq  = (fNoChi2->GetState() == kButtonDown);
    fitOpts.Nostore  = (fNoStoreDrawing->GetState() == kButtonDown);
@@ -3612,22 +3644,24 @@ TF1* TFitEditor::GetFitFunction()
       // has not defined the function properly
       if ( fDim == 1 || fDim == 0 )
       {
+
          fitFunc = new TF1("PrevFitTMP",fEnteredFunc->GetText(), xmin, xmax );
+         //std::cout << "GetFitFunction - created function PrevFitTMP " << fEnteredFunc->GetText() << "  " << fitFunc << std::endl;
          if (fNormAdd->IsOn())
-         {            
-            if (fSumFunc) delete fSumFunc; 
+         {
+            if (fSumFunc) delete fSumFunc;
             fSumFunc = new TF1NormSum(fEnteredFunc->GetText(), xmin, xmax);
             fitFunc  = new TF1("PrevFitTMP", *fSumFunc, xmin, xmax, fSumFunc->GetNpar());
-            for (int i = 0; i < fitFunc->GetNpar(); ++i) fitFunc->SetParName(i, fSumFunc->GetParName(i) ); 
+            for (int i = 0; i < fitFunc->GetNpar(); ++i) fitFunc->SetParName(i, fSumFunc->GetParName(i) );
             //std::cout << "create fit normalized function " << fSumFunc << " fitfunc " << fitFunc << std::endl;
          }
-      
+
          if (fConv -> IsOn())
          {
             if (fConvFunc) delete fConvFunc;
             fConvFunc = new TF1Convolution(fEnteredFunc->GetText());
             fitFunc  = new TF1("PrevFitTMP", *fConvFunc, xmin, xmax, fConvFunc->GetNpar());
-            for (int i = 0; i < fitFunc->GetNpar(); ++i) fitFunc->SetParName(i, fConvFunc->GetParName(i) ); 
+            for (int i = 0; i < fitFunc->GetNpar(); ++i) fitFunc->SetParName(i, fConvFunc->GetParName(i) );
             //std::cout << "create fit convolution function " << fSumFunc << " fitfunc " << fitFunc << std::endl;
          }
       }
@@ -3643,15 +3677,20 @@ TF1* TFitEditor::GetFitFunction()
       {
          // and the formulas are the same
          TF1* tmpF1 = FindFunction();
+//         if (tmpF1)
+            //std::cout << "GetFitFunction: found existing function " << tmpF1 << "  " << tmpF1->GetName() << "  " << tmpF1->GetExpFormula() << std::endl;
+//         else
+            //std::cout << "GetFitFunction: - no existing function  found " << std::endl;
          if ( tmpF1 != 0 && fitFunc != 0 &&
               strcmp(tmpF1->GetExpFormula(), fEnteredFunc->GetText()) == 0 ) {
-            // copy the parameters!
+            // copy everything from the founction available in gROOT
+            //std::cout << "GetFitFunction: copying tmp function in PrevFitTMP " <<  tmpF1->GetName()  << "  "
+            //          << tmpF1->GetExpFormula() << std::endl;
+            tmpF1->Copy(*fitFunc); 
             if ( int(fFuncPars.size()) != tmpF1->GetNpar() )
             {
-               fitFunc->SetParameters(tmpF1->GetParameters());
                GetParameters(fFuncPars, fitFunc);
-            } else
-               SetParameters(fFuncPars, fitFunc);
+            } 
          }
       }
    }

@@ -17,6 +17,7 @@
 
 #include "clang/Lex/MultipleIncludeOpt.h"
 #include "clang/Lex/Token.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace clang {
@@ -69,8 +70,8 @@ protected:
   /// we are currently in.
   SmallVector<PPConditionalInfo, 4> ConditionalStack;
 
-  PreprocessorLexer(const PreprocessorLexer &) LLVM_DELETED_FUNCTION;
-  void operator=(const PreprocessorLexer &) LLVM_DELETED_FUNCTION;
+  PreprocessorLexer(const PreprocessorLexer &) = delete;
+  void operator=(const PreprocessorLexer &) = delete;
   friend class Preprocessor;
 
   PreprocessorLexer(Preprocessor *pp, FileID fid);
@@ -175,6 +176,11 @@ public:
   }
   conditional_iterator conditional_end() const { 
     return ConditionalStack.end(); 
+  }
+
+  void setConditionalLevels(ArrayRef<PPConditionalInfo> CL) {
+    ConditionalStack.clear();
+    ConditionalStack.append(CL.begin(), CL.end());
   }
 };
 

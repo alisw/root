@@ -1,4 +1,4 @@
-//===-- Optional.h - Simple variant for passing optional values ---*- C++ -*-=//
+//===- Optional.h - Simple variant for passing optional values --*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -19,6 +19,8 @@
 #include "llvm/ADT/None.h"
 #include "llvm/Support/AlignOf.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/type_traits.h"
+#include <algorithm>
 #include <cassert>
 #include <new>
 #include <utility>
@@ -28,15 +30,18 @@ namespace llvm {
 template<typename T>
 class Optional {
   AlignedCharArrayUnion<T> storage;
-  bool hasVal;
-public:
-  typedef T value_type;
+  bool hasVal = false;
 
-  Optional(NoneType) : hasVal(false) {}
-  explicit Optional() : hasVal(false) {}
+public:
+  using value_type = T;
+
+  Optional(NoneType) {}
+  explicit Optional() {}
+
   Optional(const T &y) : hasVal(true) {
     new (storage.buffer) T(y);
   }
+
   Optional(const Optional &O) : hasVal(O.hasVal) {
     if (hasVal)
       new (storage.buffer) T(*O);
@@ -45,12 +50,18 @@ public:
   Optional(T &&y) : hasVal(true) {
     new (storage.buffer) T(std::forward<T>(y));
   }
+
   Optional(Optional<T> &&O) : hasVal(O) {
     if (O) {
       new (storage.buffer) T(std::move(*O));
       O.reset();
     }
   }
+
+  ~Optional() {
+    reset();
+  }
+
   Optional &operator=(T &&y) {
     if (hasVal)
       **this = std::move(y);
@@ -60,6 +71,7 @@ public:
     }
     return *this;
   }
+
   Optional &operator=(Optional &&O) {
     if (!O)
       reset();
@@ -70,8 +82,6 @@ public:
     return *this;
   }
 
-#if LLVM_HAS_VARIADIC_TEMPLATES
-
   /// Create a new object by constructing it in place with the given arguments.
   template<typename ...ArgTypes>
   void emplace(ArgTypes &&...Args) {
@@ -79,51 +89,6 @@ public:
     hasVal = true;
     new (storage.buffer) T(std::forward<ArgTypes>(Args)...);
   }
-
-#else
-  
-  /// Create a new object by default-constructing it in place.
-  void emplace() {
-    reset();
-    hasVal = true;
-    new (storage.buffer) T();
-  }
-  
-  /// Create a new object by constructing it in place with the given arguments.
-  template<typename T1>
-  void emplace(T1 &&A1) {
-    reset();
-    hasVal = true;
-    new (storage.buffer) T(std::forward<T1>(A1));
-  }
-  
-  /// Create a new object by constructing it in place with the given arguments.
-  template<typename T1, typename T2>
-  void emplace(T1 &&A1, T2 &&A2) {
-    reset();
-    hasVal = true;
-    new (storage.buffer) T(std::forward<T1>(A1), std::forward<T2>(A2));
-  }
-  
-  /// Create a new object by constructing it in place with the given arguments.
-  template<typename T1, typename T2, typename T3>
-  void emplace(T1 &&A1, T2 &&A2, T3 &&A3) {
-    reset();
-    hasVal = true;
-    new (storage.buffer) T(std::forward<T1>(A1), std::forward<T2>(A2),
-        std::forward<T3>(A3));
-  }
-  
-  /// Create a new object by constructing it in place with the given arguments.
-  template<typename T1, typename T2, typename T3, typename T4>
-  void emplace(T1 &&A1, T2 &&A2, T3 &&A3, T4 &&A4) {
-    reset();
-    hasVal = true;
-    new (storage.buffer) T(std::forward<T1>(A1), std::forward<T2>(A2),
-        std::forward<T3>(A3), std::forward<T4>(A4));
-  }
-
-#endif // LLVM_HAS_VARIADIC_TEMPLATES
 
   static inline Optional create(const T* y) {
     return y ? Optional(*y) : Optional();
@@ -159,16 +124,12 @@ public:
     }
   }
 
-  ~Optional() {
-    reset();
-  }
-
   const T* getPointer() const { assert(hasVal); return reinterpret_cast<const T*>(storage.buffer); }
   T* getPointer() { assert(hasVal); return reinterpret_cast<T*>(storage.buffer); }
   const T& getValue() const LLVM_LVALUE_FUNCTION { assert(hasVal); return *getPointer(); }
   T& getValue() LLVM_LVALUE_FUNCTION { assert(hasVal); return *getPointer(); }
 
-  LLVM_EXPLICIT operator bool() const { return hasVal; }
+  explicit operator bool() const { return hasVal; }
   bool hasValue() const { return hasVal; }
   const T* operator->() const { return getPointer(); }
   T* operator->() { return getPointer(); }
@@ -176,7 +137,7 @@ public:
   T& operator*() LLVM_LVALUE_FUNCTION { assert(hasVal); return *getPointer(); }
 
   template <typename U>
-  LLVM_CONSTEXPR T getValueOr(U &&value) const LLVM_LVALUE_FUNCTION {
+  constexpr T getValueOr(U &&value) const LLVM_LVALUE_FUNCTION {
     return hasValue() ? getValue() : std::forward<U>(value);
   }
 
@@ -191,66 +152,145 @@ public:
 #endif
 };
 
-template <typename T> struct isPodLike;
-template <typename T> struct isPodLike<Optional<T> > {
+template <typename T> struct isPodLike<Optional<T>> {
   // An Optional<T> is pod-like if T is.
   static const bool value = isPodLike<T>::value;
 };
 
-/// \brief Poison comparison between two \c Optional objects. Clients needs to
-/// explicitly compare the underlying values and account for empty \c Optional
-/// objects.
-///
-/// This routine will never be defined. It returns \c void to help diagnose
-/// errors at compile time.
-template<typename T, typename U>
-void operator==(const Optional<T> &X, const Optional<U> &Y);
+template <typename T, typename U>
+bool operator==(const Optional<T> &X, const Optional<U> &Y) {
+  if (X && Y)
+    return *X == *Y;
+  return X.hasValue() == Y.hasValue();
+}
 
-/// \brief Poison comparison between two \c Optional objects. Clients needs to
-/// explicitly compare the underlying values and account for empty \c Optional
-/// objects.
-///
-/// This routine will never be defined. It returns \c void to help diagnose
-/// errors at compile time.
-template<typename T, typename U>
-void operator!=(const Optional<T> &X, const Optional<U> &Y);
+template <typename T, typename U>
+bool operator!=(const Optional<T> &X, const Optional<U> &Y) {
+  return !(X == Y);
+}
 
-/// \brief Poison comparison between two \c Optional objects. Clients needs to
-/// explicitly compare the underlying values and account for empty \c Optional
-/// objects.
-///
-/// This routine will never be defined. It returns \c void to help diagnose
-/// errors at compile time.
-template<typename T, typename U>
-void operator<(const Optional<T> &X, const Optional<U> &Y);
+template <typename T, typename U>
+bool operator<(const Optional<T> &X, const Optional<U> &Y) {
+  if (X && Y)
+    return *X < *Y;
+  return X.hasValue() < Y.hasValue();
+}
 
-/// \brief Poison comparison between two \c Optional objects. Clients needs to
-/// explicitly compare the underlying values and account for empty \c Optional
-/// objects.
-///
-/// This routine will never be defined. It returns \c void to help diagnose
-/// errors at compile time.
-template<typename T, typename U>
-void operator<=(const Optional<T> &X, const Optional<U> &Y);
+template <typename T, typename U>
+bool operator<=(const Optional<T> &X, const Optional<U> &Y) {
+  return !(Y < X);
+}
 
-/// \brief Poison comparison between two \c Optional objects. Clients needs to
-/// explicitly compare the underlying values and account for empty \c Optional
-/// objects.
-///
-/// This routine will never be defined. It returns \c void to help diagnose
-/// errors at compile time.
-template<typename T, typename U>
-void operator>=(const Optional<T> &X, const Optional<U> &Y);
+template <typename T, typename U>
+bool operator>(const Optional<T> &X, const Optional<U> &Y) {
+  return Y < X;
+}
 
-/// \brief Poison comparison between two \c Optional objects. Clients needs to
-/// explicitly compare the underlying values and account for empty \c Optional
-/// objects.
-///
-/// This routine will never be defined. It returns \c void to help diagnose
-/// errors at compile time.
-template<typename T, typename U>
-void operator>(const Optional<T> &X, const Optional<U> &Y);
+template <typename T, typename U>
+bool operator>=(const Optional<T> &X, const Optional<U> &Y) {
+  return !(X < Y);
+}
 
-} // end llvm namespace
+template<typename T>
+bool operator==(const Optional<T> &X, NoneType) {
+  return !X;
+}
 
-#endif
+template<typename T>
+bool operator==(NoneType, const Optional<T> &X) {
+  return X == None;
+}
+
+template<typename T>
+bool operator!=(const Optional<T> &X, NoneType) {
+  return !(X == None);
+}
+
+template<typename T>
+bool operator!=(NoneType, const Optional<T> &X) {
+  return X != None;
+}
+
+template <typename T> bool operator<(const Optional<T> &X, NoneType) {
+  return false;
+}
+
+template <typename T> bool operator<(NoneType, const Optional<T> &X) {
+  return X.hasValue();
+}
+
+template <typename T> bool operator<=(const Optional<T> &X, NoneType) {
+  return !(None < X);
+}
+
+template <typename T> bool operator<=(NoneType, const Optional<T> &X) {
+  return !(X < None);
+}
+
+template <typename T> bool operator>(const Optional<T> &X, NoneType) {
+  return None < X;
+}
+
+template <typename T> bool operator>(NoneType, const Optional<T> &X) {
+  return X < None;
+}
+
+template <typename T> bool operator>=(const Optional<T> &X, NoneType) {
+  return None <= X;
+}
+
+template <typename T> bool operator>=(NoneType, const Optional<T> &X) {
+  return X <= None;
+}
+
+template <typename T> bool operator==(const Optional<T> &X, const T &Y) {
+  return X && *X == Y;
+}
+
+template <typename T> bool operator==(const T &X, const Optional<T> &Y) {
+  return Y && X == *Y;
+}
+
+template <typename T> bool operator!=(const Optional<T> &X, const T &Y) {
+  return !(X == Y);
+}
+
+template <typename T> bool operator!=(const T &X, const Optional<T> &Y) {
+  return !(X == Y);
+}
+
+template <typename T> bool operator<(const Optional<T> &X, const T &Y) {
+  return !X || *X < Y;
+}
+
+template <typename T> bool operator<(const T &X, const Optional<T> &Y) {
+  return Y && X < *Y;
+}
+
+template <typename T> bool operator<=(const Optional<T> &X, const T &Y) {
+  return !(Y < X);
+}
+
+template <typename T> bool operator<=(const T &X, const Optional<T> &Y) {
+  return !(Y < X);
+}
+
+template <typename T> bool operator>(const Optional<T> &X, const T &Y) {
+  return Y < X;
+}
+
+template <typename T> bool operator>(const T &X, const Optional<T> &Y) {
+  return Y < X;
+}
+
+template <typename T> bool operator>=(const Optional<T> &X, const T &Y) {
+  return !(X < Y);
+}
+
+template <typename T> bool operator>=(const T &X, const Optional<T> &Y) {
+  return !(X < Y);
+}
+
+} // end namespace llvm
+
+#endif // LLVM_ADT_OPTIONAL_H

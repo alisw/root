@@ -51,7 +51,6 @@ Bool_t TGLContext::fgGlewInitDone = kFALSE;
 TGLContext::TGLContext(TGLWidget *wid, Bool_t shareDefault,
                        const TGLContext *shareList)
    : fDevice(wid),
-     fPimpl(0),
      fFromCtor(kTRUE),
      fValid(kFALSE),
      fIdentity(0)
@@ -64,7 +63,7 @@ TGLContext::TGLContext(TGLWidget *wid, Bool_t shareDefault,
                                   (ULong_t)this, (ULong_t)wid, (ULong_t)shareList));
    } else {
 
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
 
       SetContext(wid, shareList);
    }
@@ -128,7 +127,7 @@ void TGLContext::SetContext(TGLWidget *widget, const TGLContext *shareList)
       return;
    }
 
-   std::auto_ptr<TGLContextPrivate> safe_ptr(fPimpl = new TGLContextPrivate);
+   fPimpl.reset(new TGLContextPrivate);
    LayoutCompatible_t *trick =
       reinterpret_cast<LayoutCompatible_t *>(widget->GetId());
    HWND hWND = *trick->fPHwnd;
@@ -160,7 +159,6 @@ void TGLContext::SetContext(TGLWidget *widget, const TGLContext *shareList)
    TGLContextPrivate::RegisterContext(this);
 
    dcGuard.Stop();
-   safe_ptr.release();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -178,7 +176,7 @@ Bool_t TGLContext::MakeCurrent()
       return Bool_t(gROOT->ProcessLineFast(Form("((TGLContext *)0x%lx)->MakeCurrent()", this)));
    else {
 
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
 
       Bool_t rez = wglMakeCurrent(fPimpl->fHDC, fPimpl->fGLContext);
       if (rez) {
@@ -213,7 +211,7 @@ void TGLContext::SwapBuffers()
       gROOT->ProcessLineFast(Form("((TGLContext *)0x%lx)->SwapBuffers()", this));
    else {
 
-      R__LOCKGUARD2(gROOTMutex);
+      R__LOCKGUARD(gROOTMutex);
 
       if (fPimpl->fHWND)
          wglSwapLayerBuffers(fPimpl->fHDC, WGL_SWAP_MAIN_PLANE);
@@ -233,7 +231,7 @@ void TGLContext::Release()
       return;
    }
 
-   R__LOCKGUARD2(gROOTMutex);
+   R__LOCKGUARD(gROOTMutex);
 
    if (fPimpl->fHWND)
       ReleaseDC(fPimpl->fHWND, fPimpl->fHDC);
@@ -255,7 +253,7 @@ void TGLContext::SetContext(TGLWidget *widget, const TGLContext *shareList)
       return;
    }
 
-   std::auto_ptr<TGLContextPrivate> safe_ptr(fPimpl = new TGLContextPrivate);
+   fPimpl.reset(new TGLContextPrivate);
 
    fPimpl->fGLContext = gVirtualX->CreateOpenGLContext(widget->GetId(), shareList ? shareList->fPimpl->fGLContext : 0);
    fPimpl->fWindowID = widget->GetId();
@@ -263,8 +261,6 @@ void TGLContext::SetContext(TGLWidget *widget, const TGLContext *shareList)
    fValid = kTRUE;
    fDevice->AddContext(this);
    TGLContextPrivate::RegisterContext(this);
-
-   safe_ptr.release();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -337,7 +333,7 @@ void TGLContext::SetContext(TGLWidget *widget, const TGLContext *shareList)
       return;
    }
 
-   std::auto_ptr<TGLContextPrivate> safe_ptr(fPimpl = new TGLContextPrivate);
+   fPimpl.reset(new TGLContextPrivate);
    Display *dpy = static_cast<Display *>(widget->GetInnerData().first);
    XVisualInfo *visInfo = static_cast<XVisualInfo *>(widget->GetInnerData().second);
 
@@ -357,8 +353,6 @@ void TGLContext::SetContext(TGLWidget *widget, const TGLContext *shareList)
    fValid = kTRUE;
    fDevice->AddContext(this);
    TGLContextPrivate::RegisterContext(this);
-
-   safe_ptr.release();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -439,8 +433,6 @@ TGLContext::~TGLContext()
    }
 
    fIdentity->Release(this);
-
-   delete fPimpl;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -469,7 +461,7 @@ Objects shared among GL-contexts include:
 display-list definitions, texture objects and shader programs.
 */
 
-ClassImp(TGLContextIdentity)
+ClassImp(TGLContextIdentity);
 
 TGLContextIdentity* TGLContextIdentity::fgDefaultIdentity = new TGLContextIdentity;
 

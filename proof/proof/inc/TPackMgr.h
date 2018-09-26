@@ -24,21 +24,11 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TLockPath
 #include "TLockPath.h"
-#endif
-#ifndef ROOT_TObject
-#include "TObject.h"
-#endif
-#ifndef ROOT_TMD5
+#include "TNamed.h"
 #include "TMD5.h"
-#endif
-#ifndef ROOT_TList
 #include "TList.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
 
 typedef void (*TPackMgrLog_t)(const char *);
 
@@ -95,7 +85,7 @@ public:
 
    void              Show(const char *title = 0);
    Int_t             Clean(const char *pack);
-   Int_t             Remove(const char *pack = 0);
+   Int_t             Remove(const char *pack = 0, Bool_t dolock = kTRUE);
    TList            *GetList() const;
 
    void              ShowEnabled(const char *title = 0);

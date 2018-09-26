@@ -23,9 +23,11 @@
 
 #include <cstring>
 
-ClassImp(TBranchClones)
+ClassImp(TBranchClones);
 
 /** \class TBranchClones
+\ingroup tree
+
 A Branch for the case of an array of clone objects.
 
 See TTree.
@@ -169,9 +171,9 @@ void TBranchClones::Init(TTree *tree, TBranch *parent, const char* name, void* p
          itype = "D";
       } else if (type == 11) {
          itype = "b";
-      } if (type == 12) {
+      } else if (type == 12) {
          itype = "s";
-      } if (type == 13) {
+      } else if (type == 13) {
          itype = "i";
       }
 
@@ -219,7 +221,7 @@ void TBranchClones::Browse(TBrowser* b)
 ////////////////////////////////////////////////////////////////////////////////
 /// Loop on all branches and fill Basket buffer.
 
-Int_t TBranchClones::Fill()
+Int_t TBranchClones::FillImpl(ROOT::Internal::TBranchIMTHelper *imtHelper)
 {
    Int_t i = 0;
    Int_t nbytes = 0;
@@ -244,13 +246,13 @@ Int_t TBranchClones::Fill()
          leaf->SetAddress();
       }
    }
-   nbytes += fBranchCount->Fill();
+   nbytes += fBranchCount->FillImpl(imtHelper);
    for (i = 0; i < nbranches; i++)  {
       TBranch* branch = (TBranch*) fBranches.UncheckedAt(i);
       TObjArray* leaves = branch->GetListOfLeaves();
       TLeaf* leaf = (TLeaf*) leaves->UncheckedAt(0);
       leaf->Import(fList, fN);
-      nbytes += branch->Fill();
+      nbytes += branch->FillImpl(imtHelper);
    }
    return nbytes;
 }

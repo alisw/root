@@ -9,9 +9,14 @@
 
 #include "cling/Interpreter/Value.h"
 
+#include "EnterUserCodeRAII.h"
+
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Utils/AST.h"
+#include "cling/Utils/Casting.h"
+#include "cling/Utils/Output.h"
+#include "cling/Utils/UTF8.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/CanonicalType.h"
@@ -25,10 +30,6 @@
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/raw_os_ostream.h"
-#include "llvm/Support/raw_ostream.h"
-
-#include <iostream>
-#include <sstream>
 
 namespace {
 
@@ -57,23 +58,14 @@ namespace {
     ///\brief The start of the allocation.
     char m_Payload[1];
 
-    static DtorFunc_t PtrToFunc(void* ptr) {
-      union {
-        void* m_Ptr;
-        DtorFunc_t m_Func;
-      };
-      m_Ptr = ptr;
-      return m_Func;
-    }
-
-
   public:
     ///\brief Initialize the storage management part of the allocated object.
     ///  The allocator is referencing it, thus initialize m_RefCnt with 1.
     ///\param [in] dtorFunc - the function to be called before deallocation.
     AllocatedValue(void* dtorFunc, size_t allocSize, size_t nElements):
-      m_RefCnt(1), m_DtorFunc(PtrToFunc(dtorFunc)), m_AllocSize(allocSize),
-      m_NElements(nElements)
+      m_RefCnt(1),
+      m_DtorFunc(cling::utils::VoidToFunctionPtr<DtorFunc_t>(dtorFunc)),
+      m_AllocSize(allocSize), m_NElements(nElements)
     {}
 
     char* getPayload() { return m_Payload; }
@@ -96,9 +88,11 @@ namespace {
       assert (m_RefCnt > 0 && "Reference count is already zero.");
       if (--m_RefCnt == 0) {
         if (m_DtorFunc) {
-          char* payload = getPayload();
-          for (size_t el = 0; el < m_NElements; ++el)
-            (*m_DtorFunc)(payload + el * m_AllocSize / m_NElements);
+          assert(m_NElements && "No elements!");
+          char* Payload = getPayload();
+          const auto Skip = m_AllocSize / m_NElements;
+          while (m_NElements-- != 0)
+            (*m_DtorFunc)(Payload + m_NElements * Skip);
         }
         delete [] (char*)this;
       }
@@ -174,16 +168,16 @@ namespace cling {
     return isValid() && Ctx.hasSameType(getType(), Ctx.VoidTy);
   }
 
-  unsigned long Value::GetNumberOfElements() const {
+  size_t Value::GetNumberOfElements() const {
     if (const clang::ConstantArrayType* ArrTy
         = llvm::dyn_cast<clang::ConstantArrayType>(getType())) {
-      llvm::APInt arrSize(sizeof(unsigned long)*8, 1);
+      llvm::APInt arrSize(sizeof(size_t)*8, 1);
       do {
         arrSize *= ArrTy->getSize();
         ArrTy = llvm::dyn_cast<clang::ConstantArrayType>(ArrTy->getElementType()
                                                          .getTypePtr());
       } while (ArrTy);
-      return (unsigned long)arrSize.getZExtValue();
+      return static_cast<size_t>(arrSize.getZExtValue());
     }
     return 1;
   }
@@ -221,8 +215,10 @@ namespace cling {
         = llvm::dyn_cast<clang::ConstantArrayType>(DtorType.getTypePtr())) {
       DtorType = ArrTy->getElementType();
     }
-    if (const clang::RecordType* RTy = DtorType->getAs<clang::RecordType>())
+    if (const clang::RecordType* RTy = DtorType->getAs<clang::RecordType>()) {
+      LockCompilationDuringUserCodeExecutionRAII LCDUCER(*m_Interpreter);
       dtorFunc = m_Interpreter->compileDtorCallFor(RTy->getDecl());
+    }
 
     const clang::ASTContext& ctx = getASTContext();
     unsigned payloadSize = ctx.getTypeSizeInChars(getType()).getQuantity();
@@ -241,25 +237,39 @@ namespace cling {
     std::string printValueInternal(const Value& V);
   } // end namespace valuePrinterInternal
 
-  void Value::print(llvm::raw_ostream& Out) const {
+  void Value::print(llvm::raw_ostream& Out, bool Escape) const {
+    // Save the default type string representation so output can occur as one
+    // operation (calling printValueInternal below may write to stderr).
+    const std::string Type = valuePrinterInternal::printTypeInternal(*this);
 
-    // Get the default type string representation
-    std::string typeStr = cling::valuePrinterInternal::printTypeInternal(*this);
     // Get the value string representation, by printValue() method overloading
-    std::string valueStr = cling::valuePrinterInternal::printValueInternal(*this);
+    const std::string Val
+      = cling::valuePrinterInternal::printValueInternal(*this);
+    if (Escape) {
+      const char* Data = Val.data();
+      const size_t N = Val.size();
+      switch (N ? Data[0] : 0) {
+        case 'u': case 'U': case 'L':
+          if (N < 3 || Data[1] != '\"')
+            break;
+          /* Falls through. */
 
-    // Print the type and the value:
-    Out << typeStr + " " + valueStr << "\n";
+        case '\"':
+          // Unicode string, encoded as Utf-8
+          if (N > 2 && Data[N-1] == '\"') {
+            // Drop the terminating " so Utf-8 errors can be detected ("\xeA")
+            Out << Type << ' ';
+            utils::utf8::EscapeSequence().encode(Data, N-1, Out) << "\"\n";
+            return;
+          }
+        default:
+          break;
+      }
+    }
+    Out << Type << ' ' << Val << '\n';
   }
 
-  void Value::dump() const {
-    // We need stream that doesn't close its file descriptor, thus we are not
-    // using llvm::outs. Keeping file descriptor open we will be able to use
-    // the results in pipes (Savannah #99234).
-
-    // Alternatively we could use llvm::errs()
-    std::unique_ptr<llvm::raw_ostream> Out;
-    Out.reset(new llvm::raw_os_ostream(std::cout));
-    print(*Out.get());
+  void Value::dump(bool Escape) const {
+    print(cling::outs(), Escape);
   }
 } // end namespace cling

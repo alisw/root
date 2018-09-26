@@ -15,13 +15,13 @@
 #define LLVM_CLANG_LEX_MACROARGS_H
 
 #include "clang/Basic/LLVM.h"
+#include "clang/Lex/Token.h"
 #include "llvm/ADT/ArrayRef.h"
 #include <vector>
 
 namespace clang {
   class MacroInfo;
   class Preprocessor;
-  class Token;
   class SourceLocation;
 
 /// MacroArgs - An instance of this class captures information about
@@ -53,10 +53,14 @@ class MacroArgs {
   /// Preprocessor owns which we use to avoid thrashing malloc/free.
   MacroArgs *ArgCache;
 
-  MacroArgs(unsigned NumToks, bool varargsElided)
-    : NumUnexpArgTokens(NumToks), VarargsElided(varargsElided),
-      ArgCache(nullptr) {}
-  ~MacroArgs() {}
+  /// MacroArgs - The number of arguments the invoked macro expects.
+  unsigned NumMacroArgs;
+
+  MacroArgs(unsigned NumToks, bool varargsElided, unsigned MacroArgs)
+      : NumUnexpArgTokens(NumToks), VarargsElided(varargsElided),
+        ArgCache(nullptr), NumMacroArgs(MacroArgs) {}
+  ~MacroArgs() = default;
+
 public:
   /// MacroArgs ctor function - Create a new MacroArgs object with the specified
   /// macro and argument info.
@@ -93,10 +97,9 @@ public:
                                       SourceLocation ExpansionLocStart,
                                       SourceLocation ExpansionLocEnd);
 
-  /// getNumArguments - Return the number of arguments passed into this macro
-  /// invocation.
-  unsigned getNumArguments() const { return NumUnexpArgTokens; }
-
+  /// getNumMacroArguments - Return the number of arguments the invoked macro
+  /// expects.
+  unsigned getNumMacroArguments() const { return NumMacroArgs; }
 
   /// isVarargsElidedUse - Return true if this is a C99 style varargs macro
   /// invocation and there was no argument specified for the "..." argument.  If

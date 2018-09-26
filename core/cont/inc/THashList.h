@@ -26,9 +26,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TList
 #include "TList.h"
-#endif
 
 class THashTable;
 
@@ -69,6 +67,7 @@ public:
    void       Rehash(Int_t newCapacity);
    TObject   *Remove(TObject *obj);
    TObject   *Remove(TObjLink *lnk);
+   bool       UseRWLock();
 
    ClassDef(THashList,0)  //Doubly linked list with hashtable for lookup
 };

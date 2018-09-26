@@ -23,12 +23,8 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TVirtualMutex
 #include "TVirtualMutex.h"
-#endif
-#ifndef ROOT_TMutexImp
 #include "TMutexImp.h"
-#endif
 
 
 class TMutex : public TVirtualMutex {
@@ -50,6 +46,10 @@ public:
    Int_t  TryLock();
    Int_t  UnLock();
    Int_t  CleanUp();
+
+   // Compatibility with standard library
+   void lock() { TMutex::Lock(); }
+   void unlock() { TMutex::UnLock(); }
 
    TVirtualMutex *Factory(Bool_t recursive = kFALSE);
 

@@ -10,6 +10,7 @@
  *************************************************************************/
 
 /** \class TMacro
+\ingroup Base
 
 Class supporting a collection of lines with C++ code.
 A TMacro can be executed, saved to a ROOT file, edited, etc.
@@ -44,6 +45,7 @@ Examples:
 
 #include "Riostream.h"
 #include "TEnv.h"
+#include "TInterpreter.h"
 #include "TList.h"
 #include "TMacro.h"
 #include "TMD5.h"
@@ -52,7 +54,7 @@ Examples:
 #include "TSystem.h"
 #include <sstream>
 
-ClassImp(TMacro)
+ClassImp(TMacro);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create an empty macro, use AddLine() or ReadFile() to fill this macro.

@@ -1,5 +1,5 @@
 // @(#):$Id$
-// Author: M.Gheata 
+// Author: M.Gheata
 /*************************************************************************
  * Copyright (C) 1995-2002, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
@@ -11,20 +11,8 @@
 #ifndef ROOT_TGeoBBoxEditor
 #define ROOT_TGeoBBoxEditor
 
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-//  TGeoBBoxEditor                                                      //
-//                                                                      //
-//  Editor for a TGeoBBox.                                              //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef ROOT_TGButton
 #include "TGWidget.h"
-#endif
-#ifndef ROOT_TGeoGedFrame
 #include "TGeoGedFrame.h"
-#endif
 
 class TGeoBBox;
 class TGeoTabManager;
@@ -60,7 +48,7 @@ protected:
    TGCheckButton       *fDelayed;           // Check button for delayed draw
 
    virtual void ConnectSignals2Slots();     // Connect the signals to the slots
-   Bool_t       IsDelayed() const;   
+   Bool_t       IsDelayed() const;
 
 public:
    TGeoBBoxEditor(const TGWindow *p = 0,
@@ -80,8 +68,8 @@ public:
    void           DoName();
    void           DoApply();
    void           DoUndo();
-   
+
    ClassDef(TGeoBBoxEditor,0)   // TGeoBBox editor
-};   
-  
-#endif                    
+};
+
+#endif

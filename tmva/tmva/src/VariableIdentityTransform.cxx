@@ -24,14 +24,21 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::VariableIdentityTransform
+\ingroup TMVA
+Linear interpolation class
+*/
+
 #include "TMVA/VariableIdentityTransform.h"
 
 #include "TMVA/Event.h"
 #include "TMVA/MsgLogger.h"
 #include "TMVA/SVEvent.h"
 #include "TMVA/Types.h"
+#include "TMVA/VariableTransformBase.h"
 
 #include "Rtypes.h"
+#include "TString.h"
 
 #include <iostream>
 
@@ -39,13 +46,13 @@ namespace TMVA {
    class DataSetInfo;
 }
 
-ClassImp(TMVA::VariableIdentityTransform)
+ClassImp(TMVA::VariableIdentityTransform);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor
 
-   TMVA::VariableIdentityTransform::VariableIdentityTransform( DataSetInfo& dsi )
-      : VariableTransformBase( dsi, Types::kIdentity, "Id" )
+TMVA::VariableIdentityTransform::VariableIdentityTransform( DataSetInfo& dsi )
+: VariableTransformBase( dsi, Types::kIdentity, "Id" )
 {
 }
 
@@ -65,7 +72,7 @@ Bool_t TMVA::VariableIdentityTransform::PrepareTransformation (const std::vector
 
    if (!IsEnabled() || IsCreated()) return kTRUE;
 
-   Log() << kINFO << "Preparing the Identity transformation..." << Endl;
+   Log() << kDEBUG << "Preparing the Identity transformation..." << Endl;
 
    if( fGet.size() < events[0]->GetNVariables() )
       Log() << kFATAL << "Identity transform does not allow for a selection of input variables. Please remove the variable selection option and put only 'I'." << Endl;
@@ -81,14 +88,14 @@ Bool_t TMVA::VariableIdentityTransform::PrepareTransformation (const std::vector
 /// identity transformation to write to XML
 ///Log() << kFATAL << "Please implement writing of transformation as XML" << Endl;
 
-void TMVA::VariableIdentityTransform::AttachXMLTo( void* ) 
+void TMVA::VariableIdentityTransform::AttachXMLTo( void* )
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// reding the identity transformation from XML
 
-void TMVA::VariableIdentityTransform::ReadFromXML( void* ) 
+void TMVA::VariableIdentityTransform::ReadFromXML( void* )
 {
    return;
 }
@@ -96,16 +103,16 @@ void TMVA::VariableIdentityTransform::ReadFromXML( void* )
 ////////////////////////////////////////////////////////////////////////////////
 /// identity transform returns same event
 
-const TMVA::Event* TMVA::VariableIdentityTransform::Transform (const TMVA::Event* const ev, Int_t ) const 
+const TMVA::Event* TMVA::VariableIdentityTransform::Transform (const TMVA::Event* const ev, Int_t ) const
 {
    return ev;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// creates C++ code fragment of the indentity transform for inclusion in standalone C++ class
+/// creates C++ code fragment of the identity transform for inclusion in standalone C++ class
 
-void TMVA::VariableIdentityTransform::MakeFunction( std::ostream& fout, const TString& fncName, 
-                                                    Int_t , UInt_t trCounter, Int_t ) 
+void TMVA::VariableIdentityTransform::MakeFunction( std::ostream& fout, const TString& fncName,
+                                                    Int_t , UInt_t trCounter, Int_t )
 {
    fout << "inline void " << fncName << "::InitTransform_Identity_" << trCounter << "() {}" << std::endl;
    fout << std::endl;

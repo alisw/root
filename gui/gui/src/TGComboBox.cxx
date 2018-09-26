@@ -50,12 +50,12 @@
 #include "RConfigure.h"
 
 
-ClassImp(TGComboBoxPopup)
-ClassImp(TGComboBox)
+ClassImp(TGComboBoxPopup);
+ClassImp(TGComboBox);
 
-ClassImp(TGLineStyleComboBox)
-ClassImp(TGLineWidthComboBox)
-ClassImp(TGFontTypeComboBox)
+ClassImp(TGLineStyleComboBox);
+ClassImp(TGLineWidthComboBox);
+ClassImp(TGFontTypeComboBox);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a combo box popup frame.
@@ -449,10 +449,13 @@ void TGComboBox::Select(Int_t id, Bool_t emit)
          if (fSelEntry) {
             fSelEntry->Update(e);
             Layout();
-            if (emit) {
-               Selected(fWidgetId, id);
-               Selected(id);
-            }
+         } else if (fTextEntry && e->InheritsFrom(TGTextLBEntry::Class())) {
+            TGTextLBEntry *te = (TGTextLBEntry*)e;
+            fTextEntry->SetText(te->GetText()->GetString());
+         }
+         if (emit) {
+            Selected(fWidgetId, id);
+            Selected(id);
          }
       }
    }

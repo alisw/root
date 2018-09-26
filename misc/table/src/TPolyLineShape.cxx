@@ -47,8 +47,8 @@
 //           V               v      v                     v      v                  //
 //      TPolyLineShape     TBRIK  TTUBE                 TPCON  TTRD1                //
 //       |        ^                                                                 //
-//       |        |       begin_html <a href="http://root.cern.ch/root/html/TShape.html#TShape:description">R  O  O  T        S  H  A  P  E  S</a>end_html                          //
-//       V        |       (see begin_html <a href="http://wwwinfo.cern.ch/asdoc/geant_html3/node109.html#SECTION041000000000000000000000">GEANT 3.21 shapes</a>end_html as well)                           //
+//       |        |       <a href="http://root.cern.ch/root/html/TShape.html#TShape:description">R  O  O  T        S  H  A  P  E  S</a>                          //
+//       V        |       (see <a href="https://cern-tex.web.cern.ch/cern-tex/geant_html3/node109.html#SECTION041000000000000000000000">GEANT 3.21 shapes</a> as well)                           //
 // St_PolyLine3D  |                                                                 //
 //                |                                                                 //
 //           TPoints3DABC                                                           //
@@ -76,7 +76,7 @@
 //                                                                                  //
 //////////////////////////////////////////////////////////////////////////////////////
 
-ClassImp(TPolyLineShape)
+ClassImp(TPolyLineShape);
 
 ////////////////////////////////////////////////////////////////////////////////
 ///to be documented
@@ -188,14 +188,12 @@ Int_t TPolyLineShape::SetConnection(EShapeTypes connection)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*Compute distance from point px,py to a 3-D polyline*-*-*-*-*-*-*
-///*-*            ===================================================
-///*-*
-///*-*  Compute the closest distance of approach from point px,py to each segment
-///*-*  of the polyline.
-///*-*  Returns when the distance found is below DistanceMaximum.
-///*-*  The distance is computed in pixels units.
-///*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+/// Compute distance from point px,py to a 3-D polyline.
+///
+/// Compute the closest distance of approach from point px,py to each segment
+/// of the polyline.
+/// Returns when the distance found is below DistanceMaximum.
+/// The distance is computed in pixels units.
 
 Int_t TPolyLineShape::DistancetoPrimitive(Int_t px, Int_t py)
 {
@@ -208,15 +206,12 @@ Int_t TPolyLineShape::DistancetoPrimitive(Int_t px, Int_t py)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*Compute distance from point px,py to a 3-D points *-*-*-*-*-*-*
-///*-*          =====================================================
-///*-*
-///*-*  Compute the closest distance of approach from point px,py to each segment
-///*-*  of the polyline.
-///*-*  Returns when the distance found is below DistanceMaximum.
-///*-*  The distance is computed in pixels units.
-///*-*
-///*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+/// Compute distance from point px,py to a 3-D points.
+///
+/// Compute the closest distance of approach from point px,py to each segment
+/// of the polyline.
+/// Returns when the distance found is below DistanceMaximum.
+/// The distance is computed in pixels units.
 
 Int_t TPolyLineShape::PointDistancetoPrimitive(Int_t px, Int_t py)
 {
@@ -439,8 +434,7 @@ void TPolyLineShape::Paint(Option_t *opt)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*-*Draw this 3-D polyline with new coordinates*-*-*-*-*-*-*-*-*-*
-///*-*              ===========================================
+/// Draw this 3-D polyline with new coordinates.
 
 void  TPolyLineShape::PaintPoints(Int_t n, Float_t *, Option_t *)
 {
@@ -457,8 +451,7 @@ void  TPolyLineShape::PaintPoints(Int_t n, Float_t *, Option_t *)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*-*Paint polymarker in CurrentPad World coordinates*-*-*-*-*-*-*-*
-///*-*              ================================================
+/// Paint polymarker in CurrentPad World coordinates.
 
 void TPolyLineShape::PaintPolyMarker(Int_t n, Float_t *, Marker_t, Option_t *)
 {
@@ -467,7 +460,7 @@ void TPolyLineShape::PaintPolyMarker(Int_t n, Float_t *, Marker_t, Option_t *)
    TView *view = gPad->GetView();      //Get current 3-D view
    if(!view) return;                   //Check if `view` is valid
 
-   //Create temorary storage
+   //Create temporary storage
    TPoint *pxy = new TPoint[n];
    Float_t *x  = new Float_t[n];
    Float_t *y  = new Float_t[n];
@@ -745,10 +738,9 @@ Size_t TPolyLineShape::SetSizeAttribute(Size_t size)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// SetStyleAttribute(Style_t style) - set new style for this line
+/// Set new style for this line.
 /// Returns:
 ///          previous value of the line style
-///
 
 Style_t TPolyLineShape::SetStyleAttribute(Style_t style)
 {
@@ -777,8 +769,7 @@ Int_t TPolyLineShape::Size() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*Return total X3D size of this shape with its attributes*-*-*-*-*-*
-///*-*          =======================================================
+/// Return total X3D size of this shape with its attributes.
 
 void TPolyLineShape::Sizeof3D() const
 {

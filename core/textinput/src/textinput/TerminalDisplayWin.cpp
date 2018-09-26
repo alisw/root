@@ -15,38 +15,54 @@
 
 #ifdef _WIN32
 #include "textinput/TerminalDisplayWin.h"
-
 #include "textinput/Color.h"
+
+#include <assert.h>
+
+#ifdef UNICODE
+#define filename L"CONOUT$"
+#else
+#define filename "CONOUT$"
+#endif
 
 namespace textinput {
   TerminalDisplayWin::TerminalDisplayWin():
     TerminalDisplay(false), fStartLine(0), fIsAttached(false),
-    fDefaultAttributes(0) {
+    fDefaultAttributes(0), fOldCodePage(::GetConsoleOutputCP()) {
+    DWORD mode;
+    SetIsTTY(::GetConsoleMode(::GetStdHandle(STD_INPUT_HANDLE), &mode) != 0);
+
     fOut = ::GetStdHandle(STD_OUTPUT_HANDLE);
     bool isConsole = ::GetConsoleMode(fOut, &fOldMode) != 0;
-    SetIsTTY(isConsole);
-    if (isConsole) {
+    if (!isConsole) {
       // Prevent redirection from stealing our console handle,
       // simply open our own.
-      fOut = ::CreateFile("CONOUT$", GENERIC_READ | GENERIC_WRITE,
+      fOut = ::CreateFile(filename, GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL, NULL);
       ::GetConsoleMode(fOut, &fOldMode);
-      fMyMode = fOldMode | ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT;
-
-      CONSOLE_SCREEN_BUFFER_INFO csbi;
-      ::GetConsoleScreenBufferInfo(fOut, &csbi);
-      fDefaultAttributes = csbi.wAttributes;
+    } else {
+      // disable unicode (UTF-8) for the time being, since it causes
+      // problems on Windows 10
+      //::SetConsoleOutputCP(65001); // Force UTF-8 output
     }
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    ::GetConsoleScreenBufferInfo(fOut, &csbi);
+    fDefaultAttributes = csbi.wAttributes;
+    assert(fDefaultAttributes != 0 && "~TerminalDisplayWin broken");
+    fMyMode = fOldMode | ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT;
     HandleResizeEvent();
   }
 
+#undef filename
+
   TerminalDisplayWin::~TerminalDisplayWin() {
-    if (IsTTY()) {
+    if (fDefaultAttributes) {
       ::SetConsoleTextAttribute(fOut, fDefaultAttributes);
       // We allocated CONOUT$:
       CloseHandle(fOut);
     }
+    ::SetConsoleOutputCP(fOldCodePage);
   }
 
   void
@@ -80,6 +96,7 @@ namespace textinput {
 
   void
   TerminalDisplayWin::CheckCursorPos() {
+    if (!IsTTY()) return;
     // Did something print something on the screen?
     // I.e. did the cursor move?
     CONSOLE_SCREEN_BUFFER_INFO CSI;
@@ -108,8 +125,10 @@ namespace textinput {
 
   void
   TerminalDisplayWin::MoveInternal(Pos P) {
-    COORD C = {P.fCol, P.fLine + fStartLine};
-    ::SetConsoleCursorPosition(fOut, C);
+    if (IsTTY()) {
+      COORD C = {P.fCol, P.fLine + fStartLine};
+      ::SetConsoleCursorPosition(fOut, C);
+    }
   }
 
   void
@@ -174,21 +193,19 @@ namespace textinput {
   void
   TerminalDisplayWin::Attach() {
     // set to noecho
-    if (fIsAttached) return;
-    if (IsTTY() && !::SetConsoleMode(fOut, fMyMode)) {
+    if (fIsAttached || !IsTTY()) return;
+    if (!::SetConsoleMode(fOut, fMyMode)) {
       ShowError("attaching to console output");
     }
     CONSOLE_SCREEN_BUFFER_INFO Info;
-    if (IsTTY()) {
-      if (!::GetConsoleScreenBufferInfo(fOut, &Info)) {
-        ShowError("attaching / getting console info");
-      } else {
-        fStartLine = Info.dwCursorPosition.Y;
-        if (Info.dwCursorPosition.X) {
-          // Whooa - where are we?! Newline and cross fingers:
-          WriteRawString("\n", 1);
-          ++fStartLine;
-        }
+    if (!::GetConsoleScreenBufferInfo(fOut, &Info)) {
+      ShowError("attaching / getting console info");
+    } else {
+      fStartLine = Info.dwCursorPosition.Y;
+      if (Info.dwCursorPosition.X) {
+        // Whooa - where are we?! Newline and cross fingers:
+        WriteRawString("\n", 1);
+        ++fStartLine;
       }
     }
     fIsAttached = true;
@@ -196,8 +213,8 @@ namespace textinput {
 
   void
   TerminalDisplayWin::Detach() {
-    if (!fIsAttached) return;
-    if (IsTTY() && !SetConsoleMode(fOut, fOldMode)) {
+    if (!fIsAttached || !IsTTY()) return;
+    if (!SetConsoleMode(fOut, fOldMode)) {
       ShowError("detaching to console output");
     }
     TerminalDisplay::Detach();

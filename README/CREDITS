@@ -19,6 +19,10 @@ N: Mohammad Al-Turany
 E: m.al-turany@gsi.de
 D: QTGSI classes
 
+N: Guilherme Amadio
+E: guilherme.amadio@cern.ch
+D: TDataFrame, build system, parallel writing
+
 N: Eric Anciant
 E: eric.anciant@sodern.fr
 D: TQuaternion class
@@ -56,6 +60,10 @@ D: PROOF development
 N: Paul Balm
 E: p.balm@nikhef.nl
 D: implemented TDatabasePDG::ConvertGeant3ToPDG
+
+N: Benjamin Bannier
+E: bbannier@gmail.com
+D: implemented THnChain
 
 N: Daniel Barna
 E: daniel.barna@cern.ch
@@ -162,10 +170,6 @@ D: updates in PDG codes and eventgenerator interface classes
 D: TSpline classes
 D: Support for gcc option -weffc++
 
-N: Evgeni Chernyaev
-E: Evgeni.Chernyaev@cern.ch
-D: Paint3DAlgorithms used by the LEGO and SURF options
-
 N: Gian Paolo Ciceri
 E: gp.ciceri@acm.org
 D: PostgreSQL interface
@@ -190,7 +194,7 @@ D: contribution in RooStats
 
 N: Bianca-Cristina Cristescu
 E: bianca-cristina.cristescu@cern.ch
-D: contributions to ROOT6 / meta
+D: contributions to ROOT6 / meta and cling.
 
 N: David Dagenhart
 E: wdd@fnal.gov
@@ -219,6 +223,10 @@ N: Adrien Devresse
 E: adrien.devresse@cern.ch
 D: libRDAVIX, the davix client code
 
+N: Baozeng Ding
+E: sploving1@gmail.com
+D: Contribution to cling's pointer validity checker
+
 N: Mat Dobbs
 E: Matthew.Adam.Dobbs@cern.ch
 D: TLegend class
@@ -242,6 +250,10 @@ D: TTreeReader
 N: Rutger v.d. Eijk
 E: r36@nikhef.nl
 D: various contributions to GUI classes
+
+N: Andrey Erokhin
+E: Andrey.Erokhin@cern.ch
+D: ROOT::TDirectory
 
 N: Giulio Eulisse
 E: Giulio.Eulisse@cern.ch
@@ -314,6 +326,10 @@ E: Gerardo.Ganis@cern.ch
 D: all matters related to client/server authentication
 D: PROOF developments
 
+N: Paul Gessinger
+E: hello@paulgessinger.com
+D: TRatioPlot class
+
 N: Davide Gerbaudo
 E: davide.gerbaudo@gmail.com
 D: VIOLIN drawing option for 2D histograms.
@@ -335,9 +351,13 @@ N: Mary-Louise Gill
 E: m.l.gill+cern@gmail.com
 D: editline terminal interface
 
+N: Luca Giommi
+E: luca.giommi2@studio.unibo.it
+D: rootdrawtree and TSimpleAnalysis
+
 N: Enrico Guiraud
 E: enrico.guiraud@gmail.com
-D: author of the multiproc module
+D: Multiproc runtime, TDataFrame
 
 N: Thorsten Glebe
 E: T.Glebe@mpi-hd.mpg.de
@@ -387,6 +407,10 @@ E: rhatcher@fnal.gov
 D: class TXTRU and tutorials xtruDraw.C and xtruSamples.C
 D: class TTimeStamp
 
+N: John Harvey
+E: john.harvey@cern.ch
+D: Several Coverity bug fixes
+
 N: Bill Heintzelman
 E: billh@hep.upenn.edu
 D: TTree::AutoFlush,Autosave improvements
@@ -430,6 +454,11 @@ D: debian and redhat packaging scripts, port to GNU/Hurd (Debian)
 N: Burt Holzman
 E: burt@fnal.gov
 D: Contribution to TWebFile,rpdutils and sockets.
+
+N: Raphael Isemann
+E: teemperor@gmail.com
+D: c++ modules and runtime c++ modules co-author, integration in the CMS experiment
+D: contributions to rootcling, cling and cmake
 
 N: Marian Ivanov
 E: m.ivanov@gsi.de
@@ -502,7 +531,7 @@ D: Integrating Minuit2 in Roofit and adding support for MPI
 
 N: Wim Lavrijsen
 E: WLavrijsen@lbl.gov
-D: PyRoot package
+D: PyROOT package, Cppyy package
 
 N: Kerry Lee
 E: kerry.t.lee@nasa.gov
@@ -520,6 +549,8 @@ N: Sergey Linev
 E: S.Linev@gsi.de
 D: XML interface package
 D: SQL interface extensions, ODBC driver
+D: THttpServer class
+D: JavaScript ROOT package (together with Bertrand Bellenot)
 
 N: Yan Liu
 E: liuyan@fnal.gov
@@ -590,7 +621,7 @@ D: pioneer on many fronts, installation, support
 
 N: Pere Mato
 E: Pere.Mato@cern.ch
-D: PyRoot package
+D: PyROOT package
 D: cmake build system
 
 N: Richard Maunder
@@ -617,6 +648,10 @@ N: Tgiran Mkrtchyan
 E: tigran.mkrtchyan@desy.de
 D: class TDCacheFile, interface to DESY's dCache system
 D: libRDAVIX, the davix client code
+
+N: Pau Miquel Mir
+E: paumm2006@yahoo.es
+D: Conversion of ROOT tutorials to Jupyter notebooks
 
 N: Lorenzo Moneta
 E: Lorenzo.Moneta@cern.ch
@@ -775,6 +810,10 @@ N: Benjamin Ragan-Kelley
 E: benjaminrk@gmail.com
 D: cling / Jupyter integration
 
+N: Dan Riley
+E: Daniel.Riley@cornell.edu
+D: Reduce memory/cpu waster in LZMA usage
+
 N: Reiner Rohlfs
 E: Reiner.Rohlfs@obs.unige.ch
 D: various contributions to GUI classes
@@ -872,9 +911,21 @@ N: Matevz Tadel
 E: Matevz.Tadel@cern.ch
 D: Several contributions to the 3-d graphics and GL interface
 
+N: Evgueni Tcherniaev
+E: Evgueni.Tcherniaev@cern.ch
+D: Paint3DAlgorithms used by the LEGO and SURF options
+
+N: Enric Tejedor
+E: enric.tejedor@cern.ch
+D: IO, Parallelisation, Jupyter integration, TDataFrame, PyROOT
+
 N: Jan Therhaag
 E: therhaag@users.sourceforge.net
 D: author of the TMVA package
+
+N: Jeromy Tompkins
+E: Tompkins@nscl.msu.edu
+D: COL2 drawing option
 
 N: Tim Tran
 E: timtran@jlab.org
@@ -883,6 +934,14 @@ D: Full implementation of all projections in THistPainter::ShowProjection3
 N: Long Tran-Thanh
 E: ttl1208@gmail.com
 D: PROOF contributions
+
+N: Georg Troska
+E: georg.troska@tu-dortmund.de
+D: Enhancement of the CANDLE drawing option
+
+N: Xavier Valls
+E: xavier.valls.pla@cern.ch
+D: Interfaces to the MP and MT runtimes, parallelisation, vectorisation of fits
 
 N: Alexandre V. Vaniachine
 E: AVVaniachine@lbl.gov
@@ -919,6 +978,7 @@ D: author of the TMVA package
 N: Vassil Vassilev
 E: vasil.georgiev.vasilev@cern.ch
 D: cling co-author
+D: c++ modules and runtime c++ modules co-author, integration in experiments
 
 N: Helge Voss
 E: Helge.Voss@cern.ch
@@ -940,14 +1000,6 @@ N: Omar Andres Zapata Mesa
 E: Omar.Zapata@cern.ch
 D: ROOT-R, JupyROOT, TMVA
 
-N: Sergei Gleyzer
-E: Sergei.Gleyzer@cern.ch
-D: TMVA
-
-N: Jeromy Tompkins
-E: Tompkins@nscl.msu.edu
-D: COL2 drawing option
-
-N: Georg Troska
-E: georg.troska@tu-dortmund.de
-D: Enhancement of the CANDLE drawing option
+N: Jan Musinsky
+E: musinsky@gmail.com
+D: Highlight mechanism for histograms an graphs

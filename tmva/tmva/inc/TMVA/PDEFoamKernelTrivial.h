@@ -28,12 +28,8 @@
 #ifndef ROOT_TMVA_PDEFoamKernelTrivial
 #define ROOT_TMVA_PDEFoamKernelTrivial
 
-#ifndef ROOT_TMVA_PDEFoam
 #include "TMVA/PDEFoam.h"
-#endif
-#ifndef ROOT_TMVA_PDEFoamKernelBase
 #include "TMVA/PDEFoamKernelBase.h"
-#endif
 
 namespace TMVA
 {
@@ -50,7 +46,7 @@ namespace TMVA
       virtual Float_t Estimate(PDEFoam*, std::vector<Float_t>&, ECellValue);
 
       ClassDef(PDEFoamKernelTrivial, 1) // trivial PDEFoam kernel estimator
-   }; // end of PDEFoamKernelTrivial
+         }; // end of PDEFoamKernelTrivial
 }  // namespace TMVA
 
 #endif

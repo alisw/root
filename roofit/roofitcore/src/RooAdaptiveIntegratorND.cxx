@@ -38,13 +38,12 @@ numerical integration algorithm.
 #include "Math/AdaptiveIntegratorMultiDim.h"
 
 #include <assert.h>
-#include <iomanip>
 
 
 
 using namespace std;
 
-ClassImp(RooAdaptiveIntegratorND)
+ClassImp(RooAdaptiveIntegratorND);
 ;
 
 // Register this class with RooNumIntConfig

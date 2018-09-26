@@ -1,3 +1,21 @@
+/// \file
+/// \ingroup tutorial_http
+///  This program creates :
+///    - a one dimensional histogram
+///    - a two dimensional histogram
+///    - a profile histogram
+///    - a memory-resident ntuple
+///
+///  These objects are filled with some random numbers and saved on a in-memory file.
+///  All objects can be seen in web browser is open url:
+/// ~~~
+///      http://localhost:8080
+/// ~~~
+///
+/// \macro_code
+///
+/// \author Sergey Linev
+
 #include <TFile.h>
 #include <TMemFile.h>
 #include <TNtuple.h>
@@ -14,14 +32,6 @@
 
 void httpserver(const char* jobname = "job1", Long64_t maxcnt = 0)
 {
-//  This program creates :
-//    - a one dimensional histogram
-//    - a two dimensional histogram
-//    - a profile histogram
-//    - a memory-resident ntuple
-//
-//  These objects are filled with some random numbers and saved on a in-memory file.
-
    TString filename = Form("%s.root", jobname);
    TFile *hfile = new TMemFile(filename,"RECREATE","Demo ROOT file with histograms");
 

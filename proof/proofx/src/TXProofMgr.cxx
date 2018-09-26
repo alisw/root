@@ -46,7 +46,7 @@ Implementation of the functionality provided by TProofMgr in the case of a xproo
 
 #include "XrdProofConn.h"
 
-ClassImp(TXProofMgr)
+ClassImp(TXProofMgr);
 
 //
 //----- ProofMgr Interrupt signal handler
@@ -142,7 +142,7 @@ Int_t TXProofMgr::Init(Int_t)
    fRemoteProtocol = fSocket->GetRemoteProtocol();
 
    // We add the manager itself for correct destruction
-   {  R__LOCKGUARD2(gROOTMutex);
+   {  R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfSockets()->Remove(fSocket);
    }
 
@@ -171,7 +171,7 @@ void TXProofMgr::SetInvalid()
    SafeDelete(fSocket);
 
    // Avoid destroying twice
-   {  R__LOCKGUARD2(gROOTMutex);
+   {  R__LOCKGUARD(gROOTMutex);
       gROOT->GetListOfSockets()->Remove(this);
    }
 }
@@ -1492,7 +1492,7 @@ Int_t TXProofMgr::GetFile(const char *remote, const char *local, const char *opt
 
    if (rc == 0) {
       // Check if everything went fine
-      std::auto_ptr<TMD5> md5loc(TMD5::FileChecksum(fileloc));
+      std::unique_ptr<TMD5> md5loc(TMD5::FileChecksum(fileloc));
       if (!(md5loc.get())) {
          Error("GetFile", "cannot get MD5 checksum of the new local file '%s'", fileloc.Data());
          rc = -1;
@@ -1737,7 +1737,7 @@ void TXProofMgr::CpProgress(const char *pfx, Long64_t bytes,
    watch->Stop();
    Double_t copytime = watch->RealTime();
    fprintf(stderr, "| %.02f %% [%.01f MB/s]\r",
-           100.0*(size?(bytes/size):1), bytes/copytime/1048576.);
+                   100.0*bytes/size, bytes/copytime/1048576.);
    if (cr) fprintf(stderr, "\n");
    watch->Continue();
 }

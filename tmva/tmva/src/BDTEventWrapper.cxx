@@ -20,39 +20,48 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-#ifndef ROOT_TMVA_BDTEventWrapper
 #include "TMVA/BDTEventWrapper.h"
-#endif
+
+/*! \class TMVA::BDTEventWrapper
+\ingroup TMVA
+*/
 
 #include "RtypesCore.h"
 
 using namespace TMVA;
 
-BDTEventWrapper::BDTEventWrapper(const Event* e) : fEvent(e) {
-   // constuctor
+////////////////////////////////////////////////////////////////////////////////
+/// Constructor.
 
-  fBkgWeight = 0.0;
-  fSigWeight = 0.0;
+BDTEventWrapper::BDTEventWrapper(const Event* e) : fEvent(e) {
+
+   fBkgWeight = 0.0;
+   fSigWeight = 0.0;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// Destructor.
 
 BDTEventWrapper::~BDTEventWrapper() {
-   // destructor
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Set the accumulated weight, for sorted signal/background events
+///
+/// @param fType - true for signal, false for background
+/// @param weight - the total weight
+
 void BDTEventWrapper::SetCumulativeWeight(Bool_t type, Double_t weight) {
-   // Set the accumulated weight, for sorted signal/background events
-   /**
-    * @param fType - true for signal, false for background
-    * @param weight - the total weight
-    */
+
 
    if(type) fSigWeight = weight;
    else fBkgWeight = weight;
 }
 
-Double_t BDTEventWrapper::GetCumulativeWeight(Bool_t type) const {
-   // Get the accumulated weight
+////////////////////////////////////////////////////////////////////////////////
+/// Get the accumulated weight
 
+Double_t BDTEventWrapper::GetCumulativeWeight(Bool_t type) const {
    if(type) return fSigWeight;
    return fBkgWeight;
 }

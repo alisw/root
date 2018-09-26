@@ -1,4 +1,4 @@
-//===-- OcamlGCPrinter.cpp - Ocaml frametable emitter ---------------------===//
+//===- OcamlGCPrinter.cpp - Ocaml frametable emitter ----------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,23 +11,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/GCs.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/CodeGen/GCMetadata.h"
 #include "llvm/CodeGen/GCMetadataPrinter.h"
+#include "llvm/CodeGen/GCs.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Module.h"
-#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FormattedStream.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
 using namespace llvm;
 
 namespace {
@@ -37,7 +41,8 @@ public:
   void beginAssembly(Module &M, GCModuleInfo &Info, AsmPrinter &AP) override;
   void finishAssembly(Module &M, GCModuleInfo &Info, AsmPrinter &AP) override;
 };
-}
+
+} // end anonymous namespace
 
 static GCMetadataPrinterRegistry::Add<OcamlGCMetadataPrinter>
     Y("ocaml", "ocaml 3.10-compatible collector");
@@ -50,7 +55,7 @@ static void EmitCamlGlobal(const Module &M, AsmPrinter &AP, const char *Id) {
   std::string SymName;
   SymName += "caml";
   size_t Letter = SymName.size();
-  SymName.append(MId.begin(), std::find(MId.begin(), MId.end(), '.'));
+  SymName.append(MId.begin(), llvm::find(MId, '.'));
   SymName += "__";
   SymName += Id;
 
@@ -58,20 +63,20 @@ static void EmitCamlGlobal(const Module &M, AsmPrinter &AP, const char *Id) {
   SymName[Letter] = toupper(SymName[Letter]);
 
   SmallString<128> TmpStr;
-  AP.Mang->getNameWithPrefix(TmpStr, SymName);
+  Mangler::getNameWithPrefix(TmpStr, SymName, M.getDataLayout());
 
-  MCSymbol *Sym = AP.OutContext.GetOrCreateSymbol(TmpStr);
+  MCSymbol *Sym = AP.OutContext.getOrCreateSymbol(TmpStr);
 
-  AP.OutStreamer.EmitSymbolAttribute(Sym, MCSA_Global);
-  AP.OutStreamer.EmitLabel(Sym);
+  AP.OutStreamer->EmitSymbolAttribute(Sym, MCSA_Global);
+  AP.OutStreamer->EmitLabel(Sym);
 }
 
 void OcamlGCMetadataPrinter::beginAssembly(Module &M, GCModuleInfo &Info,
                                            AsmPrinter &AP) {
-  AP.OutStreamer.SwitchSection(AP.getObjFileLowering().getTextSection());
+  AP.OutStreamer->SwitchSection(AP.getObjFileLowering().getTextSection());
   EmitCamlGlobal(M, AP, "code_begin");
 
-  AP.OutStreamer.SwitchSection(AP.getObjFileLowering().getDataSection());
+  AP.OutStreamer->SwitchSection(AP.getObjFileLowering().getDataSection());
   EmitCamlGlobal(M, AP, "data_begin");
 }
 
@@ -93,18 +98,18 @@ void OcamlGCMetadataPrinter::beginAssembly(Module &M, GCModuleInfo &Info,
 ///
 void OcamlGCMetadataPrinter::finishAssembly(Module &M, GCModuleInfo &Info,
                                             AsmPrinter &AP) {
-  unsigned IntPtrSize = AP.TM.getDataLayout()->getPointerSize();
+  unsigned IntPtrSize = M.getDataLayout().getPointerSize();
 
-  AP.OutStreamer.SwitchSection(AP.getObjFileLowering().getTextSection());
+  AP.OutStreamer->SwitchSection(AP.getObjFileLowering().getTextSection());
   EmitCamlGlobal(M, AP, "code_end");
 
-  AP.OutStreamer.SwitchSection(AP.getObjFileLowering().getDataSection());
+  AP.OutStreamer->SwitchSection(AP.getObjFileLowering().getDataSection());
   EmitCamlGlobal(M, AP, "data_end");
 
   // FIXME: Why does ocaml emit this??
-  AP.OutStreamer.EmitIntValue(0, IntPtrSize);
+  AP.OutStreamer->EmitIntValue(0, IntPtrSize);
 
-  AP.OutStreamer.SwitchSection(AP.getObjFileLowering().getDataSection());
+  AP.OutStreamer->SwitchSection(AP.getObjFileLowering().getDataSection());
   EmitCamlGlobal(M, AP, "frametable");
 
   int NumDescriptors = 0;
@@ -146,9 +151,9 @@ void OcamlGCMetadataPrinter::finishAssembly(Module &M, GCModuleInfo &Info,
                          Twine(uintptr_t(&FI)) + ")");
     }
 
-    AP.OutStreamer.AddComment("live roots for " +
-                              Twine(FI.getFunction().getName()));
-    AP.OutStreamer.AddBlankLine();
+    AP.OutStreamer->AddComment("live roots for " +
+                               Twine(FI.getFunction().getName()));
+    AP.OutStreamer->AddBlankLine();
 
     for (GCFunctionInfo::iterator J = FI.begin(), JE = FI.end(); J != JE; ++J) {
       size_t LiveCount = FI.live_size(J);
@@ -160,7 +165,7 @@ void OcamlGCMetadataPrinter::finishAssembly(Module &M, GCModuleInfo &Info,
                            Twine(LiveCount) + " >= 65536.");
       }
 
-      AP.OutStreamer.EmitSymbolValue(J->Label, IntPtrSize);
+      AP.OutStreamer->EmitSymbolValue(J->Label, IntPtrSize);
       AP.EmitInt16(FrameSize);
       AP.EmitInt16(LiveCount);
 

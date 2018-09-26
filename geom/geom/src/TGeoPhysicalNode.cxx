@@ -71,7 +71,7 @@ For more details please read the misalignment section in the Users Guide.
 
 // statics and globals
 
-ClassImp(TGeoPhysicalNode)
+ClassImp(TGeoPhysicalNode);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor
@@ -515,7 +515,10 @@ void TGeoPhysicalNode::SetBranchAsState()
 void TGeoPhysicalNode::SetMatrixOrig(const TGeoMatrix *local)
 {
    if (!fMatrixOrig) fMatrixOrig = new TGeoHMatrix();
-   if (!local) fMatrixOrig->Clear();
+   if (!local) {
+      fMatrixOrig->Clear();
+      return;
+   }
    *fMatrixOrig = local;
 }
 
@@ -548,7 +551,7 @@ Bool_t TGeoPhysicalNode::IsMatchingState(TGeoNavigator *nav) const
    return kTRUE;
 }
 
-ClassImp(TGeoPNEntry)
+ClassImp(TGeoPNEntry);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor

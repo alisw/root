@@ -28,11 +28,10 @@ The publication are available online at
 #include "TUUID.h"
 
 
-ClassImp(TRandom2)
+ClassImp(TRandom2);
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*-*-*-*default constructor*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-///*-*                  ===================
+/// Default constructor
 
 TRandom2::TRandom2(UInt_t seed)
 {
@@ -42,8 +41,7 @@ TRandom2::TRandom2(UInt_t seed)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///*-*-*-*-*-*-*-*-*-*-*default destructor*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
-///*-*                  ==================
+/// Default destructor
 
 TRandom2::~TRandom2()
 {
@@ -55,7 +53,7 @@ TRandom2::~TRandom2()
 ///  Periodicity of about  10**26
 ///  Generate number in interval (0,1)  : 0 and 1 are not included in the interval
 
-Double_t TRandom2::Rndm(Int_t)
+Double_t TRandom2::Rndm()
 {
 #define TAUSWORTHE(s,a,b,c,d) (((s &c) <<d) & 0xffffffffUL ) ^ ((((s <<a) & 0xffffffffUL )^s) >>b)
 
@@ -119,7 +117,7 @@ void TRandom2::RndmArray(Int_t n, Double_t *array)
 /// The only condition, stated at the end of the 1999 L'Ecuyer paper is that the seeds
 /// must be greater than 1,7 and 15.
 
-void TRandom2::SetSeed(UInt_t seed)
+void TRandom2::SetSeed(ULong_t seed)
 {
 #define LCG(n) ((69069 * n) & 0xffffffffUL)  // linear congurential generator
 

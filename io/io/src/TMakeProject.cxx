@@ -60,8 +60,11 @@ void TMakeProject::AddInclude(FILE *fp, const char *header, Bool_t system, char 
 
 void TMakeProject::ChopFileName(TString &name, Int_t limit)
 {
-   if (name.Length() >= limit) {
-      Bool_t has_extension = (strcmp(name.Data() + name.Length() - 2, ".h") == 0);
+   Ssiz_t len = name.Length();
+   Bool_t has_extension = name.EndsWith(".h");
+   if (has_extension)
+      len -= 2;
+   if (len >= limit) {
       if (has_extension) {
          name.Remove(name.Length()-2);
       }
@@ -116,7 +119,7 @@ TString TMakeProject::GetHeaderName(const char *in_name, const TList *extrainfos
                   if (strcmp(name + strlen(name) - 2, ".h") == 0) {
                      result.Append(".h");
                   }
-                  ChopFileName(result,255);
+                  ChopFileName(result,127);
                   return result;
                }
 #ifndef WIN32
@@ -148,7 +151,7 @@ TString TMakeProject::GetHeaderName(const char *in_name, const TList *extrainfos
             result.Append(name[i]);
       }
    }
-   ChopFileName(result,255);
+   ChopFileName(result,127);
    return result;
 }
 
@@ -306,7 +309,7 @@ UInt_t TMakeProject::GenerateClassPrefix(FILE *fp, const char *clname, Bool_t to
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Generate an empty StreamerInfo for the given type (no recursion) if it is not
-/// not known in the list of class. 
+/// not known in the list of class.
 ///
 /// If the type itself is a template,
 /// we mark it with version 1 (a class) otherwise we mark it as version -3 (an enum).
@@ -380,7 +383,7 @@ void TMakeProject::GenerateMissingStreamerInfos(TList *extrainfos, const char *c
             break;
          case '>':
             if (nest == 0) return; // The name is not well formed, give up.
-            --nest; /* intentional fall throught to the next case */
+            --nest; /* intentional fall through to the next case */
          case ',':
             if ((clname[i] == ',' && nest == 1) || (clname[i] == '>' && nest == 0)) {
                TString incName(clname + last, i - last);
@@ -445,7 +448,7 @@ UInt_t TMakeProject::GenerateForwardDeclaration(FILE *fp, const char *clname, ch
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Add to the header file, the #include needed for the argument of
+/// Add to the header file, the \#include needed for the argument of
 /// this template.
 
 UInt_t TMakeProject::GenerateIncludeForTemplate(FILE *fp, const char *clname, char *inclist, Bool_t forward, const TList *extrainfos)
@@ -464,7 +467,7 @@ UInt_t TMakeProject::GenerateIncludeForTemplate(FILE *fp, const char *clname, ch
             break;
          case '>':
             if (nest==0) return ninc; // the name is not well formed, give up.
-            --nest; /* intentional fall throught to the next case */
+            --nest; /* intentional fall through to the next case */
          case ',':
             if ((clname[i] == ',' && nest == 1) || (clname[i] == '>' && nest == 0)) {
                TString incName(clname + last, i - last);
@@ -503,6 +506,7 @@ UInt_t TMakeProject::GenerateIncludeForTemplate(FILE *fp, const char *clname, ch
                      case ROOT::kSTLunorderedset:
                      case ROOT::kSTLunorderedmultiset:
                         what = "unordered_set";
+                        break;
                      case ROOT::kSTLbitset:
                         what = "bitset";
                         break;
@@ -565,7 +569,7 @@ UInt_t TMakeProject::GenerateIncludeForTemplate(FILE *fp, const char *clname, ch
       std::vector<std::string> inside;
       int nestedLoc;
       TClassEdit::GetSplit( clname, inside, nestedLoc, TClassEdit::kLong64 );
-      Int_t stlkind =  TClassEdit::STLKind(inside[0].c_str());
+      Int_t stlkind =  TClassEdit::STLKind(inside[0]);
       TClass *key = TClass::GetClass(inside[1].c_str());
       if (key) {
          TString what;
@@ -598,7 +602,7 @@ UInt_t TMakeProject::GenerateIncludeForTemplate(FILE *fp, const char *clname, ch
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Add to the header file anything that need to appear after the class
-/// declaration (this includes some #pragma link).
+/// declaration (this includes some \#pragma link).
 
 void TMakeProject::GeneratePostDeclaration(FILE *fp, const TVirtualStreamerInfo *info, char *inclist)
 {
@@ -610,7 +614,7 @@ void TMakeProject::GeneratePostDeclaration(FILE *fp, const TVirtualStreamerInfo 
          std::vector<std::string> inside;
          int nestedLoc;
          TClassEdit::GetSplit( element->GetTypeName(), inside, nestedLoc, TClassEdit::kLong64 );
-         Int_t stlkind =  TClassEdit::STLKind(inside[0].c_str());
+         Int_t stlkind =  TClassEdit::STLKind(inside[0]);
          TClass *key = TClass::GetClass(inside[1].c_str());
          TString what;
          if (strncmp(inside[1].c_str(),"pair<",strlen("pair<"))==0) {
@@ -655,7 +659,7 @@ TString TMakeProject::UpdateAssociativeToVector(const char *name)
       int nestedLoc;
       unsigned int narg = TClassEdit::GetSplit( name, inside, nestedLoc, TClassEdit::kLong64 );
       if (nestedLoc) --narg;
-      Int_t stlkind =  TMath::Abs(TClassEdit::STLKind(inside[0].c_str()));
+      Int_t stlkind =  TMath::Abs(TClassEdit::STLKind(inside[0]));
 
       for(unsigned int i = 1; i<narg; ++i) {
          inside[i] = UpdateAssociativeToVector( inside[i].c_str() );

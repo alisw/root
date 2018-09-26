@@ -28,7 +28,7 @@
 #include "TSystem.h"
 #include <string>
 
-ClassImp(TGraphErrors)
+ClassImp(TGraphErrors);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -705,7 +705,7 @@ void TGraphErrors::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
    for (i = 0; i < fNpoints-1; i++) out << "   " << fEY[i] << "," << std::endl;
    out << "   " << fEY[fNpoints-1] << "};" << std::endl;
 
-   if (gROOT->ClassSaved(TGraph::Class())) out << "   ";
+   if (gROOT->ClassSaved(TGraphErrors::Class())) out << "   ";
    else out << "   TGraphErrors *";
    out << "gre = new TGraphErrors(" << fNpoints << ","
                                     << fXName   << ","  << fYName  << ","
@@ -737,8 +737,13 @@ void TGraphErrors::SavePrimitive(std::ostream &out, Option_t *option /*= ""*/)
          out << "   gre->GetListOfFunctions()->Add(ptstats);" << std::endl;
          out << "   ptstats->SetParent(gre->GetListOfFunctions());" << std::endl;
       } else {
+         TString objname;
+         objname.Form("%s%d",obj->GetName(),frameNumber);
+         if (obj->InheritsFrom("TF1")) {
+            out << "   " << objname << "->SetParent(gre);\n";
+         }
          out << "   gre->GetListOfFunctions()->Add("
-             << Form("%s%d",obj->GetName(),frameNumber) << ");" << std::endl;
+             << objname << ");" << std::endl;
       }
    }
 

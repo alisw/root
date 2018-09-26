@@ -10,7 +10,9 @@
  *************************************************************************/
 
 /** \class TChain
-A chain is a collection of files containg TTree objects.
+\ingroup tree
+
+A chain is a collection of files containing TTree objects.
 When the chain is created, the first parameter is the default name
 for the Tree to be processed later on.
 
@@ -51,8 +53,9 @@ the trees in the chain.
 #include "TEntryListFromFile.h"
 #include "TFileStager.h"
 #include "TFilePrefetch.h"
+#include "TVirtualMutex.h"
 
-ClassImp(TChain)
+ClassImp(TChain);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.
@@ -74,7 +77,7 @@ TChain::TChain()
    fFiles = new TObjArray(fTreeOffsetLen);
    fStatus = new TList();
    fTreeOffset[0]  = 0;
-   gDirectory->Remove(this);
+   if (gDirectory) gDirectory->Remove(this);
    gROOT->GetListOfSpecials()->Add(this);
    fFile = 0;
    fDirectory = 0;
@@ -87,6 +90,7 @@ TChain::TChain()
    gROOT->GetListOfDataSets()->Add(this);
 
    // Make sure we are informed if the TFile is deleted.
+   R__LOCKGUARD(gROOTMutex);
    gROOT->GetListOfCleanups()->Add(this);
 }
 
@@ -131,7 +135,7 @@ TChain::TChain()
 /// ~~~
 
 TChain::TChain(const char* name, const char* title)
-:TTree(name, title)
+:TTree(name, title, /*splitlevel*/ 99, nullptr)
 , fTreeOffsetLen(100)
 , fNtrees(0)
 , fTreeNumber(-1)
@@ -150,16 +154,16 @@ TChain::TChain(const char* name, const char* title)
    fFiles = new TObjArray(fTreeOffsetLen);
    fStatus = new TList();
    fTreeOffset[0]  = 0;
-   gDirectory->Remove(this);
-   gROOT->GetListOfSpecials()->Add(this);
    fFile = 0;
-   fDirectory = 0;
 
    // Reset PROOF-related bits
    ResetBit(kProofUptodate);
    ResetBit(kProofLite);
 
-   // Add to the global list
+   R__LOCKGUARD(gROOTMutex);
+
+   // Add to the global lists
+   gROOT->GetListOfSpecials()->Add(this);
    gROOT->GetListOfDataSets()->Add(this);
 
    // Make sure we are informed if the TFile is deleted.
@@ -171,7 +175,12 @@ TChain::TChain(const char* name, const char* title)
 
 TChain::~TChain()
 {
-   gROOT->GetListOfCleanups()->Remove(this);
+   bool rootAlive = gROOT && !gROOT->TestBit(TObject::kInvalidObject);
+
+   if (rootAlive) {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfCleanups()->Remove(this);
+   }
 
    SafeDelete(fProofChain);
    fStatus->Delete();
@@ -194,10 +203,12 @@ TChain::~TChain()
    delete[] fTreeOffset;
    fTreeOffset = 0;
 
-   gROOT->GetListOfSpecials()->Remove(this);
-
-   // Remove from the global list
-   gROOT->GetListOfDataSets()->Remove(this);
+   // Remove from the global lists
+   if (rootAlive) {
+      R__LOCKGUARD(gROOTMutex);
+      gROOT->GetListOfSpecials()->Remove(this);
+      gROOT->GetListOfDataSets()->Remove(this);
+   }
 
    // This is the same as fFile, don't delete it a second time.
    fDirectory = 0;
@@ -250,27 +261,35 @@ Int_t TChain::Add(TChain* chain)
 ////////////////////////////////////////////////////////////////////////////////
 /// Add a new file to this chain.
 ///
-/// Argument name may have either of two formats. The first:
+/// Argument name may have either of two set of formats. The first:
 /// ~~~ {.cpp}
-///     [//machine]/path/file_name.root[/tree_name]
+///     [//machine]/path/file_name[?query[#tree_name]]
+///  or [//machine]/path/file_name.root[.oext][/tree_name]
 /// ~~~
-/// If tree_name is missing the chain name will be assumed.
+/// If tree_name is missing the chain name will be assumed. Tagging the
+/// tree_name with a slash [/tree_name] is only supported for backward
+/// compatibility; it requires the file name to contain the string '.root'
+/// and its use is deprecated.
 /// Wildcard treatment is triggered by the any of the special characters []*?
 /// which may be used in the file name, eg. specifying "xxx*.root" adds
 /// all files starting with xxx in the current file system directory.
 ///
 /// Alternatively name may have the format of a url, eg.
 /// ~~~ {.cpp}
-///         root://machine/path/file_name.root
-///     or  root://machine/path/file_name.root/tree_name
-///     or  root://machine/path/file_name.root/tree_name?query
+///         root://machine/path/file_name[?query[#tree_name]]
+///     or  root://machine/path/file_name
+///     or  root://machine/path/file_name.root[.oext]/tree_name
+///     or  root://machine/path/file_name.root[.oext]/tree_name?query
 /// ~~~
 /// where "query" is to be interpreted by the remote server. Wildcards may be
 /// supported in urls, depending on the protocol plugin and the remote server.
 /// http or https urls can contain a query identifier without tree_name, but
 /// generally urls can not be written with them because of ambiguity with the
-/// wildcard character. (Also see the documentaiton for TChain::AddFile,
-/// which does not support wildcards but allows the url to contain query)
+/// wildcard character. (Also see the documentation for TChain::AddFile,
+/// which does not support wildcards but allows the url name to contain query).
+/// Again, tagging the tree_name with a slash [/tree_name] is only supported
+/// for backward compatibility; it requires the file name ot contain the string
+/// '.root' and its use is deprecated.
 ///
 /// NB. To add all the files of a TChain to a chain, use Add(TChain *chain).
 ///
@@ -385,13 +404,17 @@ Int_t TChain::Add(const char* name, Long64_t nentries /* = TTree::kMaxEntries */
 ///
 /// eg.
 /// ~~~ {.cpp}
-///     root://machine/path/file_name.root?query#tree_name
+///     root://machine/path/file_name[?query[#tree_name]]
+///     root://machine/path/file_name.root[.oext]/tree_name[?query]
 /// ~~~
 /// If tree_name is given as a part of the file name it is used to
 /// as the name of the tree to load from the file. Otherwise if tname
 /// argument is specified the chain will load the tree named tname from
 /// the file, otherwise the original treename specified in the TChain
 /// constructor will be used.
+/// Tagging the tree_name with a slash [/tree_name] is only supported for
+/// backward compatibility; it requires the file name ot contain the string
+/// '.root' and its use is deprecated.
 ///
 /// A. If nentries <= 0, the file is opened and the tree header read
 ///    into memory to get the number of entries.
@@ -950,7 +973,7 @@ Int_t TChain::GetEntry(Long64_t entry, Int_t getall)
 /// Return entry number corresponding to entry.
 ///
 /// if no TEntryList set returns entry
-/// else returns entry #entry from this entry list and
+/// else returns entry \#entry from this entry list and
 /// also computes the global entry number (loads all tree headers)
 
 Long64_t TChain::GetEntryNumber(Long64_t entry) const
@@ -1234,12 +1257,14 @@ Int_t TChain::LoadBaskets(Long64_t /*maxmemory*/)
 /// The input argument entry is the entry serial number in the whole chain.
 ///
 /// In case of error, LoadTree returns a negative number:
-///   1. The chain is empty.
-///   2. The requested entry number of less than zero or too large for the chain.
+///   * -1: The chain is empty.
+///   * -2: The requested entry number is less than zero or too large for the chain.
 ///       or too large for the large TTree.
-///   3. The file corresponding to the entry could not be correctly open
-///   4. The TChainElement corresponding to the entry is missing or
+///   * -3: The file corresponding to the entry could not be correctly open
+///   * -4: The TChainElement corresponding to the entry is missing or
 ///       the TTree is missing from the file.
+///   * -5: Internal error, please report the circumstance when this happen
+///       as a ROOT issue.
 ///
 /// Note: This is the only routine which sets the value of fTree to
 ///       a non-zero pointer.
@@ -1466,7 +1491,7 @@ Long64_t TChain::LoadTree(Long64_t entry)
       returnCode = -3;
    } else {
       // Note: We do *not* own fTree after this, the file does!
-      fTree = (TTree*) fFile->Get(element->GetName());
+      fTree = dynamic_cast<TTree*>(fFile->Get(element->GetName()));
       if (!fTree) {
          // Now that we do not check during the addition, we need to check here!
          Error("LoadTree", "Cannot find tree with name %s in file %s", element->GetName(), element->GetTitle());
@@ -1516,6 +1541,11 @@ Long64_t TChain::LoadTree(Long64_t entry)
       // Below we must test >= in case the tree has no entries.
       if (entry >= fTreeOffset[fTreeNumber+1]) {
          if ((fTreeNumber < (fNtrees - 1)) && (entry < fTreeOffset[fTreeNumber+2])) {
+            // The request entry is not in the tree 'fTreeNumber' we will need
+            // to look further.
+
+            // Before moving on, let's record the result.
+            element->SetLoadResult(returnCode);
 
             // Before trying to read the file file/tree, notify the user
             // that we have switched trees if requested; the user might need
@@ -1525,6 +1555,7 @@ Long64_t TChain::LoadTree(Long64_t entry)
                fNotify->Notify();
             }
 
+            // Load the next TTree.
             return LoadTree(entry);
          } else {
             treeReadEntry = fReadEntry = -2;
@@ -1532,12 +1563,15 @@ Long64_t TChain::LoadTree(Long64_t entry)
       }
    }
 
+
    if (!fTree) {
       // The Error message already issued.  However if we reach here
       // we need to make sure that we do not use fTree.
       //
       // Force a reload of the tree next time.
       fTreeNumber = -1;
+
+      element->SetLoadResult(returnCode);
       return returnCode;
    }
    // ----- End of modifications by MvL
@@ -1557,7 +1591,16 @@ Long64_t TChain::LoadTree(Long64_t entry)
    // they use the correct read entry number).
 
    // Change the new current tree to the new entry.
-   fTree->LoadTree(treeReadEntry);
+   Long64_t loadResult = fTree->LoadTree(treeReadEntry);
+   if (loadResult == treeReadEntry) {
+      element->SetLoadResult(0);
+   } else {
+      // This is likely to be an internal error, if treeReadEntry was not in range
+      // (or intentionally -2 for TChain::GetEntries) then something happened
+      // that is very odd/surprising.
+      element->SetLoadResult(-5);
+   }
+
 
    // Change the chain friends to the new entry.
    if (fFriends) {
@@ -1892,7 +1935,7 @@ Long64_t TChain::Merge(TCollection* /* list */, TFileMergeInfo *)
 /// ## IMPORTANT Note 1: AUTOMATIC FILE OVERFLOW
 ///
 /// When merging many files, it may happen that the resulting file
-/// reaches a size > TTree::fgMaxTreeSize (default = 1.9 GBytes).
+/// reaches a size > TTree::fgMaxTreeSize (default = 100 GBytes).
 /// In this case the current file is automatically closed and a new
 /// file started.  If the name of the merged file was "merged.root",
 /// the subsequent files will be named "merged_1.root", "merged_2.root",
@@ -2025,10 +2068,25 @@ Long64_t TChain::Merge(TFile* file, Int_t basketsize, Option_t* option)
 /// both the url query identifier and a wildcard. Wildcard matching is not
 /// done in this method itself.
 /// ~~~ {.cpp}
-///     /a/path/file.root[/treename]
-///     xxx://a/path/file.root[/treename][?query]
-///     xxx://a/path/file.root[?query[#treename]]
+///     [xxx://host]/a/path/file_name[?query[#treename]]
 /// ~~~
+///
+/// The following way to specify the treename is still supported with the
+/// constrain that the file name contains the sub-string '.root'.
+/// This is now deprecated and will be removed in future versions.
+/// ~~~ {.cpp}
+///     [xxx://host]/a/path/file.root[.oext][/treename]
+///     [xxx://host]/a/path/file.root[.oext][/treename][?query]
+/// ~~~
+///
+/// Note that in a case like this
+/// ~~~ {.cpp}
+///     [xxx://host]/a/path/file#treename
+/// ~~~
+/// i.e. anchor but no options (query), the filename will be the full path, as
+/// the anchor may be the internal file name of an archive. Use '?#treename' to
+/// pass the treename if the query field is empty.
+///
 /// \param[in] name        is the original name
 /// \param[in] wildcards   indicates if the resulting filename will be treated for
 ///                        wildcards. For backwards compatibility, with most protocols
@@ -2037,84 +2095,66 @@ Long64_t TChain::Merge(TFile* file, Int_t basketsize, Option_t* option)
 ///                        where the tree name is given as a trailing slash-separated
 ///                        string at the end of the file name.
 /// \param[out] filename   the url or filename to be opened or matched
-/// \param[out] treename   the treename, which may be found as a trailing part of the
-///                        name or in a url fragment section. If not found this will
-///                        be empty.
+/// \param[out] treename   the treename, which may be found in a url fragment section
+///                        as a trailing part of the name (deprecated).
+///                        If not found this will be empty.
 /// \param[out] query      is the url query section, including the leading question
 ///                        mark. If not found or the query section is only followed by
 ///                        a fragment this will be empty.
-/// \param[out] suffix     the portion of name which was removed to form filename.
+/// \param[out] suffix     the portion of name which was removed to from filename.
 
-void TChain::ParseTreeFilename(const char *name, TString &filename, TString &treename, TString &query, TString &suffix, Bool_t wildcards) const
+void TChain::ParseTreeFilename(const char *name, TString &filename, TString &treename, TString &query, TString &suffix,
+                               Bool_t) const
 {
-   Ssiz_t pIdx;
-   Bool_t isUrl = kFALSE;
-   Bool_t isUrlDoFull = kFALSE;
+   Ssiz_t pIdx = kNPOS;
    filename = name;
    treename.Clear();
    query.Clear();
    suffix.Clear();
 
-   pIdx = filename.Index("://");
-   if (pIdx != kNPOS && pIdx > 0 && filename.Index("/") > pIdx) {
-      // filename has a url format "xxx://"
-      // decide if to do full search for url query and fragment identifiers
-      isUrl = kTRUE;
-      if (wildcards) {
-         TUrl url(name);
-         if (url.IsValid()) {
-            TString proto = url.GetProtocol();
-            if (proto == "http" || proto == "https") {
-               isUrlDoFull = kTRUE;
-            }
-         }
+   // General case
+   TUrl url(name, kTRUE);
+
+   TString fn = url.GetFile();
+   // Extract query, if any
+   if (url.GetOptions() && (strlen(url.GetOptions()) > 0))
+      query.Form("?%s", url.GetOptions());
+   // The treename can be passed as anchor
+   if (url.GetAnchor() && (strlen(url.GetAnchor()) > 0)) {
+      // Support "?#tree_name" and "?query#tree_name"
+      // "#tree_name" (no '?' is for tar archives)
+      if (!query.IsNull() || strstr(name, "?#")) {
+         treename = url.GetAnchor();
       } else {
-         isUrlDoFull = kTRUE;
+         // The anchor is part of the file name
+         fn = url.GetFileAndOptions();
       }
    }
+   // Suffix
+   suffix = url.GetFileAndOptions();
+   suffix.Replace(suffix.Index(fn), fn.Length(), "");
+   // Remove it from the file name
+   filename.Remove(filename.Index(fn) + fn.Length());
 
-   if (isUrlDoFull) {
-      pIdx = filename.Index("?");
-      if (pIdx != kNPOS) {
-         query = filename(pIdx,filename.Length()-pIdx);
-         suffix = filename(pIdx, filename.Length()-pIdx);
-         filename.Remove(pIdx);
-      }
-      pIdx = query.Index("#");
-      if (pIdx != kNPOS) {
-         treename = query(pIdx+1,query.Length()-pIdx-1);
-         query.Remove(pIdx);
-         if (query.Length() == 1) {
-            // was only followed by the fragment
-            query.Clear();
-         }
-      }
+   // Special case: [...]file.root/treename
+   static const char *dotr = ".root";
+   static Ssiz_t dotrl = strlen(dotr);
+   // Find the last one
+   Ssiz_t js = filename.Index(dotr);
+   while (js != kNPOS) {
+      pIdx = js;
+      js = filename.Index(dotr, js + 1);
    }
-
-   if (treename.IsNull()) {
-      Ssiz_t dotSlashPos = kNPOS;
-      pIdx = filename.Index(".root");
-      while(pIdx != kNPOS) {
-         dotSlashPos = pIdx;
-         pIdx = filename.Index(".root",dotSlashPos+1);
-      }
-      if (dotSlashPos != kNPOS && filename[dotSlashPos+5]!='/') {
-         // We found the 'last' .root in the name and it is not followed by
-         // a '/', so the tree name is _not_ specified in the name.
-         dotSlashPos = kNPOS;
-      }
-      if (dotSlashPos != kNPOS) {
-         // Copy the tree name specification and remove it from filename
-         treename = filename(dotSlashPos+6,filename.Length()-dotSlashPos-6);
-         suffix.Prepend(filename(dotSlashPos+5, filename.Length()-dotSlashPos-5));
-         filename.Remove(dotSlashPos+5);
-      }
-      if (isUrl && !isUrlDoFull) {
-         pIdx = treename.Index("?");
-         if (pIdx != kNPOS) {
-            query = treename(pIdx,treename.Length()-pIdx);
-            treename.Remove(pIdx);
-         }
+   if (pIdx != kNPOS) {
+      static const char *slash = "/";
+      static Ssiz_t slashl = strlen(slash);
+      // Find the last one
+      Ssiz_t ppIdx = filename.Index(slash, pIdx + dotrl);
+      if (ppIdx != kNPOS) {
+         // Good treename with the old receipe
+         treename = filename(ppIdx + slashl, filename.Length());
+         filename.Remove(ppIdx + slashl - 1);
+         suffix.Insert(0, TString::Format("/%s", treename.Data()));
       }
    }
 }
@@ -2349,6 +2389,7 @@ void TChain::ResetBranchAddresses()
 ///
 /// \param[in] bname    is the name of a branch.
 /// \param[in] add      is the address of the branch.
+/// \param[in] ptr
 ///
 /// Note: See the comments in TBranchElement::SetAddress() for a more
 /// detailed discussion of the meaning of the add parameter.
@@ -2447,6 +2488,7 @@ Int_t TChain::SetBranchAddress(const char* bname, void* add, TBranch** ptr, TCla
 /// \param[in] bname     is the name of a branch. if bname="*", apply to all branches.
 /// \param[in] status    = 1  branch will be processed,
 ///                      = 0  branch will not be processed
+/// \param[out] found
 ///
 ///  See IMPORTANT REMARKS in TTree::SetBranchStatus and TChain::SetBranchAddress
 ///
@@ -2717,6 +2759,29 @@ void TChain::SetEventList(TEventList *evlist)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Change the name of this TChain.
+
+void TChain::SetName(const char* name)
+{
+   {
+      // Should this be extended to include the call to TTree::SetName?
+      R__WRITE_LOCKGUARD(ROOT::gCoreMutex); // Take the lock once rather than 3 times.
+      gROOT->GetListOfCleanups()->Remove(this);
+      gROOT->GetListOfSpecials()->Remove(this);
+      gROOT->GetListOfDataSets()->Remove(this);
+   }
+   TTree::SetName(name);
+   {
+      // Should this be extended to include the call to TTree::SetName?
+      R__WRITE_LOCKGUARD(ROOT::gCoreMutex); // Take the lock once rather than 3 times.
+      gROOT->GetListOfCleanups()->Add(this);
+      gROOT->GetListOfSpecials()->Add(this);
+      gROOT->GetListOfDataSets()->Add(this);
+   }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Set number of entries per packet for parallel root.
 
 void TChain::SetPacketSize(Int_t size)
@@ -2733,7 +2798,7 @@ void TChain::SetPacketSize(Int_t size)
 /// Enable/Disable PROOF processing on the current default Proof (gProof).
 ///
 /// "Draw" and "Processed" commands will be handled by PROOF.
-/// The refresh and gettreeheader are meaningfull only if on == kTRUE.
+/// The refresh and gettreeheader are meaningful only if on == kTRUE.
 /// If refresh is kTRUE the underlying fProofChain (chain proxy) is always
 /// rebuilt (even if already existing).
 /// If gettreeheader is kTRUE the header of the tree will be read from the
@@ -2805,7 +2870,10 @@ void TChain::Streamer(TBuffer& b)
 {
    if (b.IsReading()) {
       // Remove using the 'old' name.
-      gROOT->GetListOfCleanups()->Remove(this);
+      {
+         R__LOCKGUARD(gROOTMutex);
+         gROOT->GetListOfCleanups()->Remove(this);
+      }
 
       UInt_t R__s, R__c;
       Version_t R__v = b.ReadVersion(&R__s, &R__c);
@@ -2826,7 +2894,10 @@ void TChain::Streamer(TBuffer& b)
          //====end of old versions
       }
       // Re-add using the new name.
-      gROOT->GetListOfCleanups()->Add(this);
+      {
+         R__LOCKGUARD(gROOTMutex);
+         gROOT->GetListOfCleanups()->Add(this);
+      }
 
    } else {
       b.WriteClassBuffer(TChain::Class(),this);

@@ -26,9 +26,14 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::PDEFoamVect
+\ingroup TMVA
+
+*/
 #include "TMVA/PDEFoamVect.h"
 
 #include "Rtypes.h"
+#include "TObject.h"
 
 #include <iostream>
 #include <iomanip>
@@ -37,15 +42,15 @@ using namespace std;
 
 //#define SW2 std::setw(12)
 
-ClassImp(TMVA::PDEFoamVect)
+ClassImp(TMVA::PDEFoamVect);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor for streamer
 
 TMVA::PDEFoamVect::PDEFoamVect()
-   : TObject(),
-     fDim(0),
-     fCoords(0)
+: TObject(),
+   fDim(0),
+   fCoords(0)
 {
 }
 

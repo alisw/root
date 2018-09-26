@@ -164,9 +164,9 @@
 
 #include "TRolke.h"
 #include "TMath.h"
-#include "Riostream.h"
+#include <iostream>
 
-ClassImp(TRolke)
+ClassImp(TRolke);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor with optional Confidence Level argument.

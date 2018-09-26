@@ -37,13 +37,9 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
 
-#ifndef ROOT_TMVA_VariableTransformBase
 #include "TMVA/VariableTransformBase.h"
-#endif
 
 namespace TMVA {
 
@@ -86,7 +82,7 @@ namespace TMVA {
       VectorOfFloatVectors                   fMin;       //! Min of source range
       VectorOfFloatVectors                   fMax;       //! Max of source range
 
-      ClassDef(VariableNormalizeTransform,0) // Variable transformation: normalization
+      ClassDef(VariableNormalizeTransform,0); // Variable transformation: normalization
    };
 
 } // namespace TMVA

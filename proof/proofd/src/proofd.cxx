@@ -14,6 +14,13 @@
 // Proofd                                                               //
 //                                                                      //
 // PROOF, Parallel ROOT Facility, front-end daemon.                     //
+//                                                                      //
+//-------------------------- Nota Bene ---------------------------------//
+// The proofd daemon is deprecated and not maintained any longer and    //
+// will be removed in ROOT v6.16/00. Please contact the ROOT team in    //
+// the unlikely event this change is disruptive for your workflow.      //
+//----------------------------------------------------------------------//
+//                                                                      //
 // This small server is started either by inetd when a client requests  //
 // a connection to a PROOF server or by hand (i.e. from the command     //
 // line). By default proofd uses port 1093 (allocated by IANA,          //
@@ -155,7 +162,7 @@
 // 14: add env setup message
 
 #include "RConfigure.h"
-#include "RConfig.h"
+#include <ROOT/RConfig.h>
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -781,6 +788,14 @@ void Usage(const char* name, int rc)
    exit(rc);
 }
 
+void PrintDeprecation(bool withctx = true)
+{
+   if (withctx) printf(" \n");
+   printf(" NB: The proofd daemon is deprecated and not maintained any longer and will be removed in ROOT v6.16/00\n");
+   printf("     Please contact the ROOT team in the unlikely event this change is disruptive for your workflow.\n");
+   if (withctx) printf(" \n");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char **argv)
@@ -810,6 +825,8 @@ int main(int argc, char **argv)
 
    // Output to syslog ...
    RpdSetSysLogFlag(1);
+
+   PrintDeprecation();
 
    // ... unless we are running in the foreground and we are
    // attached to terminal; make also sure that "-i" and "-f"
@@ -1001,49 +1018,48 @@ int main(int argc, char **argv)
 
    if (argc > 0) {
       gConfDir = std::string(*argv);
-   } else {
-      // try to guess the config directory...
-#ifndef ROOTDATADIR
-      if (getenv("ROOTSYS")) {
-         gConfDir = getenv("ROOTSYS");
-         if (gDebug > 0)
-            ErrorInfo("main: no config directory specified using ROOTSYS (%s)",
-                      gConfDir.c_str());
-      } else {
-         Error(ErrFatal, -1, "main: no config directory specified");
-      }
-#else
-      gConfDir = ROOTDATADIR;
-#endif
    }
-#ifdef ROOTBINDIR
-   gRootBinDir= ROOTBINDIR;
-#endif
-#ifdef ROOTETCDIR
-   rootetcdir= ROOTETCDIR;
-#endif
 
-   // Define gRootBinDir if not done already
-   if (!gRootBinDir.length())
+#ifdef ROOTPREFIX
+   if (getenv("IGNOREROOTPREFIX")) {
+#endif
+      if (!gConfDir.length()) {
+         // try to guess the config directory...
+         if (getenv("ROOTSYS")) {
+            gConfDir = getenv("ROOTSYS");
+            if (gDebug > 0)
+               ErrorInfo("main: no config directory specified using"
+                         " ROOTSYS (%s)", gConfDir.c_str());
+         } else {
+            Error(ErrFatal, -1, "main: no config directory specified");
+         }
+      }
       gRootBinDir = std::string(gConfDir).append("/bin");
+      rootetcdir = std::string(gConfDir).append("/etc");
+#ifdef ROOTPREFIX
+   }
+   else  {
+      if (!gConfDir.length())
+         gConfDir = ROOTPREFIX;
+      gRootBinDir = ROOTBINDIR;
+      rootetcdir = ROOTETCDIR;
+   }
+#endif
 
-   // make sure it contains the executable we want to run
+   // make sure gRootBinDir contains the executable we want to run
    std::string arg0 = std::string(gRootBinDir).append("/proofserv");
    if (access(arg0.c_str(), X_OK) == -1) {
       Error(ErrFatal,-1,"main: incorrect config directory specified (%s)",
                         gConfDir.c_str());
    }
-   // Make it available to all the session via env
+   // Make gRootBinDir available to all the session via env
    if (gRootBinDir.length()) {
       char *tmp = new char[15 + gRootBinDir.length()];
       snprintf(tmp, 15 + gRootBinDir.length(), "ROOTBINDIR=%s", gRootBinDir.c_str());
       putenv(tmp);
    }
 
-   // Define rootetcdir if not done already
-   if (!rootetcdir.length())
-      rootetcdir = std::string(gConfDir).append("/etc");
-   // Make it available to all the session via env
+   // Make rootetcdir available to all the session via env
    if (rootetcdir.length()) {
       char *tmp = new char[15 + rootetcdir.length()];
       snprintf(tmp, 15 + rootetcdir.length(), "ROOTETCDIR=%s", rootetcdir.c_str());

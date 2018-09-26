@@ -20,15 +20,9 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TObject
+#include "Rtypes.h"
 #include "TObject.h"
-#endif
-#ifndef ROOT_Riosfwd
-#include "Riosfwd.h"
-#endif
-#ifndef __CINT__
 #include <string.h>
-#endif
 
 class TBits : public TObject {
 
@@ -45,6 +39,7 @@ protected:
    void DoLeftShift(UInt_t shift);
    void DoRightShift(UInt_t shift);
    void DoFlip();
+   void Resize(UInt_t newlen);
 
 public:
    TBits(UInt_t nbits = 8);
@@ -70,10 +65,8 @@ public:
       // For b[i] = b[__j];
       TReference& operator=(const TReference& rhs);
 
-#ifndef __CINT__
       // Flips the bit
       Bool_t operator~() const;
-#endif
 
       // For val = b[i];
       operator Bool_t() const;
@@ -97,7 +90,7 @@ public:
    TBits& operator>>=(UInt_t rhs) { DoRightShift(rhs); return *this; }
    TBits  operator<<(UInt_t rhs) { return TBits(*this)<<= rhs; }
    TBits  operator>>(UInt_t rhs) { return TBits(*this)>>= rhs; }
-   TBits  operator~() { TBits res(*this); res.DoFlip(); return res; }
+   TBits  operator~() const { TBits res(*this); res.DoFlip(); return res; }
 
    //----- Optimized setters
    // Each of these will replace the contents of the receiver with the bitvector
@@ -195,21 +188,27 @@ inline std::ostream &operator<<(std::ostream& os, const TBits& rhs)
 
 // inline functions...
 
+inline void TBits::Resize(UInt_t newbitnumber)
+{
+   // Update the allocated size.
+   UInt_t new_size = (newbitnumber / 8) + 1;
+   if (new_size > fNbytes) {
+      new_size *= 2;
+      UChar_t *old_location = fAllBits;
+      fAllBits = new UChar_t[new_size];
+      memcpy(fAllBits, old_location, fNbytes);
+      memset(fAllBits + fNbytes, 0, new_size - fNbytes);
+      fNbytes = new_size;
+      delete[] old_location;
+   }
+}
+
 inline void TBits::SetBitNumber(UInt_t bitnumber, Bool_t value)
 {
    // Set bit number 'bitnumber' to be value
 
    if (bitnumber >= fNbits) {
-      UInt_t new_size = (bitnumber/8) + 1;
-      if (new_size > fNbytes) {
-         new_size *= 2;
-         UChar_t *old_location = fAllBits;
-         fAllBits = new UChar_t[new_size];
-         memcpy(fAllBits,old_location,fNbytes);
-         memset(fAllBits+fNbytes ,0, new_size-fNbytes);
-         fNbytes = new_size;
-         delete [] old_location;
-      }
+      Resize(bitnumber);
       fNbits = bitnumber+1;
    }
    UInt_t  loc = bitnumber/8;
@@ -257,14 +256,12 @@ inline TBits::TReference& TBits::TReference::operator=(const TReference& rhs)
    fBits.SetBitNumber(fPos,rhs.fBits.TestBitNumber(rhs.fPos)); return *this;
 }
 
-#ifndef __CINT__
 inline Bool_t TBits::TReference::operator~() const
 {
    // Flips the bit.
 
    return !fBits.TestBitNumber(fPos);
 }
-#endif
 
 inline TBits::TReference::operator Bool_t() const
 {

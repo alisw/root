@@ -30,13 +30,9 @@
 
 
 
-#ifndef ROOT_Math_IFunction
 #include "Math/IFunction.h"
-#endif
 
-#ifndef ROOT_Math_WrappedFunction
 #include "Math/WrappedFunction.h"
-#endif
 
 #include <vector>
 
@@ -235,7 +231,9 @@ namespace Math {
     /// Return the status of last root finding
     int Status() const { return fStatus; }
 
-    /// Return the algorithm name
+    /// Return the algorithm name used for solving
+    /// Note the name is available only after having called solved
+    /// Otherwise an empyty string is returned
     const char * Name() const;
 
     /*

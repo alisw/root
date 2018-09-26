@@ -25,19 +25,19 @@
 #endif
 
 // ROOT integration
-#include "RConfig.h"
+#include <ROOT/RConfig.h>
 #ifdef R__BYTESWAP
 #ifndef LITTLE_ENDIAN
 #define LITTLE_ENDIAN 1
 #endif // LITTLE_ENDIAN
-#include "Byteswap.h"
-#define bswap_16(x)   Rbswap_16((x))
-#define bswap_32(x)   Rbswap_32((x))
 #else // R__BYTESWAP
 #ifdef LITTLE_ENDIAN
 #undef LITTLE_ENDIAN
 #endif // LITTLE_ENDIAN
 #endif // R__BYTESWAP
+#include "Byteswap.h"
+#define bswap_16(x)   Rbswap_16((x))
+#define bswap_32(x)   Rbswap_32((x))
 
 // References:
 //
@@ -236,29 +236,27 @@ namespace mathtext {
       if(magic_number[0] == '\200') {
          // IBM PC format printer font binary
 
-         // FIXME: Maybe the real name can be parsed out of the
-         // file
-         font_name = "";
-
          struct pfb_segment_header_s segment_header;
          size_t offset = 0;
 
-         segment_header.type = 0;
+         // The two char elements of struct
+         // pfb_segment_header_s are most likely aligned to
+         // larger than 1 byte boundaries, so copy all the
+         // elements individually
+         segment_header.always_128 = font_data[offset];
+         segment_header.type = font_data[offset + 1];
+
          while (segment_header.type != TYPE_EOF) {
-            // The two char elements of struct
-            // pfb_segment_header_s are most likely aligned to
-            // larger than 1 byte boundaries, so copy all the
-            // elements individually
-            segment_header.always_128 = font_data[offset];
-            segment_header.type = font_data[offset + 1];
             memcpy(&segment_header.length, &font_data[offset + 2],
                    sizeof(unsigned int));
             offset += sizeof(unsigned int) + 2;
-#ifdef LITTLE_ENDIAN
+#ifndef LITTLE_ENDIAN
             segment_header.length =
             bswap_32(segment_header.length);
 #endif // LITTLE_ENDIAN
+            const char *match = "/FontName";
             char *buffer = new char[segment_header.length];
+            char *fname;
 
             memcpy(buffer, &font_data[offset],
                    segment_header.length);
@@ -278,6 +276,25 @@ namespace mathtext {
                      buffer[segment_header.length - 1] = '\n';
                   }
                   ret.append(buffer, segment_header.length);
+                  fname = std::search(buffer, buffer+segment_header.length,
+                                      match, match+9);
+                  if (fname) {
+                     fname += 9;
+                     while (fname < buffer + segment_header.length &&
+                            isspace(*fname)) {
+                        fname++;
+                     }
+                     if (fname < buffer + segment_header.length &&
+                         *fname == '/') {
+                        fname++;
+                     }
+                     int len = 0;
+                     while (fname + len < buffer + segment_header.length &&
+                            isgraph(*(fname + len))) {
+                        len++;
+                     }
+                     font_name.assign(fname, len);
+                  }
                   break;
                case TYPE_BINARY:
                   append_asciihex(
@@ -289,6 +306,9 @@ namespace mathtext {
             }
 
             delete [] buffer;
+
+            segment_header.always_128 = font_data[offset];
+            segment_header.type = font_data[offset + 1];
          }
 
          return ret;
@@ -423,9 +443,8 @@ namespace mathtext {
 
       unsigned int char_strings_count = 0;
 
-      for (std::vector<std::string>::const_iterator iterator =
-           char_strings.begin();
-           iterator < char_strings.end(); iterator++) {
+      for (std::vector<std::string>::const_iterator iterator = char_strings.begin(); iterator < char_strings.end();
+           ++iterator) {
          if (!iterator->empty()) {
             char_strings_count++;
          }

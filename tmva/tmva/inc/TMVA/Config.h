@@ -39,11 +39,11 @@
 #if __cplusplus > 199711L
 #include <atomic>
 #endif
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
+
+#ifdef R__USE_IMT
+#include <ROOT/TThreadExecutor.hxx>
 #endif
 
 namespace TMVA {
@@ -51,7 +51,12 @@ namespace TMVA {
    class MsgLogger;
 
    class Config {
-               
+   protected:
+#ifdef R__USE_IMT
+      ROOT::TThreadExecutor fPool;   // Pool for multi-thread execution
+#endif
+      UInt_t fNCpu = 0;              // number of machine CPU
+
    public:
 
       static Config& Instance();
@@ -68,7 +73,14 @@ namespace TMVA {
 
       Bool_t DrawProgressBar() const { return fDrawProgressBar; }
       void   SetDrawProgressBar( Bool_t d ) { fDrawProgressBar = d; }
+      UInt_t GetNCpu() { return fNCpu; }
 
+      UInt_t GetNumWorkers() const { return fNWorkers; }
+      void   SetNumWorkers(UInt_t n) { fNWorkers = n; }
+
+#ifdef R__USE_IMT
+      ROOT::TThreadExecutor &GetThreadExecutor() { return fPool; }
+#endif
    public:
 
       class VariablePlotting;
@@ -118,20 +130,22 @@ namespace TMVA {
    private:
 
 #if __cplusplus > 199711L
+      std::atomic<Bool_t> fDrawProgressBar;       // draw progress bar to indicate training evolution
+      std::atomic<UInt_t> fNWorkers;              // Default number of workers for multi-process jobs
       std::atomic<Bool_t> fUseColoredConsole;     // coloured standard output
       std::atomic<Bool_t> fSilent;                // no output at all
       std::atomic<Bool_t> fWriteOptionsReference; // if set true: Configurable objects write file with option reference
-      std::atomic<Bool_t> fDrawProgressBar;       // draw progress bar to indicate training evolution
 #else
+      Bool_t fDrawProgressBar;       // draw progress bar to indicate training evolution
+      UInt_t fNWorkers;              // Default number of workers for multi-process jobs
       Bool_t fUseColoredConsole;     // coloured standard output
       Bool_t fSilent;                // no output at all
       Bool_t fWriteOptionsReference; // if set true: Configurable objects write file with option reference
-      Bool_t fDrawProgressBar;       // draw progress bar to indicate training evolution
 #endif
       mutable MsgLogger* fLogger;   // message logger
       MsgLogger& Log() const { return *fLogger; }
          
-      ClassDef(Config,0) // Singleton class for global configuration settings
+      ClassDef(Config,0); // Singleton class for global configuration settings
    };
 
    // global accessor

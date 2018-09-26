@@ -14,9 +14,10 @@
 #define ROOTTUTDIR    "@tutdir@"
 #define ROOTSRCDIR    "@srcdir@"
 #define ROOTICONPATH  "@iconpath@"
-#define EXTRAICONPATH "@extraiconpath@"
 #define TTFFONTDIR    "@ttffontdir@"
 #endif
+
+#define EXTRAICONPATH "@extraiconpath@"
 
 #@setresuid@ R__HAS_SETRESUID   /**/
 #@hasmathmore@ R__HAS_MATHMORE   /**/
@@ -24,13 +25,37 @@
 #@hasxft@ R__HAS_XFT    /**/
 #@hascocoa@ R__HAS_COCOA    /**/
 #@hasvc@ R__HAS_VC    /**/
+#@hasvdt@ R__HAS_VDT    /**/
+#@hasveccore@ R__HAS_VECCORE    /**/
 #@usec++11@ R__USE_CXX11    /**/
 #@usec++14@ R__USE_CXX14    /**/
+#@usec++17@ R__USE_CXX17    /**/
+#@usecxxmodules@ R__USE_CXXMODULES   /**/
 #@uselibc++@ R__USE_LIBCXX    /**/
 #@hasstdstringview@ R__HAS_STD_STRING_VIEW   /**/
 #@hasstdexpstringview@ R__HAS_STD_EXPERIMENTAL_STRING_VIEW   /**/
 #@hasstodstringview@ R__HAS_STOD_STRING_VIEW /**/
+#@hasstdapply@ R__HAS_STD_APPLY /**/
+#@hasstdinvoke@ R__HAS_STD_INVOKE /**/
+#@hasstdindexsequence@ R__HAS_STD_INDEX_SEQUENCE /**/
+#@has_found_attribute_always_inline@ R__HAS_ATTRIBUTE_ALWAYS_INLINE /**/
 #@hasllvm@ R__EXTERN_LLVMDIR @llvmdir@
 #@useimt@ R__USE_IMT   /**/
+#@memory_term@ R__COMPLETE_MEM_TERMINATION /**/
+#@hascefweb@ R__HAS_CEFWEB  /**/
+#@hasqt5webengine@ R__HAS_QT5WEB  /**/
+
+#if defined(R__HAS_VECCORE) && defined(R__HAS_VC)
+#ifndef VECCORE_ENABLE_VC
+#define VECCORE_ENABLE_VC
+#endif
+#endif
+
+#@uselz4@ R__HAS_DEFAULT_LZ4  /**/
+#@usezlib@ R__HAS_DEFAULT_ZLIB  /**/
+#@uselzma@ R__HAS_DEFAULT_LZMA  /**/
+
+#@hastmvacpu@ R__HAS_TMVACPU /**/
+#@hastmvagpu@ R__HAS_TMVAGPU /**/
 
 #endif

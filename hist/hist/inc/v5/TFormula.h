@@ -19,19 +19,13 @@
 //                                                                      //
 // TFormula                                                             //
 //                                                                      //
-// The old formula base class  f(x,y,z,par)                                 //
-// mantained for backward compatibility and TTree usage                  //
+// The old formula base class  f(x,y,z,par)                             //
+// mantained for backward compatibility and TTree usage                 //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TBits
 #include "TBits.h"
-#endif
-#ifndef ROOT_TObjArray
 #include "TObjArray.h"
-#endif
 
 
 const Int_t kMAXFOUND = 500;
@@ -67,7 +61,7 @@ protected:
    Short_t fOldAction;        // temporary variable used during optimization
 };
 
-      
+
 class TFormula : public TNamed {
 
 protected:
@@ -280,5 +274,5 @@ public:
    } // end namespace v5
 
 } // end namespace ROOT
-      
+
 #endif

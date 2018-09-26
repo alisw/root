@@ -1,4 +1,4 @@
-//===-------------------- Graph.h - PBQP Graph ------------------*- C++ -*-===//
+//===- Graph.h - PBQP Graph -------------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,24 +11,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #ifndef LLVM_CODEGEN_PBQP_GRAPH_H
 #define LLVM_CODEGEN_PBQP_GRAPH_H
 
-#include "llvm/ADT/ilist.h"
-#include "llvm/ADT/ilist_node.h"
-#include "llvm/Support/Debug.h"
-#include <list>
-#include <map>
-#include <set>
+#include "llvm/ADT/STLExtras.h"
+#include <algorithm>
+#include <cassert>
+#include <iterator>
+#include <limits>
+#include <vector>
 
 namespace llvm {
 namespace PBQP {
 
   class GraphBase {
   public:
-    typedef unsigned NodeId;
-    typedef unsigned EdgeId;
+    using NodeId = unsigned;
+    using EdgeId = unsigned;
 
     /// @brief Returns a value representing an invalid (non-existent) node.
     static NodeId invalidNodeId() {
@@ -47,31 +46,31 @@ namespace PBQP {
   template <typename SolverT>
   class Graph : public GraphBase {
   private:
-    typedef typename SolverT::CostAllocator CostAllocator;
+    using CostAllocator = typename SolverT::CostAllocator;
+
   public:
-    typedef typename SolverT::RawVector RawVector;
-    typedef typename SolverT::RawMatrix RawMatrix;
-    typedef typename SolverT::Vector Vector;
-    typedef typename SolverT::Matrix Matrix;
-    typedef typename CostAllocator::VectorPtr VectorPtr;
-    typedef typename CostAllocator::MatrixPtr MatrixPtr;
-    typedef typename SolverT::NodeMetadata NodeMetadata;
-    typedef typename SolverT::EdgeMetadata EdgeMetadata;
-    typedef typename SolverT::GraphMetadata GraphMetadata;
+    using RawVector = typename SolverT::RawVector;
+    using RawMatrix = typename SolverT::RawMatrix;
+    using Vector = typename SolverT::Vector;
+    using Matrix = typename SolverT::Matrix;
+    using VectorPtr = typename CostAllocator::VectorPtr;
+    using MatrixPtr = typename CostAllocator::MatrixPtr;
+    using NodeMetadata = typename SolverT::NodeMetadata;
+    using EdgeMetadata = typename SolverT::EdgeMetadata;
+    using GraphMetadata = typename SolverT::GraphMetadata;
 
   private:
-
     class NodeEntry {
     public:
-      typedef std::vector<EdgeId> AdjEdgeList;
-      typedef AdjEdgeList::size_type AdjEdgeIdx;
-      typedef AdjEdgeList::const_iterator AdjEdgeItr;
+      using AdjEdgeList = std::vector<EdgeId>;
+      using AdjEdgeIdx = AdjEdgeList::size_type;
+      using AdjEdgeItr = AdjEdgeList::const_iterator;
+
+      NodeEntry(VectorPtr Costs) : Costs(std::move(Costs)) {}
 
       static AdjEdgeIdx getInvalidAdjEdgeIdx() {
         return std::numeric_limits<AdjEdgeIdx>::max();
       }
-
-      NodeEntry(VectorPtr Costs) : Costs(Costs) {}
 
       AdjEdgeIdx addAdjEdgeId(EdgeId EId) {
         AdjEdgeIdx Idx = AdjEdgeIds.size();
@@ -95,6 +94,7 @@ namespace PBQP {
 
       VectorPtr Costs;
       NodeMetadata Metadata;
+
     private:
       AdjEdgeList AdjEdgeIds;
     };
@@ -102,18 +102,11 @@ namespace PBQP {
     class EdgeEntry {
     public:
       EdgeEntry(NodeId N1Id, NodeId N2Id, MatrixPtr Costs)
-        : Costs(Costs) {
+          : Costs(std::move(Costs)) {
         NIds[0] = N1Id;
         NIds[1] = N2Id;
         ThisEdgeAdjIdxs[0] = NodeEntry::getInvalidAdjEdgeIdx();
         ThisEdgeAdjIdxs[1] = NodeEntry::getInvalidAdjEdgeIdx();
-      }
-
-      void invalidate() {
-        NIds[0] = NIds[1] = Graph::invalidNodeId();
-        ThisEdgeAdjIdxs[0] = ThisEdgeAdjIdxs[1] =
-          NodeEntry::getInvalidAdjEdgeIdx();
-        Costs = nullptr;
       }
 
       void connectToN(Graph &G, EdgeId ThisEdgeId, unsigned NIdx) {
@@ -121,15 +114,6 @@ namespace PBQP {
                "Edge already connected to NIds[NIdx].");
         NodeEntry &N = G.getNode(NIds[NIdx]);
         ThisEdgeAdjIdxs[NIdx] = N.addAdjEdgeId(ThisEdgeId);
-      }
-
-      void connectTo(Graph &G, EdgeId ThisEdgeId, NodeId NId) {
-        if (NId == NIds[0])
-          connectToN(G, ThisEdgeId, 0);
-        else {
-          assert(NId == NIds[1] && "Edge does not connect NId.");
-          connectToN(G, ThisEdgeId, 1);
-        }
       }
 
       void connect(Graph &G, EdgeId ThisEdgeId) {
@@ -165,8 +149,10 @@ namespace PBQP {
 
       NodeId getN1Id() const { return NIds[0]; }
       NodeId getN2Id() const { return NIds[1]; }
+
       MatrixPtr Costs;
       EdgeMetadata Metadata;
+
     private:
       NodeId NIds[2];
       typename NodeEntry::AdjEdgeIdx ThisEdgeAdjIdxs[2];
@@ -176,17 +162,19 @@ namespace PBQP {
 
     GraphMetadata Metadata;
     CostAllocator CostAlloc;
-    SolverT *Solver;
+    SolverT *Solver = nullptr;
 
-    typedef std::vector<NodeEntry> NodeVector;
-    typedef std::vector<NodeId> FreeNodeVector;
+    using NodeVector = std::vector<NodeEntry>;
+    using FreeNodeVector = std::vector<NodeId>;
     NodeVector Nodes;
     FreeNodeVector FreeNodeIds;
 
-    typedef std::vector<EdgeEntry> EdgeVector;
-    typedef std::vector<EdgeId> FreeEdgeVector;
+    using EdgeVector = std::vector<EdgeEntry>;
+    using FreeEdgeVector = std::vector<EdgeId>;
     EdgeVector Edges;
     FreeEdgeVector FreeEdgeIds;
+
+    Graph(const Graph &Other) {}
 
     // ----- INTERNAL METHODS -----
 
@@ -235,20 +223,18 @@ namespace PBQP {
       return EId;
     }
 
-    Graph(const Graph &Other) {}
     void operator=(const Graph &Other) {}
 
   public:
-
-    typedef typename NodeEntry::AdjEdgeItr AdjEdgeItr;
+    using AdjEdgeItr = typename NodeEntry::AdjEdgeItr;
 
     class NodeItr {
     public:
-      typedef std::forward_iterator_tag iterator_category;
-      typedef NodeId value_type;
-      typedef int difference_type;
-      typedef NodeId* pointer;
-      typedef NodeId& reference;
+      using iterator_category = std::forward_iterator_tag;
+      using value_type = NodeId;
+      using difference_type = int;
+      using pointer = NodeId *;
+      using reference = NodeId &;
 
       NodeItr(NodeId CurNId, const Graph &G)
         : CurNId(CurNId), EndNId(G.Nodes.size()), FreeNodeIds(G.FreeNodeIds) {
@@ -262,9 +248,7 @@ namespace PBQP {
 
     private:
       NodeId findNextInUse(NodeId NId) const {
-        while (NId < EndNId &&
-               std::find(FreeNodeIds.begin(), FreeNodeIds.end(), NId) !=
-               FreeNodeIds.end()) {
+        while (NId < EndNId && is_contained(FreeNodeIds, NId)) {
           ++NId;
         }
         return NId;
@@ -288,9 +272,7 @@ namespace PBQP {
 
     private:
       EdgeId findNextInUse(EdgeId EId) const {
-        while (EId < EndEId &&
-               std::find(FreeEdgeIds.begin(), FreeEdgeIds.end(), EId) !=
-               FreeEdgeIds.end()) {
+        while (EId < EndEId && is_contained(FreeEdgeIds, EId)) {
           ++EId;
         }
         return EId;
@@ -302,52 +284,65 @@ namespace PBQP {
 
     class NodeIdSet {
     public:
-      NodeIdSet(const Graph &G) : G(G) { }
+      NodeIdSet(const Graph &G) : G(G) {}
+
       NodeItr begin() const { return NodeItr(0, G); }
       NodeItr end() const { return NodeItr(G.Nodes.size(), G); }
+
       bool empty() const { return G.Nodes.empty(); }
+
       typename NodeVector::size_type size() const {
         return G.Nodes.size() - G.FreeNodeIds.size();
       }
+
     private:
       const Graph& G;
     };
 
     class EdgeIdSet {
     public:
-      EdgeIdSet(const Graph &G) : G(G) { }
+      EdgeIdSet(const Graph &G) : G(G) {}
+
       EdgeItr begin() const { return EdgeItr(0, G); }
       EdgeItr end() const { return EdgeItr(G.Edges.size(), G); }
+
       bool empty() const { return G.Edges.empty(); }
+
       typename NodeVector::size_type size() const {
         return G.Edges.size() - G.FreeEdgeIds.size();
       }
+
     private:
       const Graph& G;
     };
 
     class AdjEdgeIdSet {
     public:
-      AdjEdgeIdSet(const NodeEntry &NE) : NE(NE) { }
+      AdjEdgeIdSet(const NodeEntry &NE) : NE(NE) {}
+
       typename NodeEntry::AdjEdgeItr begin() const {
         return NE.getAdjEdgeIds().begin();
       }
+
       typename NodeEntry::AdjEdgeItr end() const {
         return NE.getAdjEdgeIds().end();
       }
+
       bool empty() const { return NE.getAdjEdgeIds().empty(); }
+
       typename NodeEntry::AdjEdgeList::size_type size() const {
         return NE.getAdjEdgeIds().size();
       }
+
     private:
       const NodeEntry &NE;
     };
 
     /// @brief Construct an empty PBQP graph.
-    Graph() : Solver(nullptr) {}
+    Graph() = default;
 
     /// @brief Construct an empty PBQP graph with the given graph metadata.
-    Graph(GraphMetadata Metadata) : Metadata(Metadata), Solver(nullptr) {}
+    Graph(GraphMetadata Metadata) : Metadata(std::move(Metadata)) {}
 
     /// @brief Get a reference to the graph metadata.
     GraphMetadata& getMetadata() { return Metadata; }
@@ -507,14 +502,14 @@ namespace PBQP {
       return getNode(NId).getAdjEdgeIds().size();
     }
 
-    /// @brief Set an edge's cost matrix.
+    /// @brief Update an edge's cost matrix.
     /// @param EId Edge id.
     /// @param Costs New cost matrix.
     template <typename OtherMatrixT>
-    void setEdgeCosts(EdgeId EId, OtherMatrixT Costs) {
+    void updateEdgeCosts(EdgeId EId, OtherMatrixT Costs) {
       MatrixPtr AllocatedCosts = CostAlloc.getMatrix(std::move(Costs));
       if (Solver)
-        Solver->handleSetEdgeCosts(EId, *AllocatedCosts);
+        Solver->handleUpdateCosts(EId, *AllocatedCosts);
       getEdge(EId).Costs = AllocatedCosts;
     }
 
@@ -548,14 +543,14 @@ namespace PBQP {
     /// @brief Get the first node connected to this edge.
     /// @param EId Edge id.
     /// @return The first node connected to the given edge.
-    NodeId getEdgeNode1Id(EdgeId EId) {
+    NodeId getEdgeNode1Id(EdgeId EId) const {
       return getEdge(EId).getN1Id();
     }
 
     /// @brief Get the second node connected to this edge.
     /// @param EId Edge id.
     /// @return The second node connected to the given edge.
-    NodeId getEdgeNode2Id(EdgeId EId) {
+    NodeId getEdgeNode2Id(EdgeId EId) const {
       return getEdge(EId).getN2Id();
     }
 
@@ -672,72 +667,9 @@ namespace PBQP {
       Edges.clear();
       FreeEdgeIds.clear();
     }
-
-    /// @brief Dump a graph to an output stream.
-    template <typename OStream>
-    void dumpToStream(OStream &OS) {
-      OS << nodeIds().size() << " " << edgeIds().size() << "\n";
-
-      for (auto NId : nodeIds()) {
-        const Vector& V = getNodeCosts(NId);
-        OS << "\n" << V.getLength() << "\n";
-        assert(V.getLength() != 0 && "Empty vector in graph.");
-        OS << V[0];
-        for (unsigned i = 1; i < V.getLength(); ++i) {
-          OS << " " << V[i];
-        }
-        OS << "\n";
-      }
-
-      for (auto EId : edgeIds()) {
-        NodeId N1Id = getEdgeNode1Id(EId);
-        NodeId N2Id = getEdgeNode2Id(EId);
-        assert(N1Id != N2Id && "PBQP graphs shound not have self-edges.");
-        const Matrix& M = getEdgeCosts(EId);
-        OS << "\n" << N1Id << " " << N2Id << "\n"
-           << M.getRows() << " " << M.getCols() << "\n";
-        assert(M.getRows() != 0 && "No rows in matrix.");
-        assert(M.getCols() != 0 && "No cols in matrix.");
-        for (unsigned i = 0; i < M.getRows(); ++i) {
-          OS << M[i][0];
-          for (unsigned j = 1; j < M.getCols(); ++j) {
-            OS << " " << M[i][j];
-          }
-          OS << "\n";
-        }
-      }
-    }
-
-    /// @brief Dump this graph to dbgs().
-    void dump() {
-      dumpToStream(dbgs());
-    }
-
-    /// @brief Print a representation of this graph in DOT format.
-    /// @param OS Output stream to print on.
-    template <typename OStream>
-    void printDot(OStream &OS) {
-      OS << "graph {\n";
-      for (auto NId : nodeIds()) {
-        OS << "  node" << NId << " [ label=\""
-           << NId << ": " << getNodeCosts(NId) << "\" ]\n";
-      }
-      OS << "  edge [ len=" << nodeIds().size() << " ]\n";
-      for (auto EId : edgeIds()) {
-        OS << "  node" << getEdgeNode1Id(EId)
-           << " -- node" << getEdgeNode2Id(EId)
-           << " [ label=\"";
-        const Matrix &EdgeCosts = getEdgeCosts(EId);
-        for (unsigned i = 0; i < EdgeCosts.getRows(); ++i) {
-          OS << EdgeCosts.getRowAsVector(i) << "\\n";
-        }
-        OS << "\" ]\n";
-      }
-      OS << "}\n";
-    }
   };
 
-}  // namespace PBQP
-}  // namespace llvm
+} // end namespace PBQP
+} // end namespace llvm
 
 #endif // LLVM_CODEGEN_PBQP_GRAPH_HPP

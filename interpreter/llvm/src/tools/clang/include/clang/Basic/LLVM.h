@@ -30,6 +30,7 @@ namespace llvm {
   class Twine;
   template<typename T> class ArrayRef;
   template<typename T> class MutableArrayRef;
+  template<typename T> class OwningArrayRef;
   template<unsigned InternalLen> class SmallString;
   template<typename T, unsigned N> class SmallVector;
   template<typename T> class SmallVectorImpl;
@@ -42,9 +43,9 @@ namespace llvm {
   template <typename T> class IntrusiveRefCntPtr;
   template <typename T> struct IntrusiveRefCntPtrInfo;
   template <class Derived> class RefCountedBase;
-  class RefCountedBaseVPTR;
 
   class raw_ostream;
+  class raw_pwrite_stream;
   // TODO: DenseMap, ...
 }
 
@@ -64,6 +65,7 @@ namespace clang {
   using llvm::Twine;
   using llvm::ArrayRef;
   using llvm::MutableArrayRef;
+  using llvm::OwningArrayRef;
   using llvm::SmallString;
   using llvm::SmallVector;
   using llvm::SmallVectorImpl;
@@ -73,9 +75,9 @@ namespace clang {
   using llvm::IntrusiveRefCntPtr;
   using llvm::IntrusiveRefCntPtrInfo;
   using llvm::RefCountedBase;
-  using llvm::RefCountedBaseVPTR;
 
   using llvm::raw_ostream;
+  using llvm::raw_pwrite_stream;
 } // end namespace clang.
 
 #endif

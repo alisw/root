@@ -21,12 +21,8 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TMethodCall
 #include "TMethodCall.h"
-#endif
 #include "Foption.h"
 
 
@@ -96,7 +92,6 @@ public:
    virtual void      PrintResults(Int_t level, Double_t amin) const = 0;
    virtual void      ReleaseParameter(Int_t ipar) = 0;
    virtual Double_t *SetCache(Int_t npoints, Int_t psize);
-   virtual void      SetFCN(void *fcn);
    virtual void      SetFCN(void (*fcn)(Int_t &, Double_t *, Double_t &f, Double_t *, Int_t));
    virtual void      SetFitMethod(const char *name) = 0;
    virtual void      SetFitOption(Foption_t option) {fOption = option;}

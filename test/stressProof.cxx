@@ -1722,6 +1722,7 @@ Int_t PT_CheckSimple(TQueryResult *qr, Long64_t nevt, Int_t nhist)
       hist[i] = dynamic_cast<TH1F *>(TProof::GetOutput(Form("h%d",i), out));
       if (!hist[i]) {
          printf("\n >>> Test failure: 'h%d' histo not found\n", i);
+         delete[] hist;
          return -1;
       }
    }
@@ -1733,6 +1734,7 @@ Int_t PT_CheckSimple(TQueryResult *qr, Long64_t nevt, Int_t nhist)
       Double_t rms = hist[i]->GetRMS();
       if (TMath::Abs(ave) > 5 * rms / TMath::Sqrt(hist[i]->GetEntries())) {
          printf("\n >>> Test failure: 'h%d' histo: mean > 5 * RMS/Sqrt(N)\n", i);
+         delete[] hist;
          return -1;
       }
    }
@@ -3650,7 +3652,7 @@ Int_t PT_AdminFunc(void *, RunTimes &tt)
       return -1;
    }
    // Reference checksum
-   std::auto_ptr<TMD5> testMacroMd5(testMacro.Checksum());
+   std::unique_ptr<TMD5> testMacroMd5(testMacro.Checksum());
    if (!testMacroMd5.get()) {
       // MD5 sum not calculated
       printf("\n >>> Test failure: could not calculate the md5 sum of the test macro\n");
@@ -3719,7 +3721,7 @@ Int_t PT_AdminFunc(void *, RunTimes &tt)
       macroMore.GetListOfLines()->Remove(macroMore.GetListOfLines()->First());
       os = (TObjString *) macroMore.GetListOfLines()->First();
    }
-   std::auto_ptr<TMD5> testMoreMd5(macroMore.Checksum());
+   std::unique_ptr<TMD5> testMoreMd5(macroMore.Checksum());
    if (!testMoreMd5.get()) {
       // MD5 sum not calculated
       printf("\n >>> Test failure: could not calculate the md5 sum of the 'more' result\n");

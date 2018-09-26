@@ -18,7 +18,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#include "RConfig.h"
+#include <ROOT/RConfig.h>
 
 // avoid warning due to wrong bzero prototype (used by FD_ZERO macro)
 #include <stdio.h>
@@ -87,6 +87,8 @@ static void InitSelect(int nsock)
 int NetParSend(const void *buf, int len)
 {
    int i, alen = len, nsock = gParallel;
+
+   if (!buf) return -1;
 
    // If data buffer is < 4K use only one socket
    if (len < 4096)

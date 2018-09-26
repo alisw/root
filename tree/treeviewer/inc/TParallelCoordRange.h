@@ -12,13 +12,9 @@
 #ifndef ROOT_TParallelCoordRange
 #define ROOT_TParallelCoordRange
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
 
-#ifndef ROOT_TAttLine
 #include "TAttLine.h"
-#endif
 
 class TParallelCoordVar;
 class TParallelCoord;
@@ -28,7 +24,7 @@ class TString;
 
 class TParallelCoordRange : public TNamed, public TAttLine {
 public:
-   enum {
+   enum EStatusBits {
       kShowOnPad = BIT(15),
       kLiveUpdate = BIT(16)
    };
@@ -74,12 +70,8 @@ public:
 #ifndef ROOT_TParallelCoordSelect
 #define ROOT_TParallelCoordSelect
 
-#ifndef ROOT_TAttLine
 #include "TAttLine.h"
-#endif
-#ifndef ROOT_TList
 #include "TList.h"
-#endif
 
 class TParallelCoord;
 class TParallelCoordRange;

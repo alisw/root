@@ -27,6 +27,8 @@ else()
   set(nmcxxflags "${CMAKE_CXX_FLAGS}")
 endif()
 
+string(REPLACE "-std=c++14" "" nmcxxflags "${nmcxxflags}")
+
 # Build iconv
 
 add_custom_command( OUTPUT ${iconvliba} ${iconvdlla}
@@ -81,29 +83,18 @@ add_custom_command( OUTPUT ${gdklib} ${gdkdll}
 add_custom_target(GDKLIB DEPENDS ${gdklib})
 set_target_properties(GDKLIB PROPERTIES FOLDER Builtins)
 
-#
-# ROOT Dicts for the win32gdk library
-#
-
-ROOT_GENERATE_DICTIONARY(G__Win32gdk TGWin32.h TGWin32GL.h MODULE Win32gdk LINKDEF LinkDef.h)
-
-
-#
-# The library itself
-#
-
-ROOT_LINKER_LIBRARY(Win32gdk *.cxx *.c G__Win32gdk.cxx LIBRARIES Cling Core Graf ${FREETYPE_LIBRARIES} 
-					${gdklib} ${gliblib} Glu32.lib Opengl32.lib)
+ROOT_STANDARD_LIBRARY_PACKAGE(Win32gdk
+                              HEADERS TGWin32.h TGWin32GL.h
+                              SOURCES *.cxx *.c
+                              DICTIONARY_OPTIONS "-writeEmptyRootPCM"
+                              DEPENDENCIES Cling Core Graf
+                              LIBRARIES ${FREETYPE_LIBRARIES} ${gdklib} ${gliblib} Glu32.lib Opengl32.lib
+                              BUILTINS FREETYPE)
 
 add_dependencies(Win32gdk GDKLIB glib)
 
-if(builtin_freetype)
-  ROOT_ADD_BUILTIN_DEPENDENCIES(Win32gdk FREETYPE)
-endif()
-					
 install(FILES  ${gdkdlla}
 			   ${glibdlla}
 			   ${iconvdlla}
 			   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-ROOT_INSTALL_HEADERS()

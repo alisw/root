@@ -25,7 +25,6 @@
 #include "Fit/FitConfig.h"
 #include "Fit/FitResult.h"
 #include "Math/Error.h"
-#include "TF1.h"
 
 #include <memory>
 
@@ -65,14 +64,14 @@ Fitter::Fitter(const std::shared_ptr<FitResult> & result) :
 {
    if (result->fFitFunc)  SetFunction(*fResult->fFitFunc); // this will create also the configuration
    if (result->fObjFunc)  fObjFunction = fResult->fObjFunc;
-   if (result->fFitData)  fData = fResult->fFitData; 
+   if (result->fFitData)  fData = fResult->fFitData;
 }
-      
+
 Fitter::~Fitter()
 {
    // Destructor implementation.
 
-   // nothing to do since we use shared_ptr now 
+   // nothing to do since we use shared_ptr now
 }
 
 Fitter::Fitter(const Fitter & rhs)
@@ -91,7 +90,7 @@ Fitter & Fitter::operator = (const Fitter &rhs)
 //    fBinFit = rhs.fBinFit;
 //    fResult = rhs.fResult;
 //    fConfig = rhs.fConfig;
-//    // function is copied and managed by FitResult (maybe should use an auto_ptr)
+//    // function is copied and managed by FitResult (maybe should use an unique_ptr)
 //    fFunc = fResult.ModelFunction();
 //    if (rhs.fFunc != 0 && fResult.ModelFunction() == 0) { // case no fit has been done yet - then clone
 //       if (fFunc) delete fFunc;
@@ -125,8 +124,8 @@ void Fitter::SetFunction(const IModelFunction & func, bool useGradient)
 
    // creates the parameter  settings
    fConfig.CreateParamsSettings(*fFunc);
+   fFunc_v.reset();
 }
-
 
 void Fitter::SetFunction(const IModel1DFunction & func, bool useGradient)
 {
@@ -149,6 +148,7 @@ void Fitter::SetFunction(const IModel1DFunction & func, bool useGradient)
 
    // creates the parameter  settings
    fConfig.CreateParamsSettings(*fFunc);
+   fFunc_v.reset();
 }
 
 void Fitter::SetFunction(const IGradModelFunction & func, bool useGradient)
@@ -161,6 +161,7 @@ void Fitter::SetFunction(const IGradModelFunction & func, bool useGradient)
 
    // creates the parameter  settings
    fConfig.CreateParamsSettings(*fFunc);
+   fFunc_v.reset();
 }
 
 
@@ -173,6 +174,7 @@ void Fitter::SetFunction(const IGradModel1DFunction & func, bool useGradient)
 
    // creates the parameter  settings
    fConfig.CreateParamsSettings(*fFunc);
+   fFunc_v.reset();
 }
 
 
@@ -199,7 +201,7 @@ bool Fitter::SetFCN(const ROOT::Math::IMultiGenFunction & fcn, const double * pa
 
    // keep also a copy of FCN function and set this in minimizer so they will be managed together
    // (remember that cloned copy will still depends on data and model function pointers)
-   fObjFunction = std::auto_ptr<ROOT::Math::IMultiGenFunction> ( fcn.Clone() );
+   fObjFunction = std::unique_ptr<ROOT::Math::IMultiGenFunction> ( fcn.Clone() );
 
    return true;
 }
@@ -298,7 +300,7 @@ bool Fitter::FitFCN() {
       return false;
    }
    // look if FCN s of a known type and we can get some modelfunction and data objects
-   ExamineFCN(); 
+   ExamineFCN();
    // init the minimizer
    if (!DoInitMinimizer() ) return false;
    // perform the minimization
@@ -314,8 +316,8 @@ bool Fitter::EvalFCN() {
       MATH_ERROR_MSG("Fitter::FitFCN","Objective function has not been set");
       return false;
    }
-   // create a Fit result from the fit configuration 
-   fResult = std::shared_ptr<ROOT::Fit::FitResult>(new ROOT::Fit::FitResult(fConfig) );
+   // create a Fit result from the fit configuration
+   fResult = std::make_shared<ROOT::Fit::FitResult>(fConfig);
    // evaluate one time the FCN
    double fcnval = (*fObjFunction)(fResult->GetParams() );
    // update fit result
@@ -324,133 +326,189 @@ bool Fitter::EvalFCN() {
    return true;
 }
 
+bool Fitter::DoLeastSquareFit(const ROOT::Fit::ExecutionPolicy &executionPolicy)
+{
 
-bool Fitter::DoLeastSquareFit() {
-   
    // perform a chi2 fit on a set of binned data
    std::shared_ptr<BinData> data = std::dynamic_pointer_cast<BinData>(fData);
-   assert(data); 
+   assert(data);
 
    // check function
-   if (!fFunc) {
-      MATH_ERROR_MSG("Fitter::DoLeastSquareFit","model function is not set");
+   if (!fFunc && !fFunc_v) {
+      MATH_ERROR_MSG("Fitter::DoLeastSquareFit", "model function is not set");
       return false;
-   }
+   } else {
 
 #ifdef DEBUG
-   std::cout << "Fitter ParamSettings " << Config().ParamsSettings()[3].IsBound() << " lower limit " <<  Config().ParamsSettings()[3].LowerLimit() << " upper limit " <<  Config().ParamsSettings()[3].UpperLimit() << std::endl;
+      std::cout << "Fitter ParamSettings " << Config().ParamsSettings()[3].IsBound() << " lower limit "
+                << Config().ParamsSettings()[3].LowerLimit() << " upper limit "
+                << Config().ParamsSettings()[3].UpperLimit() << std::endl;
 #endif
 
-   fBinFit = true;
-   fDataSize = data->Size();
+      fBinFit = true;
+      fDataSize = data->Size();
+      // check if fFunc provides gradient
+      if (!fUseGradient) {
+         // do minimzation without using the gradient
+         if (fFunc_v) {
+            Chi2FCN<BaseFunc, IModelFunction_v> chi2(data, fFunc_v, executionPolicy);
+            fFitType = chi2.Type();
+            return DoMinimization(chi2);
+         } else {
+            Chi2FCN<BaseFunc> chi2(data, fFunc, executionPolicy);
+            fFitType = chi2.Type();
+            return DoMinimization(chi2);
+         }
+      } else {
+         // use gradient
+         if (fConfig.MinimizerOptions().PrintLevel() > 0)
+            MATH_INFO_MSG("Fitter::DoLeastSquareFit", "use gradient from model function");
 
-   // check if fFunc provides gradient
-   if (!fUseGradient) {
-      // do minimzation without using the gradient
-      Chi2FCN<BaseFunc> chi2(data,fFunc);
-      fFitType = chi2.Type();
-      return DoMinimization (chi2);
-   }
-   else {
-      // use gradient
-      if (fConfig.MinimizerOptions().PrintLevel() > 0)
-         MATH_INFO_MSG("Fitter::DoLeastSquareFit","use gradient from model function");
-      std::shared_ptr<IGradModelFunction> gradFun = std::dynamic_pointer_cast<IGradModelFunction>(fFunc);
-      if (gradFun) {
-         Chi2FCN<BaseGradFunc> chi2(data,gradFun);
-         fFitType = chi2.Type();
-         return DoMinimization (chi2);
+         if (fFunc_v) {
+            std::shared_ptr<IGradModelFunction_v> gradFun = std::dynamic_pointer_cast<IGradModelFunction_v>(fFunc_v);
+            if (gradFun) {
+               Chi2FCN<BaseGradFunc, IModelFunction_v> chi2(data, gradFun);
+               fFitType = chi2.Type();
+               return DoMinimization(chi2);
+            }
+         } else {
+            std::shared_ptr<IGradModelFunction> gradFun = std::dynamic_pointer_cast<IGradModelFunction>(fFunc);
+            if (gradFun) {
+               Chi2FCN<BaseGradFunc> chi2(data, gradFun);
+               fFitType = chi2.Type();
+               return DoMinimization(chi2);
+            }
+         }
+         MATH_ERROR_MSG("Fitter::DoLeastSquareFit", "wrong type of function - it does not provide gradient");
       }
-      MATH_ERROR_MSG("Fitter::DoLeastSquareFit","wrong type of function - it does not provide gradient");
    }
    return false;
 }
 
-bool Fitter::DoBinnedLikelihoodFit(bool extended) {
+bool Fitter::DoBinnedLikelihoodFit(bool extended, const ROOT::Fit::ExecutionPolicy &executionPolicy)
+{
    // perform a likelihood fit on a set of binned data
    // The fit is extended (Poisson logl_ by default
 
    std::shared_ptr<BinData> data = std::dynamic_pointer_cast<BinData>(fData);
-   assert(data); 
+   assert(data);
 
-   bool  useWeight = fConfig.UseWeightCorrection();
+   bool useWeight = fConfig.UseWeightCorrection();
 
    // check function
-   if (!fFunc) {
-      MATH_ERROR_MSG("Fitter::DoLikelihoodFit","model function is not set");
+   if (!fFunc && !fFunc_v) {
+      MATH_ERROR_MSG("Fitter::DoBinnedLikelihoodFit", "model function is not set");
       return false;
    }
 
    // logl fit (error should be 0.5) set if different than default values (of 1)
-   if (fConfig.MinimizerOptions().ErrorDef() == gDefaultErrorDef ) {
+   if (fConfig.MinimizerOptions().ErrorDef() == gDefaultErrorDef) {
       fConfig.MinimizerOptions().SetErrorDef(0.5);
    }
 
-   if (useWeight && fConfig.MinosErrors() ) {
-      MATH_INFO_MSG("Fitter::DoLikelihoodFit","MINOS errors cannot be computed in weighted likelihood fits");
+   if (useWeight && fConfig.MinosErrors()) {
+      MATH_INFO_MSG("Fitter::DoBinnedLikelihoodFit", "MINOS errors cannot be computed in weighted likelihood fits");
       fConfig.SetMinosErrors(false);
    }
-
 
    fBinFit = true;
    fDataSize = data->Size();
 
-   // create a chi2 function to be used for the equivalent chi-square
-   Chi2FCN<BaseFunc> chi2(data,fFunc);
-
    if (!fUseGradient) {
       // do minimization without using the gradient
-      PoissonLikelihoodFCN<BaseFunc> logl(data,fFunc, useWeight, extended);
-      fFitType = logl.Type();
-      // do minimization
-      if (!DoMinimization (logl, &chi2) ) return false;
-      if (useWeight) {
-         logl.UseSumOfWeightSquare();
-         if (!ApplyWeightCorrection(logl) ) return false;
+      if (fFunc_v) {
+         // create a chi2 function to be used for the equivalent chi-square
+         Chi2FCN<BaseFunc, IModelFunction_v> chi2(data, fFunc_v);
+         PoissonLikelihoodFCN<BaseFunc, IModelFunction_v> logl(data, fFunc_v, useWeight, extended, executionPolicy);
+         fFitType = logl.Type();
+         // do minimization
+         if (!DoMinimization(logl, &chi2))
+            return false;
+         if (useWeight) {
+            logl.UseSumOfWeightSquare();
+            if (!ApplyWeightCorrection(logl))
+               return false;
+         }
+      } else {
+         // create a chi2 function to be used for the equivalent chi-square
+         Chi2FCN<BaseFunc> chi2(data, fFunc);
+         PoissonLikelihoodFCN<BaseFunc> logl(data, fFunc, useWeight, extended, executionPolicy);
+         fFitType = logl.Type();
+         // do minimization
+         if (!DoMinimization(logl, &chi2))
+            return false;
+         if (useWeight) {
+            logl.UseSumOfWeightSquare();
+            if (!ApplyWeightCorrection(logl))
+               return false;
+         }
       }
-   }
-   else {
-      if (fConfig.MinimizerOptions().PrintLevel() > 0)
-         MATH_INFO_MSG("Fitter::DoLikelihoodFit","use gradient from model function");
-      // check if fFunc provides gradient
-      std::shared_ptr<IGradModelFunction> gradFun = std::dynamic_pointer_cast<IGradModelFunction>(fFunc);
-      if (!gradFun) {
-         MATH_ERROR_MSG("Fitter::DoLikelihoodFit","wrong type of function - it does not provide gradient");
-         return false;
-      }
-      // use gradient for minimization
-      // not-extended is not impelemented in this case
-      if (!extended) {
-         MATH_WARN_MSG("Fitter::DoLikelihoodFit","Not-extended binned fit with gradient not yet supported - do an extended fit");
-      }
-      PoissonLikelihoodFCN<BaseGradFunc> logl(data,gradFun, useWeight, true);
-      fFitType = logl.Type();
-      // do minimization
-      if (!DoMinimization (logl, &chi2) ) return false;
-      if (useWeight) {
-         logl.UseSumOfWeightSquare();
-         if (!ApplyWeightCorrection(logl) ) return false;
+   } else {
+      if (fFunc_v) {
+         // create a chi2 function to be used for the equivalent chi-square
+         Chi2FCN<BaseFunc, IModelFunction_v> chi2(data, fFunc_v);
+         std::shared_ptr<IGradModelFunction_v> gradFun = std::dynamic_pointer_cast<IGradModelFunction_v>(fFunc_v);
+         if (!gradFun) {
+            MATH_ERROR_MSG("Fitter::DoBinnedLikelihoodFit", "wrong type of function - it does not provide gradient");
+            return false;
+         }
+         PoissonLikelihoodFCN<BaseGradFunc, IModelFunction_v> logl(data, gradFun, useWeight, true, executionPolicy);
+         fFitType = logl.Type();
+         // do minimization
+         if (!DoMinimization(logl, &chi2))
+            return false;
+         if (useWeight) {
+            logl.UseSumOfWeightSquare();
+            if (!ApplyWeightCorrection(logl))
+               return false;
+         }
+      } else {
+         // create a chi2 function to be used for the equivalent chi-square
+         Chi2FCN<BaseFunc> chi2(data, fFunc);
+         if (fConfig.MinimizerOptions().PrintLevel() > 0)
+            MATH_INFO_MSG("Fitter::DoLikelihoodFit", "use gradient from model function");
+         // check if fFunc provides gradient
+         std::shared_ptr<IGradModelFunction> gradFun = std::dynamic_pointer_cast<IGradModelFunction>(fFunc);
+         if (!gradFun) {
+            MATH_ERROR_MSG("Fitter::DoBinnedLikelihoodFit", "wrong type of function - it does not provide gradient");
+            return false;
+         }
+         // use gradient for minimization
+         // not-extended is not impelemented in this case
+         if (!extended) {
+            MATH_WARN_MSG("Fitter::DoBinnedLikelihoodFit",
+                          "Not-extended binned fit with gradient not yet supported - do an extended fit");
+         }
+         PoissonLikelihoodFCN<BaseGradFunc> logl(data, gradFun, useWeight, true, executionPolicy);
+         fFitType = logl.Type();
+         // do minimization
+         if (!DoMinimization(logl, &chi2))
+            return false;
+         if (useWeight) {
+            logl.UseSumOfWeightSquare();
+            if (!ApplyWeightCorrection(logl))
+               return false;
+         }
       }
    }
    return true;
 }
 
-
-bool Fitter::DoUnbinnedLikelihoodFit(bool extended) {
+bool Fitter::DoUnbinnedLikelihoodFit(bool extended, const ROOT::Fit::ExecutionPolicy &executionPolicy) {
    // perform a likelihood fit on a set of unbinned data
 
    std::shared_ptr<UnBinData> data = std::dynamic_pointer_cast<UnBinData>(fData);
-   assert(data); 
+   assert(data);
 
    bool useWeight = fConfig.UseWeightCorrection();
 
-   if (!fFunc) {
-      MATH_ERROR_MSG("Fitter::DoLikelihoodFit","model function is not set");
+   if (!fFunc && !fFunc_v) {
+      MATH_ERROR_MSG("Fitter::DoUnbinnedLikelihoodFit","model function is not set");
       return false;
    }
 
    if (useWeight && fConfig.MinosErrors() ) {
-      MATH_INFO_MSG("Fitter::DoLikelihoodFit","MINOS errors cannot be computed in weighted likelihood fits");
+      MATH_INFO_MSG("Fitter::DoUnbinnedLikelihoodFit","MINOS errors cannot be computed in weighted likelihood fits");
       fConfig.SetMinosErrors(false);
    }
 
@@ -470,34 +528,72 @@ bool Fitter::DoUnbinnedLikelihoodFit(bool extended) {
 
    if (!fUseGradient) {
       // do minimization without using the gradient
-      LogLikelihoodFCN<BaseFunc> logl(data,fFunc, useWeight, extended);
-      fFitType = logl.Type();
-      if (!DoMinimization (logl) ) return false;
-      if (useWeight) {
-         logl.UseSumOfWeightSquare();
-         if (!ApplyWeightCorrection(logl) ) return false;
-      }
-      return true;
-   }
-   else {
+     if (fFunc_v ){
+       LogLikelihoodFCN<BaseFunc, IModelFunction_v> logl(data, fFunc_v, useWeight, extended, executionPolicy);
+       fFitType = logl.Type();
+        if (!DoMinimization (logl) ) return false;
+        if (useWeight) {
+          logl.UseSumOfWeightSquare();
+          if (!ApplyWeightCorrection(logl) ) return false;
+        }
+        return true;
+     } else {
+        LogLikelihoodFCN<BaseFunc> logl(data, fFunc, useWeight, extended, executionPolicy);
+
+        fFitType = logl.Type();
+        if (!DoMinimization (logl) ) return false;
+        if (useWeight) {
+          logl.UseSumOfWeightSquare();
+          if (!ApplyWeightCorrection(logl) ) return false;
+        }
+        return true;
+     }
+   } else {
       // use gradient : check if fFunc provides gradient
-      if (fConfig.MinimizerOptions().PrintLevel() > 0)
-         MATH_INFO_MSG("Fitter::DoLikelihoodFit","use gradient from model function");
-      std::shared_ptr<IGradModelFunction>  gradFun = std::dynamic_pointer_cast<IGradModelFunction>(fFunc);
-      if (gradFun) {
-         if (extended) {
-            MATH_WARN_MSG("Fitter::DoLikelihoodFit","Extended unbinned fit with gradient not yet supported - do a not-extended fit");
+      if (fFunc_v) {
+         if (fConfig.MinimizerOptions().PrintLevel() > 0)
+            MATH_INFO_MSG("Fitter::DoUnbinnedLikelihoodFit", "use gradient from model function");
+         std::shared_ptr<IGradModelFunction_v> gradFun = std::dynamic_pointer_cast<IGradModelFunction_v>(fFunc_v);
+         if (gradFun) {
+            if (extended) {
+               MATH_WARN_MSG("Fitter::DoUnbinnedLikelihoodFit",
+                             "Extended unbinned fit with gradient not yet supported - do a not-extended fit");
+            }
+            LogLikelihoodFCN<BaseGradFunc, IModelFunction_v> logl(data, gradFun, useWeight, extended);
+            fFitType = logl.Type();
+            if (!DoMinimization(logl))
+               return false;
+            if (useWeight) {
+               logl.UseSumOfWeightSquare();
+               if (!ApplyWeightCorrection(logl))
+                  return false;
+            }
+            return true;
          }
-         LogLikelihoodFCN<BaseGradFunc> logl(data,gradFun,useWeight, extended);
-         fFitType = logl.Type();
-         if (!DoMinimization (logl) ) return false;
-         if (useWeight) {
-            logl.UseSumOfWeightSquare();
-            if (!ApplyWeightCorrection(logl) ) return false;
+         MATH_ERROR_MSG("Fitter::DoUnbinnedLikelihoodFit", "wrong type of function - it does not provide gradient");
+
+      } else {
+         if (fConfig.MinimizerOptions().PrintLevel() > 0)
+            MATH_INFO_MSG("Fitter::DoUnbinnedLikelihoodFit", "use gradient from model function");
+         std::shared_ptr<IGradModelFunction> gradFun = std::dynamic_pointer_cast<IGradModelFunction>(fFunc);
+         if (gradFun) {
+            if (extended) {
+               MATH_WARN_MSG("Fitter::DoUnbinnedLikelihoodFit",
+                             "Extended unbinned fit with gradient not yet supported - do a not-extended fit");
+            }
+            LogLikelihoodFCN<BaseGradFunc> logl(data, gradFun, useWeight, extended);
+            fFitType = logl.Type();
+            if (!DoMinimization(logl))
+               return false;
+            if (useWeight) {
+               logl.UseSumOfWeightSquare();
+               if (!ApplyWeightCorrection(logl))
+                  return false;
+            }
+            return true;
          }
-         return true;
+         MATH_ERROR_MSG("Fitter::DoUnbinnedLikelihoodFit", "wrong type of function - it does not provide gradient");
       }
-      MATH_ERROR_MSG("Fitter::DoLikelihoodFit","wrong type of function - it does not provide gradient");
    }
    return false;
 }
@@ -506,7 +602,7 @@ bool Fitter::DoUnbinnedLikelihoodFit(bool extended) {
 bool Fitter::DoLinearFit( ) {
 
    std::shared_ptr<BinData> data = std::dynamic_pointer_cast<BinData>(fData);
-   assert(data); 
+   assert(data);
 
    // perform a linear fit on a set of binned data
    std::string  prevminimizer = fConfig.MinimizerType();
@@ -578,10 +674,10 @@ bool Fitter::CalculateHessErrors() {
    // update minimizer results with what comes out from Hesse
    // in case is empty - create from a FitConfig
    if (fResult->IsEmpty() )
-      fResult = std::auto_ptr<ROOT::Fit::FitResult>(new ROOT::Fit::FitResult(fConfig) );
+      fResult = std::unique_ptr<ROOT::Fit::FitResult>(new ROOT::Fit::FitResult(fConfig) );
 
 
-   // re-give a minimizer instance in case it has been changed 
+   // re-give a minimizer instance in case it has been changed
    ret |= fResult->Update(fMinimizer, ret);
 
    // when possible get ncalls from FCN and set in fit result
@@ -714,7 +810,7 @@ bool Fitter::DoMinimization(const ROOT::Math::IMultiGenFunction * chi2func) {
    // unsigned int ncalls =  ObjFuncTrait<ObjFunc>::NCalls(*fcn);
    // int fitType =  ObjFuncTrait<ObjFunc>::Type(objFunc);
 
-   if (!fResult) fResult =  std::shared_ptr<FitResult> ( new FitResult() );
+   if (!fResult) fResult = std::make_shared<FitResult>();
    fResult->FillResult(fMinimizer,fConfig, fFunc, ret, fDataSize, fBinFit, chi2func );
 
    // when possible get ncalls from FCN and set in fit result
@@ -724,7 +820,7 @@ bool Fitter::DoMinimization(const ROOT::Math::IMultiGenFunction * chi2func) {
 
    // fill information in fit result
    fResult->fObjFunc = fObjFunction;
-   fResult->fFitData = fData; 
+   fResult->fFitData = fData;
 
 
 #ifdef DEBUG
@@ -733,8 +829,6 @@ bool Fitter::DoMinimization(const ROOT::Math::IMultiGenFunction * chi2func) {
 
    if (fConfig.NormalizeErrors() && fFitType == ROOT::Math::FitMethodFunction::kLeastSquare )
       fResult->NormalizeErrors();
-
-
 
    // set also new parameter values and errors in FitConfig
    if (fConfig.UpdateAfterFit() && ret) DoUpdateFitConfig();
@@ -747,7 +841,7 @@ bool Fitter::DoMinimization(const BaseFunc & objFunc, const ROOT::Math::IMultiGe
 
    // keep also a copy of FCN function and set this in minimizer so they will be managed together
    // (remember that cloned copy will still depends on data and model function pointers)
-   fObjFunction = std::auto_ptr<ROOT::Math::IMultiGenFunction> ( objFunc.Clone() );
+   fObjFunction = std::unique_ptr<ROOT::Math::IMultiGenFunction> ( objFunc.Clone() );
    if (!DoInitMinimizer()) return false;
    return DoMinimization(chi2func);
 }
@@ -801,7 +895,7 @@ bool Fitter::ApplyWeightCorrection(const ROOT::Math::IMultiGenFunction & loglw2,
       return false;
    }
    // need to re-init the minimizer and set w2
-   fObjFunction = std::auto_ptr<ROOT::Math::IMultiGenFunction> ( loglw2.Clone() );
+   fObjFunction = std::unique_ptr<ROOT::Math::IMultiGenFunction> ( loglw2.Clone() );
    // need to re-initialize the minimizer for the changes applied in the
    // objective functions
    if (!DoInitMinimizer()) return false;
@@ -885,27 +979,23 @@ bool Fitter::ApplyWeightCorrection(const ROOT::Math::IMultiGenFunction & loglw2,
 }
 
 
-      
+
 void Fitter::ExamineFCN()  {
    // return a pointer to the binned data used in the fit
    // works only for chi2 or binned likelihood fits
    // thus when the objective function stored is a Chi2Func or a PoissonLikelihood
-   // The funciton also set the model function correctly if it has not been set 
+   // The funciton also set the model function correctly if it has not been set
 
-   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGenFunction, BinData> >() ) return;
-   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGenFunction, UnBinData> >() ) return;
+   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGenFunction, ROOT::Math::IParamMultiFunction, BinData> >() ) return;
+   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGenFunction, ROOT::Math::IParamMultiFunction, UnBinData> >() ) return;
 
-   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGradFunction, BinData> >() ) return;
-   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGradFunction, UnBinData> >() ) return;
+   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGradFunction, ROOT::Math::IParamMultiFunction, BinData> >() ) return;
+   if ( GetDataFromFCN<BasicFCN<ROOT::Math::IMultiGradFunction, ROOT::Math::IParamMultiFunction, UnBinData> >() ) return;
 
    //MATH_INFO_MSG("Fitter::ExamineFCN","Objective function is not of a known type - FitData and ModelFunction objects are not available");
    return;
 }
 
-
-
-      
    } // end namespace Fit
 
 } // end namespace ROOT
-

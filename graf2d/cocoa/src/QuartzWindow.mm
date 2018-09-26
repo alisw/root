@@ -28,6 +28,7 @@
 #include <Availability.h>
 
 #include "ROOTOpenGLView.h"
+#include "CocoaConstants.h"
 #include "QuartzWindow.h"
 #include "QuartzPixmap.h"
 #include "QuartzUtils.h"
@@ -39,6 +40,10 @@
 #include "TGClient.h"
 #include "TSystem.h"
 #include "TGCocoa.h"
+#include "TROOT.h"
+#include "TGTextView.h"
+#include "TGView.h"
+#include "TGCanvas.h"
 
 
 namespace ROOT {
@@ -51,14 +56,16 @@ namespace X11 {
 QuartzWindow *CreateTopLevelWindow(Int_t x, Int_t y, UInt_t w, UInt_t h, UInt_t /*border*/, Int_t depth,
                                    UInt_t clss, void */*visual*/, SetWindowAttributes_t *attr, UInt_t)
 {
+   using namespace Details;
+
    NSRect winRect = {};
    winRect.origin.x = GlobalXROOTToCocoa(x);
    winRect.origin.y = GlobalYROOTToCocoa(y + h);
    winRect.size.width = w;
    winRect.size.height = h;
 
-   const NSUInteger styleMask = NSTitledWindowMask | NSClosableWindowMask |
-                                NSMiniaturizableWindowMask | NSResizableWindowMask;
+   const NSUInteger styleMask = kTitledWindowMask | kClosableWindowMask |
+                                kMiniaturizableWindowMask | kResizableWindowMask;
 
    QuartzWindow * const newWindow = [[QuartzWindow alloc] initWithContentRect : winRect
                                                                     styleMask : styleMask
@@ -428,7 +435,6 @@ QuartzWindow *FindWindowUnderPointer()
 //______________________________________________________________________________
 NSView<X11Window> *FindViewUnderPointer()
 {
-   //TODO: call FindViewInPoint using cursor screen coordiantes.
    const Util::AutoreleasePool pool;
 
    if (QuartzWindow *topLevel = FindWindowUnderPointer()) {
@@ -525,12 +531,10 @@ std::vector<unsigned char> DownscaledImageData(unsigned w, unsigned h, CGImageRe
    try {
       result.resize(w * h * 4);
    } catch (const std::bad_alloc &) {
-      //TODO: check that 'resize' has no side effects in case of exception.
       NSLog(@"DownscaledImageData, memory allocation failed");
       return result;
    }
 
-   //TODO: device RGB? should it be generic?
    const Util::CFScopeGuard<CGColorSpaceRef> colorSpace(CGColorSpaceCreateDeviceRGB());//[1]
    if (!colorSpace.Get()) {
       NSLog(@"DownscaledImageData, CGColorSpaceCreateDeviceRGB failed");
@@ -646,14 +650,10 @@ void SetWindowAttributes(const SetWindowAttributes_t *attr, NSObject<X11Window> 
    if (mask & kWAWinGravity)
       window.fWinGravity = attr->fWinGravity;
 
-   //TODO: More attributes to set -
-   //cursor for example, etc.
    if (mask & kWAOverrideRedirect) {
-      //This is quite a special case.
-      //TODO: Must be checked yet, if I understand this correctly!
       if ([(NSObject *)window isKindOfClass : [QuartzWindow class]]) {
          QuartzWindow * const qw = (QuartzWindow *)window;
-         [qw setStyleMask : NSBorderlessWindowMask];
+         [qw setStyleMask : Details::kBorderlessWindowMask];
          [qw setAlphaValue : 0.95];
       }
 
@@ -811,11 +811,7 @@ NSCursor *CreateCustomCursor(ECursor currentCursor)
    }
 
    if (pngFileName) {
-#ifdef ROOTICONPATH
-      const char * const path = gSystem->Which(ROOTICONPATH, pngFileName, kReadPermission);
-#else
-      const char * const path = gSystem->Which("$ROOTSYS/icons", pngFileName, kReadPermission);
-#endif
+      const char * const path = gSystem->Which(TROOT::GetIconPath(), pngFileName, kReadPermission);
       const Util::ScopedArray<const char> arrayGuard(path);
 
       if (!path || path[0] == 0) {
@@ -895,10 +891,6 @@ NSCursor *CreateCursor(ECursor currentCursor)
 //QuartzView -drawRect/TGCocoa. So I need a trick to identify
 //this special window.
 
-//TODO: possibly refactor these functions in a more generic way - not
-//to have two separate versions for text and html.
-
-
 #pragma mark - Workarounds for a text view and its descendants.
 
 //______________________________________________________________________________
@@ -907,7 +899,10 @@ bool ViewIsTextView(unsigned viewID)
    const TGWindow * const window = gClient->GetWindowById(viewID);
    if (!window)
       return false;
-   return window->InheritsFrom("TGTextView");
+   // This code used to use TObject::InheritsFrom, however since this is
+   // run under the AppKit, we can not call core/meta functions, otherwise
+   // we will run into deadlocks.
+   return dynamic_cast<const TGTextView*>(window);
 }
 
 //______________________________________________________________________________
@@ -927,7 +922,10 @@ bool ViewIsTextViewFrame(NSView<X11Window> *view, bool checkParent)
    if (!window)
       return false;
 
-   if (!window->InheritsFrom("TGViewFrame"))
+   // This code used to use TObject::InheritsFrom, however since this is
+   // run under the AppKit, we can not call core/meta functions, otherwise
+   // we will run into deadlocks.
+   if (!dynamic_cast<const TGViewFrame*>(window))
       return false;
 
    if (!checkParent)
@@ -945,7 +943,10 @@ bool ViewIsHtmlView(unsigned viewID)
    const TGWindow * const window = gClient->GetWindowById(viewID);
    if (!window)
       return false;
-   return window->InheritsFrom("TGHtml");
+   // This code used to use TObject::InheritsFrom, however since this is
+   // run under the AppKit, we can not call core/meta functions, otherwise
+   // we will run into deadlocks.
+   return window->TestBit(TGWindow::kIsHtmlView);
 }
 
 //______________________________________________________________________________
@@ -966,7 +967,10 @@ bool ViewIsHtmlViewFrame(NSView<X11Window> *view, bool checkParent)
    if (!window)
       return false;
 
-   if (!window->InheritsFrom("TGViewFrame"))
+   // This code used to use TObject::InheritsFrom, however since this is
+   // run under the AppKit, we can not call core/meta functions, otherwise
+   // we will run into deadlocks.
+   if (!dynamic_cast<const TGViewFrame*>(window))
       return false;
 
    if (!checkParent)
@@ -1045,6 +1049,7 @@ void UnlockFocus(NSView<X11Window> *view)
 namespace Quartz = ROOT::Quartz;
 namespace Util = ROOT::MacOSX::Util;
 namespace X11 = ROOT::MacOSX::X11;
+namespace Details = ROOT::MacOSX::Details;
 
 #ifdef DEBUG_ROOT_COCOA
 
@@ -1143,8 +1148,6 @@ void print_mask_info(ULong_t mask)
       contentViewRect.origin.x = 0.f;
       contentViewRect.origin.y = 0.f;
 
-      //TODO: OpenGL view can not be content of our QuartzWindow, check if
-      //this is a problem for ROOT.
       fContentView = [[QuartzView alloc] initWithFrame : contentViewRect windowAttributes : 0];
 
       [self setContentView : fContentView];
@@ -1165,10 +1168,12 @@ void print_mask_info(ULong_t mask)
 //______________________________________________________________________________
 - (id) initWithGLView : (ROOTOpenGLView *) glView
 {
+   using namespace Details;
+
    assert(glView != nil && "-initWithGLView, parameter 'glView' is nil");
 
-   const NSUInteger styleMask = NSTitledWindowMask | NSClosableWindowMask |
-                                NSMiniaturizableWindowMask | NSResizableWindowMask;
+   const NSUInteger styleMask = kTitledWindowMask | kClosableWindowMask |
+                                kMiniaturizableWindowMask | kResizableWindowMask;
 
    NSRect contentRect = glView.frame;
    contentRect.origin = NSPoint();
@@ -1308,7 +1313,6 @@ void print_mask_info(ULong_t mask)
       [fShapeCombineMask release];
       if (mask) {
          fShapeCombineMask = [mask retain];
-
          //TODO: Check window's shadow???
       }
    }
@@ -1328,6 +1332,14 @@ void print_mask_info(ULong_t mask)
 {
    //Never.
    return NO;
+}
+
+//______________________________________________________________________________
+- (CGFloat) fScaleFactor
+{
+   if (!self.screen)
+      return 1.;
+   return self.screen.backingScaleFactor;
 }
 
 //______________________________________________________________________________
@@ -1509,7 +1521,7 @@ void print_mask_info(ULong_t mask)
 {
    if (!fContentView)
       return;
- 
+
    assert(attr && "-getAttributes:, parameter 'attr' is nil");
 
    X11::GetWindowAttributes(self, attr);
@@ -1602,7 +1614,7 @@ void print_mask_info(ULong_t mask)
    if (!fContentView)
       return;
 
-   if (theEvent.type == NSLeftMouseDown || theEvent.type == NSRightMouseDown) {
+   if (theEvent.type == Details::kLeftMouseDown || theEvent.type == Details::kRightMouseDown) {
       bool generateFakeRelease = false;
 
       const NSPoint windowPoint = [theEvent locationInWindow];
@@ -1624,7 +1636,7 @@ void print_mask_info(ULong_t mask)
       TGCocoa * const vx = static_cast<TGCocoa *>(gVirtualX);
       if (vx->GetEventTranslator()->HasPointerGrab() && generateFakeRelease) {
           vx->GetEventTranslator()->GenerateButtonReleaseEvent(fContentView, theEvent,
-                                                               theEvent.type == NSLeftMouseDown ?
+                                                               theEvent.type == Details::kLeftMouseDown ?
                                                                kButton1 : kButton3);
          //Yes, ignore this event completely (this means, you are not able to immediately start
          //resizing a window, if some popup is open. Actually, this is more or less
@@ -1645,11 +1657,6 @@ void print_mask_info(ULong_t mask)
    if (!fContentView)
       return NO;
 
-   //TODO: check this!!! Children are
-   //transient windows and ROOT does not handle
-   //such a deletion properly, noop then:
-   //you can not close some window, if there is a
-   //modal dialog above.
    if ([[self childWindows] count])
       return NO;
 
@@ -1948,6 +1955,12 @@ void print_mask_info(ULong_t mask)
 }
 
 //______________________________________________________________________________
+- (CGFloat) fScaleFactor
+{
+   return self.fQuartzWindow.fScaleFactor;
+}
+
+//______________________________________________________________________________
 - (int) fX
 {
    return self.frame.origin.x;
@@ -2081,8 +2094,6 @@ void print_mask_info(ULong_t mask)
 {
    //To copy one "window" to another "window", I have to ask source QuartzView to draw intself into
    //bitmap, and copy this bitmap into the destination view.
-
-   //TODO: this code must be tested, with all possible cases.
 
    assert(srcView != nil && "-copyView:area:toPoint:, parameter 'srcView' is nil");
 
@@ -2278,20 +2289,20 @@ void print_mask_info(ULong_t mask)
       NSLog(@"QuartzView: -readColorBits:, bitmapImageRepForCachingDisplayInRect failed");
       return nullptr;
    }
-   
+
    CGContextRef ctx = self.fContext; //Save old context if any.
    [self cacheDisplayInRect : visRect toBitmapImageRep : imageRep];
    self.fContext = ctx; //Restore old context.
    //
    const NSInteger bitsPerPixel = [imageRep bitsPerPixel];
-   //TODO: ohhh :(((
+
    assert(bitsPerPixel == 32 && "-readColorBits:, no alpha channel???");
    const NSInteger bytesPerRow = [imageRep bytesPerRow];
    unsigned dataWidth = bytesPerRow / (bitsPerPixel / 8);//assume an octet :(
 
    unsigned char *srcData = nullptr;
    std::vector<unsigned char> downscaled;
-   if ([[NSScreen mainScreen] backingScaleFactor] > 1 && imageRep.CGImage) {
+   if ([self.window.screen backingScaleFactor] > 1 && imageRep.CGImage) {
       downscaled = X11::DownscaledImageData(area.fWidth, area.fHeight, imageRep.CGImage);
       if (downscaled.size())
          srcData = &downscaled[0];
@@ -2306,7 +2317,7 @@ void print_mask_info(ULong_t mask)
 
    //We have a source data now. Let's allocate buffer for ROOT's GUI and convert source data.
    unsigned char *data = nullptr;
-   
+
    try {
       data = new unsigned char[area.fWidth * area.fHeight * 4];//bgra?
    } catch (const std::bad_alloc &) {
@@ -2317,7 +2328,7 @@ void print_mask_info(ULong_t mask)
    unsigned char *dstPixel = data;
    const unsigned char *line = srcData + area.fY * dataWidth * 4;
    const unsigned char *srcPixel = line + area.fX * 4;
-      
+
    for (unsigned i = 0; i < area.fHeight; ++i) {
       for (unsigned j = 0; j < area.fWidth; ++j, srcPixel += 4, dstPixel += 4) {
          dstPixel[0] = srcPixel[2];
@@ -2329,7 +2340,7 @@ void print_mask_info(ULong_t mask)
       line += dataWidth * 4;
       srcPixel = line + area.fX * 4;
    }
-   
+
    return data;
 }
 
@@ -2588,7 +2599,6 @@ void print_mask_info(ULong_t mask)
       if (sibling == self)
          continue;
 
-      //TODO: equal test is not good :) I have a baaad feeling about this ;)
       if (NSEqualRects(sibling.frame, self.frame)) {
          [sibling setOverlapped : NO];
          //
@@ -2710,7 +2720,10 @@ void print_mask_info(ULong_t mask)
          if (self.fQuartzWindow.fShapeCombineMask)
             X11::ClipToShapeMask(self, fContext);
 
-         if (window->InheritsFrom("TGContainer"))//It always has an ExposureMask.
+         // This code used to use TObject::InheritsFrom, however since this is
+         // run under the AppKit, we can not call core/meta functions, otherwise
+         // we will run into deadlocks.
+         if (dynamic_cast<const TGContainer*>(window))//It always has an ExposureMask.
             vx->GetEventTranslator()->GenerateExposeEvent(self, [self visibleRect]);
 
          if (fEventMask & kExposureMask) {
@@ -2941,7 +2954,7 @@ void print_mask_info(ULong_t mask)
    assert(fID != 0 && "-mouseMoved:, fID is 0");
 
    if (fParentView)//Suppress events in all views, except the top-level one.
-      return;      //TODO: check, that it does not create additional problems.
+      return;
 
    assert(dynamic_cast<TGCocoa *>(gVirtualX) != 0 &&
           "-mouseMoved:, gVirtualX is null or not of TGCocoa type");
@@ -3077,11 +3090,7 @@ void print_mask_info(ULong_t mask)
    }
 
    if (pngFileName) {
-#ifdef ROOTICONPATH
-      const char * const path = gSystem->Which(ROOTICONPATH, pngFileName, kReadPermission);
-#else
-      const char * const path = gSystem->Which("$ROOTSYS/icons", pngFileName, kReadPermission);
-#endif
+      const char * const path = gSystem->Which(TROOT::GetIconPath(), pngFileName, kReadPermission);
       const Util::ScopedArray<const char> arrayGuard(path);
 
       if (!path || path[0] == 0) {

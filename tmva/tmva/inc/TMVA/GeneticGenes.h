@@ -33,9 +33,7 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef ROOT_Rtypes
 #include "Rtypes.h"
-#endif
 #include <vector>
 
 namespace TMVA {
@@ -44,7 +42,7 @@ namespace TMVA {
       
    public:
       
-      GeneticGenes():fFitness(0) {}  
+   GeneticGenes():fFitness(0) {}  
       GeneticGenes( std::vector<Double_t> & f );
       virtual ~GeneticGenes() {}  
       
@@ -60,7 +58,7 @@ namespace TMVA {
       std::vector<Double_t> fFactors; // stores the factors (coefficients) of one individual
       Double_t fFitness;
       
-      ClassDef(GeneticGenes,0) // Genes definition for genetic algorithm
+      ClassDef(GeneticGenes,0); // Genes definition for genetic algorithm
    };
 
    Bool_t operator <(const GeneticGenes&, const GeneticGenes&);

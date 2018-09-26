@@ -27,6 +27,7 @@
 #include "TMVA/Tools.h"
 #include "TXMLEngine.h"
 
+std::vector<TControlBar*> TMVA::BDTReg_Global__cbar;
 
 TMVA::StatDialogBDTReg* TMVA::StatDialogBDTReg::fThis = 0;
 
@@ -126,7 +127,7 @@ void TMVA::StatDialogBDTReg::GetNtrees()
          if (nc > 200) {
             std::cout << std::endl;
             std::cout << "*** Huge problem: could not locate term \"NTrees\" in BDT weight file: " 
-                 << fWfile << std::endl;
+                      << fWfile << std::endl;
             std::cout << "==> panic abort (please contact the TMVA authors)" << std::endl;
             std::cout << std::endl;
             exit(1);
@@ -158,8 +159,8 @@ void TMVA::StatDialogBDTReg::GetNtrees()
 ///
 
 void TMVA::StatDialogBDTReg::DrawNode( TMVA::DecisionTreeNode *n, 
-                               Double_t x, Double_t y, 
-                               Double_t xscale,  Double_t yscale, TString * vars) 
+                                       Double_t x, Double_t y, 
+                                       Double_t xscale,  Double_t yscale, TString * vars) 
 {
    Float_t xsize=xscale*1.5;
    Float_t ysize=yscale/3;
@@ -217,13 +218,17 @@ TMVA::DecisionTree* TMVA::StatDialogBDTReg::ReadTree( TString* &vars, Int_t itre
       std::ifstream fin( fWfile );
       if (!fin.good( )) { // file not found --> Error
          std::cout << "*** ERROR: Weight file: " << fWfile << " does not exist" << std::endl;
+         delete d;
+         d = nullptr;
          return 0;
       }
       TString dummy = "";
       
       if (itree >= fNtrees) {
          std::cout << "*** ERROR: requested decision tree: " << itree 
-              << ", but number of trained trees only: " << fNtrees << std::endl;
+                   << ", but number of trained trees only: " << fNtrees << std::endl;
+         delete d;
+         d = nullptr;
          return 0;
       }
       
@@ -256,7 +261,9 @@ TMVA::DecisionTree* TMVA::StatDialogBDTReg::ReadTree( TString* &vars, Int_t itre
    else{
       if (itree >= fNtrees) {
          std::cout << "*** ERROR: requested decision tree: " << itree 
-               << ", but number of trained trees only: " << fNtrees << std::endl;
+                   << ", but number of trained trees only: " << fNtrees << std::endl;
+         delete d;
+         d = nullptr;
          return 0;
       }
       Int_t nVars;
@@ -338,18 +345,18 @@ void TMVA::StatDialogBDTReg::DrawTree( Int_t itree )
    signalleaf->AddText("Leaf Nodes");
    signalleaf->SetTextColor( getSigColorT() );
    signalleaf->Draw();
-/*
-   ydown = ydown - ystep/2.5 -dy;
-   yup   = yup - ystep/2.5 -dy;
-   TPaveText *backgroundleaf = new TPaveText(0.02,ydown,0.15,yup, "NDC");
-   backgroundleaf->SetBorderSize(1);
-   backgroundleaf->SetFillStyle(1001);
-   backgroundleaf->SetFillColor( kBkgColorF );
+   /*
+     ydown = ydown - ystep/2.5 -dy;
+     yup   = yup - ystep/2.5 -dy;
+     TPaveText *backgroundleaf = new TPaveText(0.02,ydown,0.15,yup, "NDC");
+     backgroundleaf->SetBorderSize(1);
+     backgroundleaf->SetFillStyle(1001);
+     backgroundleaf->SetFillColor( kBkgColorF );
 
-   backgroundleaf->AddText("Backgr. Leaf Nodes");
-   backgroundleaf->SetTextColor( kBkgColorT );
-   backgroundleaf->Draw();
-*/
+     backgroundleaf->AddText("Backgr. Leaf Nodes");
+     backgroundleaf->SetTextColor( kBkgColorT );
+     backgroundleaf->Draw();
+   */
    fCanvas->Update();
    TString fname = fDataset+Form("/plots/%s_%i", fMethName.Data(), itree );
    std::cout << "--- Creating image: " << fname << std::endl;
@@ -387,7 +394,7 @@ void TMVA::BDT_Reg(TString dataset, const TString& fin )
       TDirectory* mdir = dir->GetDirectory( key->GetName() );
       if (!mdir) {
          std::cout << "*** Error in macro \"BDT_Reg.C\": cannot find sub-directory: " << key->GetName() 
-              << " in directory: " << dir->GetName() << std::endl;
+                   << " in directory: " << dir->GetName() << std::endl;
          return;
       }
 
@@ -418,9 +425,9 @@ void TMVA::BDT_Reg(TString dataset, const TString& fin )
    }
 
    // *** problems with this button in ROOT 5.19 ***
-   #if ROOT_VERSION_CODE < ROOT_VERSION(5,19,0)
+#if ROOT_VERSION_CODE < ROOT_VERSION(5,19,0)
    cbar->AddButton( "Close", Form("BDTReg_DeleteTBar(%i)", BDTReg_Global__cbar.size()-1), "Close this control bar", "button" );
-   #endif
+#endif
    // **********************************************
 
    // set the style 
@@ -448,7 +455,7 @@ void TMVA::BDT_Reg(TString dataset, Int_t itree, TString wfile , TString methNam
    StatDialogBDTReg::Delete();
    TMVAGlob::DestroyCanvases(); 
    if(wfile=="")
-       wfile = dataset+"/weights/TMVARegression_BDT.weights.xml";
+      wfile = dataset+"/weights/TMVARegression_BDT.weights.xml";
 
    // quick check if weight file exist
    if(!wfile.EndsWith(".xml") ){

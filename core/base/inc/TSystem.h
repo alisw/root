@@ -31,21 +31,11 @@
 #endif
 #endif
 
-#ifndef ROOT_TNamed
 #include "TNamed.h"
-#endif
-#ifndef ROOT_TString
 #include "TString.h"
-#endif
-#ifndef ROOT_TInetAddress
 #include "TInetAddress.h"
-#endif
-#ifndef ROOT_TTimer
 #include "TTimer.h"
-#endif
-#ifndef ROOT_ThreadLocalStorage
 #include "ThreadLocalStorage.h"
-#endif
 
 class TSeqCollection;
 class TFdSet;
@@ -207,7 +197,7 @@ struct ProcInfo_t {
    Long_t    fMemVirtual;  // virtual memory used by this process in KB
    ProcInfo_t() : fCpuUser(0), fCpuSys(0), fMemResident(0),
                   fMemVirtual(0) { }
-   virtual ~ProcInfo_t() { }
+   virtual ~ProcInfo_t();
    ClassDef(ProcInfo_t, 1);// System resource usage of given process.
 };
 
@@ -317,6 +307,7 @@ protected:
    TSystem               *FindHelper(const char *path, void *dirptr = 0);
    virtual Bool_t         ConsistentWith(const char *path, void *dirptr = 0);
    virtual const char    *ExpandFileName(const char *fname);
+   virtual Bool_t         ExpandFileName(TString &fname);
    virtual void           SigAlarmInterruptsSyscalls(Bool_t) { }
    virtual const char    *GetLinkedLibraries();
    virtual void           DoBeep(Int_t /*freq*/=-1, Int_t /*duration*/=-1) const { printf("\a"); fflush(stdout); }
@@ -328,6 +319,7 @@ protected:
 private:
    TSystem(const TSystem&);              // not implemented
    TSystem& operator=(const TSystem&);   // not implemented
+   Bool_t ExpandFileName(const char *fname, char *xname, const int kBufSize);
 
 public:
    TSystem(const char *name = "Generic", const char *title = "Generic System");
@@ -405,7 +397,9 @@ public:
    virtual void           *GetDirPtr() const { return 0; }
    virtual Bool_t          ChangeDirectory(const char *path);
    virtual const char     *WorkingDirectory();
+   virtual std::string     GetWorkingDirectory() const;
    virtual const char     *HomeDirectory(const char *userName = 0);
+   virtual std::string     GetHomeDirectory(const char *userName = 0) const;
    virtual int             mkdir(const char *name, Bool_t recursive = kFALSE);
    Bool_t                  cd(const char *path) { return ChangeDirectory(path); }
    const char             *pwd() { return WorkingDirectory(); }
@@ -473,6 +467,7 @@ public:
    virtual Func_t          DynFindSymbol(const char *module, const char *entry);
    virtual int             Load(const char *module, const char *entry = "", Bool_t system = kFALSE);
    virtual void            Unload(const char *module);
+   virtual UInt_t          LoadAllLibraries();
    virtual void            ListSymbols(const char *module, const char *re = "");
    virtual void            ListLibraries(const char *regexp = "");
    virtual const char     *GetLibraries(const char *regexp = "",

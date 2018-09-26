@@ -14,37 +14,31 @@
  *      Fredrik Tegenfeldt <Fredrik.Tegenfeldt@cern.ch>  - Iowa State U., USA     *
  *                                                                                *
  * Copyright (c) 2005:                                                            *
- *      CERN, Switzerland                                                         * 
+ *      CERN, Switzerland                                                         *
  *      Iowa State U.                                                             *
- *      MPI-K Heidelberg, Germany                                                 * 
+ *      MPI-K Heidelberg, Germany                                                 *
  *                                                                                *
  * Redistribution and use in source and binary forms, with or without             *
  * modification, are permitted according to the terms listed in LICENSE           *
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
-//_______________________________________________________________________
-//
-// J Friedman's RuleFit method
-//_______________________________________________________________________
+/*! \class TMVA::MethodRuleFit
+\ingroup TMVA
+J Friedman's RuleFit method
+*/
 
 #include "TMVA/MethodRuleFit.h"
 
-#include <algorithm>
-#include <list>
-
-#include "Riostream.h"
-#include "TRandom3.h"
-#include "TMath.h"
-#include "TMatrix.h"
-#include "TDirectory.h"
-
 #include "TMVA/ClassifierFactory.h"
 #include "TMVA/Config.h"
+#include "TMVA/Configurable.h"
 #include "TMVA/CrossEntropy.h"
 #include "TMVA/DataSet.h"
 #include "TMVA/DecisionTree.h"
 #include "TMVA/GiniIndex.h"
+#include "TMVA/IMethod.h"
+#include "TMVA/MethodBase.h"
 #include "TMVA/MisClassificationError.h"
 #include "TMVA/MsgLogger.h"
 #include "TMVA/Ranking.h"
@@ -55,21 +49,30 @@
 #include "TMVA/Tools.h"
 #include "TMVA/Types.h"
 
+#include "Riostream.h"
+#include "TRandom3.h"
+#include "TMath.h"
+#include "TMatrix.h"
+#include "TDirectory.h"
+
+#include <algorithm>
+#include <list>
+#include <random>
+
 using std::min;
 
 REGISTER_METHOD(RuleFit)
 
-ClassImp(TMVA::MethodRuleFit)
- 
+ClassImp(TMVA::MethodRuleFit);
+
 ////////////////////////////////////////////////////////////////////////////////
 /// standard constructor
 
-TMVA::MethodRuleFit::MethodRuleFit( const TString& jobName,
-                                    const TString& methodTitle,
-                                    DataSetInfo& theData, 
-                                    const TString& theOption,
-                                    TDirectory* theTargetDir ) :
-   MethodBase( jobName, Types::kRuleFit, methodTitle, theData, theOption, theTargetDir )
+   TMVA::MethodRuleFit::MethodRuleFit( const TString& jobName,
+                                       const TString& methodTitle,
+                                       DataSetInfo& theData,
+                                       const TString& theOption) :
+   MethodBase( jobName, Types::kRuleFit, methodTitle, theData, theOption)
    , fSignalFraction(0)
    , fNTImportance(0)
    , fNTCoefficient(0)
@@ -88,7 +91,7 @@ TMVA::MethodRuleFit::MethodRuleFit( const TString& jobName,
    , fRFNendnodes(0)
    , fNTrees(0)
    , fTreeEveFrac(0)
-   , fSepType(0) 
+   , fSepType(0)
    , fMinFracNEve(0)
    , fMaxFracNEve(0)
    , fNCuts(0)
@@ -109,15 +112,15 @@ TMVA::MethodRuleFit::MethodRuleFit( const TString& jobName,
    , fRuleMinDist(0)
    , fLinQuantile(0)
 {
+      fMonitorNtuple = NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// constructor from weight file
 
 TMVA::MethodRuleFit::MethodRuleFit( DataSetInfo& theData,
-                                    const TString& theWeightFile,
-                                    TDirectory* theTargetDir ) :
-   MethodBase( Types::kRuleFit, theData, theWeightFile, theTargetDir )
+                                    const TString& theWeightFile) :
+   MethodBase( Types::kRuleFit, theData, theWeightFile)
    , fSignalFraction(0)
    , fNTImportance(0)
    , fNTCoefficient(0)
@@ -136,7 +139,7 @@ TMVA::MethodRuleFit::MethodRuleFit( DataSetInfo& theData,
    , fRFNendnodes(0)
    , fNTrees(0)
    , fTreeEveFrac(0)
-   , fSepType(0) 
+   , fSepType(0)
    , fMinFracNEve(0)
    , fMaxFracNEve(0)
    , fNCuts(0)
@@ -157,6 +160,7 @@ TMVA::MethodRuleFit::MethodRuleFit( DataSetInfo& theData,
    , fRuleMinDist(0)
    , fLinQuantile(0)
 {
+      fMonitorNtuple = NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,7 +173,7 @@ TMVA::MethodRuleFit::~MethodRuleFit( void )
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// RuleFit can handle classification with 2 classes 
+/// RuleFit can handle classification with 2 classes
 
 Bool_t TMVA::MethodRuleFit::HasAnalysisType( Types::EAnalysisType type, UInt_t numberClasses, UInt_t /*numberTargets*/ )
 {
@@ -178,51 +182,51 @@ Bool_t TMVA::MethodRuleFit::HasAnalysisType( Types::EAnalysisType type, UInt_t n
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// define the options (their key words) that can be set in the option string 
+/// define the options (their key words) that can be set in the option string
 /// know options.
-///---------
-/// general
-///---------
-/// RuleFitModule  <string>     
-///    available values are:    RFTMVA      - use TMVA implementation
-///                             RFFriedman  - use Friedmans original implementation
-///----------------------
-/// Path search (fitting)
-///----------------------
-/// GDTau          <float>      gradient-directed path: fit threshhold, default
-/// GDTauPrec      <float>      gradient-directed path: precision of estimated tau
-/// GDStep         <float>      gradient-directed path: step size       
-/// GDNSteps       <float>      gradient-directed path: number of steps 
-/// GDErrScale     <float>      stop scan when error>scale*errmin       
-///-----------------
-/// Tree generation
-///-----------------
-/// fEventsMin     <float>      minimum fraction of events in a splittable node
-/// fEventsMax     <float>      maximum fraction of events in a splittable node
-/// nTrees         <float>      number of trees in forest.
-/// ForestType     <string>
-///    available values are:    Random    - create forest using random subsample and only random variables subset at each node
-///                             AdaBoost  - create forest with boosted events
 ///
-///-----------------
-/// Model creation
-///-----------------
-/// RuleMinDist    <float>      min distance allowed between rules
-/// MinImp         <float>      minimum rule importance accepted        
-/// Model          <string>     model to be used
-///    available values are:    ModRuleLinear <default>
-///                             ModRule
-///                             ModLinear
+/// #### general
 ///
-///-----------------
-/// Friedmans module
-///-----------------
-/// RFWorkDir      <string>     directory where Friedmans module (rf_go.exe) is installed
-/// RFNrules       <int>        maximum number of rules allowed
-/// RFNendnodes    <int>        average number of end nodes in the forest of trees
+///  - RuleFitModule  <string>
+///    available values are:
+///    - RFTMVA      - use TMVA implementation
+///    - RFFriedman  - use Friedmans original implementation
 ///
+/// #### Path search (fitting)
+///
+///  - GDTau          <float>      gradient-directed path: fit threshold, default
+///  - GDTauPrec      <float>      gradient-directed path: precision of estimated tau
+///  - GDStep         <float>      gradient-directed path: step size
+///  - GDNSteps       <float>      gradient-directed path: number of steps
+///  - GDErrScale     <float>      stop scan when error>scale*errmin
+///
+/// #### Tree generation
+///
+///  - fEventsMin     <float>      minimum fraction of events in a splittable node
+///  - fEventsMax     <float>      maximum fraction of events in a splittable node
+///  - nTrees         <float>      number of trees in forest.
+///  - ForestType     <string>
+///    available values are:
+///    - Random    - create forest using random subsample and only random variables subset at each node
+///    - AdaBoost  - create forest with boosted events
+///
+/// #### Model creation
+///
+///  - RuleMinDist    <float>      min distance allowed between rules
+///  - MinImp         <float>      minimum rule importance accepted
+///  - Model          <string>     model to be used
+///    available values are:
+///    - ModRuleLinear <default>
+///    - ModRule
+///    - ModLinear
+///
+/// #### Friedmans module
+///
+///  - RFWorkDir      <string>     directory where Friedmans module (rf_go.exe) is installed
+///  - RFNrules       <int>        maximum number of rules allowed
+///  - RFNendnodes    <int>        average number of end nodes in the forest of trees
 
-void TMVA::MethodRuleFit::DeclareOptions() 
+void TMVA::MethodRuleFit::DeclareOptions()
 {
    DeclareOptionRef(fGDTau=-1,             "GDTau",          "Gradient-directed (GD) path: default fit cut-off");
    DeclareOptionRef(fGDTauPrec=0.01,       "GDTauPrec",      "GD path: precision of tau");
@@ -236,7 +240,7 @@ void TMVA::MethodRuleFit::DeclareOptions()
    DeclareOptionRef(fMinFracNEve=0.1,      "fEventsMin",     "Minimum fraction of events in a splittable node");
    DeclareOptionRef(fMaxFracNEve=0.9,      "fEventsMax",     "Maximum fraction of events in a splittable node");
    DeclareOptionRef(fNTrees=20,            "nTrees",         "Number of trees in forest.");
-   
+
    DeclareOptionRef(fForestTypeS="AdaBoost",  "ForestType",   "Method to use for forest generation (AdaBoost or RandomForest)");
    AddPreDefVal(TString("AdaBoost"));
    AddPreDefVal(TString("Random"));
@@ -258,13 +262,13 @@ void TMVA::MethodRuleFit::DeclareOptions()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// process the options specified by the user   
+/// process the options specified by the user
 
-void TMVA::MethodRuleFit::ProcessOptions() 
+void TMVA::MethodRuleFit::ProcessOptions()
 {
    if (IgnoreEventsWithNegWeightsInTraining()) {
       Log() << kFATAL << "Mechanism to ignore events with negative weights in training not yet available for method: "
-            << GetMethodTypeName() 
+            << GetMethodTypeName()
             << " --> please remove \"IgnoreNegWeightsInTraining\" option from booking string."
             << Endl;
    }
@@ -430,7 +434,7 @@ void TMVA::MethodRuleFit::InitEventSample( void )
    }
    if (fTreeEveFrac>1.0) fTreeEveFrac=1.0;
    //
-   std::random_shuffle(fEventSample.begin(), fEventSample.end());
+   std::shuffle(fEventSample.begin(), fEventSample.end(), std::default_random_engine{});
    //
    Log() << kDEBUG << "Set sub-sample fraction to " << fTreeEveFrac << Endl;
 }
@@ -442,19 +446,20 @@ void TMVA::MethodRuleFit::Train( void )
    TMVA::DecisionTreeNode::fgIsTraining=true;
    // training of rules
 
-   InitMonitorNtuple();
+  if(!IsSilentFile()) InitMonitorNtuple();
 
    // fill the STL Vector with the event sample
    this->InitEventSample();
 
    if (fUseRuleFitJF) {
       TrainJFRuleFit();
-   } 
+   }
    else {
       TrainTMVARuleFit();
    }
    fRuleFit.GetRuleEnsemblePtr()->ClearRuleMap();
    TMVA::DecisionTreeNode::fgIsTraining=false;
+   ExitFromTraining();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -462,10 +467,10 @@ void TMVA::MethodRuleFit::Train( void )
 
 void TMVA::MethodRuleFit::TrainTMVARuleFit( void )
 {
-   if (IsNormalised()) Log() << kFATAL << "\"Normalise\" option cannot be used with RuleFit; " 
-                               << "please remove the optoin from the configuration string, or "
-                               << "use \"!Normalise\""
-                               << Endl;
+   if (IsNormalised()) Log() << kFATAL << "\"Normalise\" option cannot be used with RuleFit; "
+                             << "please remove the option from the configuration string, or "
+                             << "use \"!Normalise\""
+                             << Endl;
 
    // timer
    Timer timer( 1, GetName() );
@@ -473,7 +478,7 @@ void TMVA::MethodRuleFit::TrainTMVARuleFit( void )
    // test tree nmin cut -> for debug purposes
    // the routine will generate trees with stopping cut on N(eve) given by
    // a fraction between [20,N(eve)-1].
-   // 
+   //
    //   MakeForestRnd();
    //   exit(1);
    //
@@ -496,30 +501,33 @@ void TMVA::MethodRuleFit::TrainTMVARuleFit( void )
    // Output results and fill monitor ntuple
    fRuleFit.GetRuleEnsemblePtr()->Print();
    //
-   Log() << kDEBUG << "Filling rule ntuple" << Endl;
-   UInt_t nrules = fRuleFit.GetRuleEnsemble().GetRulesConst().size();
-   const Rule *rule;
-   for (UInt_t i=0; i<nrules; i++ ) {
-      rule            = fRuleFit.GetRuleEnsemble().GetRulesConst(i);
-      fNTImportance   = rule->GetRelImportance();
-      fNTSupport      = rule->GetSupport();
-      fNTCoefficient  = rule->GetCoefficient();
-      fNTType         = (rule->IsSignalRule() ? 1:-1 );
-      fNTNvars        = rule->GetRuleCut()->GetNvars();
-      fNTNcuts        = rule->GetRuleCut()->GetNcuts();
-      fNTPtag         = fRuleFit.GetRuleEnsemble().GetRulePTag(i); // should be identical with support
-      fNTPss          = fRuleFit.GetRuleEnsemble().GetRulePSS(i);
-      fNTPsb          = fRuleFit.GetRuleEnsemble().GetRulePSB(i);
-      fNTPbs          = fRuleFit.GetRuleEnsemble().GetRulePBS(i);
-      fNTPbb          = fRuleFit.GetRuleEnsemble().GetRulePBB(i);
-      fNTSSB          = rule->GetSSB();
-      fMonitorNtuple->Fill();
+   if(!IsSilentFile())
+    {
+        Log() << kDEBUG << "Filling rule ntuple" << Endl;
+        UInt_t nrules = fRuleFit.GetRuleEnsemble().GetRulesConst().size();
+        const Rule *rule;
+        for (UInt_t i=0; i<nrules; i++ ) {
+            rule            = fRuleFit.GetRuleEnsemble().GetRulesConst(i);
+            fNTImportance   = rule->GetRelImportance();
+            fNTSupport      = rule->GetSupport();
+            fNTCoefficient  = rule->GetCoefficient();
+            fNTType         = (rule->IsSignalRule() ? 1:-1 );
+            fNTNvars        = rule->GetRuleCut()->GetNvars();
+            fNTNcuts        = rule->GetRuleCut()->GetNcuts();
+            fNTPtag         = fRuleFit.GetRuleEnsemble().GetRulePTag(i); // should be identical with support
+            fNTPss          = fRuleFit.GetRuleEnsemble().GetRulePSS(i);
+            fNTPsb          = fRuleFit.GetRuleEnsemble().GetRulePSB(i);
+            fNTPbs          = fRuleFit.GetRuleEnsemble().GetRulePBS(i);
+            fNTPbb          = fRuleFit.GetRuleEnsemble().GetRulePBB(i);
+            fNTSSB          = rule->GetSSB();
+            fMonitorNtuple->Fill();
+        }
+
+        fRuleFit.MakeVisHists();
+        fRuleFit.MakeDebugHists();
    }
    Log() << kDEBUG << "Training done" << Endl;
 
-   fRuleFit.MakeVisHists();
-
-   fRuleFit.MakeDebugHists();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -532,8 +540,8 @@ void TMVA::MethodRuleFit::TrainJFRuleFit( void )
    UInt_t nevents = Data()->GetNTrainingEvents();
    std::vector<const TMVA::Event*> tmp;
    for (Long64_t ievt=0; ievt<nevents; ievt++) {
-     const Event *event = GetEvent(ievt);
-     tmp.push_back(event);
+      const Event *event = GetEvent(ievt);
+      tmp.push_back(event);
    }
    fRuleFit.SetTrainingEvents( tmp );
 
@@ -558,7 +566,7 @@ void TMVA::MethodRuleFit::TrainJFRuleFit( void )
    // Output results and fill monitor ntuple
    fRuleFit.GetRuleEnsemblePtr()->Print();
    //
-   fRuleFit.MakeVisHists();
+   if(!IsSilentFile())fRuleFit.MakeVisHists();
 
    delete rfAPI;
 
@@ -568,7 +576,7 @@ void TMVA::MethodRuleFit::TrainJFRuleFit( void )
 ////////////////////////////////////////////////////////////////////////////////
 /// computes ranking of input variables
 
-const TMVA::Ranking* TMVA::MethodRuleFit::CreateRanking() 
+const TMVA::Ranking* TMVA::MethodRuleFit::CreateRanking()
 {
    // create the ranking object
    fRanking = new Ranking( GetName(), "Importance" );
@@ -583,7 +591,7 @@ const TMVA::Ranking* TMVA::MethodRuleFit::CreateRanking()
 ////////////////////////////////////////////////////////////////////////////////
 /// add the rules to XML node
 
-void TMVA::MethodRuleFit::AddWeightsXMLTo( void* parent ) const 
+void TMVA::MethodRuleFit::AddWeightsXMLTo( void* parent ) const
 {
    fRuleFit.GetRuleEnsemble().AddXMLTo( parent );
 }
@@ -672,7 +680,7 @@ void TMVA::MethodRuleFit::MakeClassRuleCuts( std::ostream& fout ) const
    fout << "   //" << std::endl;
    //
    for ( std::list< std::pair<double,int> >::reverse_iterator itpair = sortedRules.rbegin();
-         itpair != sortedRules.rend(); itpair++ ) {
+         itpair != sortedRules.rend(); ++itpair ) {
       UInt_t ir     = itpair->second;
       Double_t impr = itpair->first;
       ruleCut = (*rules)[ir]->GetRuleCut();
@@ -724,9 +732,9 @@ void TMVA::MethodRuleFit::MakeClassLinear( std::ostream& fout ) const
          Double_t norm = rens->GetLinNorm(il);
          Double_t imp  = rens->GetLinImportance(il)/rens->GetImportanceRef();
          fout << "   rval+="
-   //           << std::setprecision(10) << rens->GetLinCoefficients(il)*norm << "*std::min(" << setprecision(10) << rens->GetLinDP(il)
-   //           << ", std::max( inputValues[" << il << "]," << std::setprecision(10) << rens->GetLinDM(il) << "));"
-              << std::setprecision(10) << rens->GetLinCoefficients(il)*norm 
+            //           << std::setprecision(10) << rens->GetLinCoefficients(il)*norm << "*std::min(" << setprecision(10) << rens->GetLinDP(il)
+            //           << ", std::max( inputValues[" << il << "]," << std::setprecision(10) << rens->GetLinDM(il) << "));"
+              << std::setprecision(10) << rens->GetLinCoefficients(il)*norm
               << "*std::min( double(" << std::setprecision(10) << rens->GetLinDP(il)
               << "), std::max( double(inputValues[" << il << "]), double(" << std::setprecision(10) << rens->GetLinDM(il) << ")));"
               << std::flush;
@@ -738,7 +746,7 @@ void TMVA::MethodRuleFit::MakeClassLinear( std::ostream& fout ) const
 ////////////////////////////////////////////////////////////////////////////////
 /// get help message text
 ///
-/// typical length of text line: 
+/// typical length of text line:
 ///         "|--------------------------------------------------------------|"
 
 void TMVA::MethodRuleFit::GetHelpMessage() const
@@ -780,12 +788,12 @@ void TMVA::MethodRuleFit::GetHelpMessage() const
    Log() << "evolution of the path is defined by a cut-off parameter, tau." << Endl;
    Log() << "This parameter is unknown and depends on the training data." << Endl;
    Log() << "A large value will tend to give large weights to a few rules." << Endl;
-   Log() << "Similarily, a small value will lead to a large set of rules" << Endl;
+   Log() << "Similarly, a small value will lead to a large set of rules" << Endl;
    Log() << "with similar weights." << Endl;
    Log() << Endl;
    Log() << "A final point is the model used; rules and/or linear terms." << Endl;
    Log() << "For a given training sample, the result may improve by adding" << Endl;
-   Log() << "linear terms. If best performance is optained using only linear" << Endl;
+   Log() << "linear terms. If best performance is obtained using only linear" << Endl;
    Log() << "terms, it is very likely that the Fisher discriminant would be" << Endl;
    Log() << "a better choice. Ideally the fitting procedure should be able to" << Endl;
    Log() << "make this choice by giving appropriate weights for either terms." << Endl;
@@ -795,21 +803,21 @@ void TMVA::MethodRuleFit::GetHelpMessage() const
    Log() << "I.  TUNING OF RULE ENSEMBLE:" << Endl;
    Log() << Endl;
    Log() << "   " << col << "ForestType  " << colres
-           << ": Recomended is to use the default \"AdaBoost\"." << brk << Endl;
+         << ": Recommended is to use the default \"AdaBoost\"." << brk << Endl;
    Log() << "   " << col << "nTrees      " << colres
-           << ": More trees leads to more rules but also slow" << Endl;
+         << ": More trees leads to more rules but also slow" << Endl;
    Log() << "                 performance. With too few trees the risk is" << Endl;
    Log() << "                 that the rule ensemble becomes too simple." << brk << Endl;
    Log() << "   " << col << "fEventsMin  " << colres << brk << Endl;
    Log() << "   " << col << "fEventsMax  " << colres
-           << ": With a lower min, more large trees will be generated" << Endl;
+         << ": With a lower min, more large trees will be generated" << Endl;
    Log() << "                 leading to more complex rules." << Endl;
    Log() << "                 With a higher max, more small trees will be" << Endl;
    Log() << "                 generated leading to more simple rules." << Endl;
    Log() << "                 By changing this range, the average complexity" << Endl;
    Log() << "                 of the rule ensemble can be controlled." << brk << Endl;
    Log() << "   " << col << "RuleMinDist " << colres
-           << ": By increasing the minimum distance between" << Endl;
+         << ": By increasing the minimum distance between" << Endl;
    Log() << "                 rules, fewer and more diverse rules will remain." << Endl;
    Log() << "                 Initially it is a good idea to keep this small" << Endl;
    Log() << "                 or zero and let the fitting do the selection of" << Endl;
@@ -820,13 +828,13 @@ void TMVA::MethodRuleFit::GetHelpMessage() const
    Log() << "II. TUNING OF THE FITTING:" << Endl;
    Log() << Endl;
    Log() << "   " << col << "GDPathEveFrac " << colres
-           << ": fraction of events in path evaluation" << Endl;
+         << ": fraction of events in path evaluation" << Endl;
    Log() << "                 Increasing this fraction will improve the path" << Endl;
    Log() << "                 finding. However, a too high value will give few" << Endl;
    Log() << "                 unique events available for error estimation." << Endl;
-   Log() << "                 It is recomended to usethe default = 0.5." << brk << Endl;
+   Log() << "                 It is recommended to use the default = 0.5." << brk << Endl;
    Log() << "   " << col << "GDTau         " << colres
-           << ": cutoff parameter tau" << Endl;
+         << ": cutoff parameter tau" << Endl;
    Log() << "                 By default this value is set to -1.0." << Endl;
    //         "|----------------|---------------------------------------------|"
    Log() << "                 This means that the cut off parameter is" << Endl;
@@ -835,11 +843,11 @@ void TMVA::MethodRuleFit::GetHelpMessage() const
    Log() << "                 to fix this value if you already know it" << Endl;
    Log() << "                 and want to reduce on training time." << brk << Endl;
    Log() << "   " << col << "GDTauPrec     " << colres
-           << ": precision of estimated tau" << Endl;
+         << ": precision of estimated tau" << Endl;
    Log() << "                 Increase this precision to find a more" << Endl;
    Log() << "                 optimum cut-off parameter." << brk << Endl;
    Log() << "   " << col << "GDNStep       " << colres
-           << ": number of steps in path search" << Endl;
+         << ": number of steps in path search" << Endl;
    Log() << "                 If the number of steps is too small, then" << Endl;
    Log() << "                 the program will give a warning message." << Endl;
    Log() << Endl;
@@ -858,11 +866,11 @@ void TMVA::MethodRuleFit::GetHelpMessage() const
    Log() << "                 the fitting fails." << Endl;
    Log() << "                 A remedy may be to increase the value" << brk << Endl;
    Log() << "                 "
-           << col << "GDValidEveFrac" << colres
-           << " to 1.0 (or a larger value)." << brk << Endl;
+         << col << "GDValidEveFrac" << colres
+         << " to 1.0 (or a larger value)." << brk << Endl;
    Log() << "                 In addition, if "
-           << col << "GDPathEveFrac" << colres
-           << " is too high" << Endl;
+         << col << "GDPathEveFrac" << colres
+         << " is too high" << Endl;
    Log() << "                 the same warnings may occur since the events" << Endl;
    Log() << "                 used for error estimation are also used for" << Endl;
    Log() << "                 path estimation." << Endl;
@@ -870,15 +878,15 @@ void TMVA::MethodRuleFit::GetHelpMessage() const
    Log() << "                 See above on tuning the rule ensemble." << Endl;
    Log() << Endl;
    Log() << col << "The error rate was still decreasing at the end of the path"
-           << colres << Endl;
+         << colres << Endl;
    Log() << "                 Too few steps in path! Increase "
-           << col << "GDNSteps" <<  colres << "." << Endl;
+         << col << "GDNSteps" <<  colres << "." << Endl;
    Log() << Endl;
    Log() << col << "Reached minimum early in the search" << colres << Endl;
 
    Log() << "                 Minimum was found early in the fitting. This" << Endl;
    Log() << "                 may indicate that the used step size "
-           << col << "GDStep" <<  colres << "." << Endl;
+         << col << "GDStep" <<  colres << "." << Endl;
    Log() << "                 was too large. Reduce it and rerun." << Endl;
    Log() << "                 If the results still are not OK, modify the" << Endl;
    Log() << "                 model either by modifying the rule ensemble" << Endl;

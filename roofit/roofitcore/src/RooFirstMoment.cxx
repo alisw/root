@@ -30,7 +30,6 @@ derivator class.
 #include "Riostream.h"
 #include "Riostream.h"
 #include <math.h>
-#include <string>
 
 #include "RooFirstMoment.h"
 #include "RooAbsReal.h"
@@ -49,7 +48,7 @@ derivator class.
 using namespace std ;
 
 
-ClassImp(RooFirstMoment)
+ClassImp(RooFirstMoment);
 ;
 
 

@@ -46,7 +46,7 @@ End_Macro
 #include "TBuffer3DTypes.h"
 #include "TMath.h"
 
-ClassImp(TGeoEltu)
+ClassImp(TGeoEltu);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Dummy constructor
@@ -60,7 +60,7 @@ TGeoEltu::TGeoEltu()
 /// Default constructor specifying X and Y semiaxis length
 
 TGeoEltu::TGeoEltu(Double_t a, Double_t b, Double_t dz)
-           :TGeoTube()
+           :TGeoTube(0, 0, 0)
 {
    SetShapeBit(TGeoShape::kGeoEltu);
    SetEltuDimensions(a, b, dz);
@@ -320,7 +320,7 @@ TGeoVolume *TGeoEltu::Divide(TGeoVolume * /*voldiv*/, const char * /*divname*/, 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-///--- Fill vector param[4] with the bounding cylinder parameters. The order
+/// Fill vector param[4] with the bounding cylinder parameters. The order
 /// is the following : Rmin, Rmax, Phi1, Phi2
 
 void TGeoEltu::GetBoundingCylinder(Double_t *param) const

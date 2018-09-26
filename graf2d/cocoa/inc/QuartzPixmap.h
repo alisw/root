@@ -17,18 +17,10 @@
 
 #include <Cocoa/Cocoa.h>
 
-#ifndef ROOT_CocoaGuiTypes
 #include "CocoaGuiTypes.h"
-#endif
-#ifndef ROOT_CocoaUtils
 #include "CocoaUtils.h"
-#endif
-#ifndef ROOT_X11Drawable
 #include "X11Drawable.h"
-#endif
-#ifndef ROOT_GuiTypes
 #include "GuiTypes.h"
-#endif
 
 ///////////////////////////////////////////////////////
 //                                                   //
@@ -48,7 +40,7 @@
    std::vector<unsigned char> fData;
    ROOT::MacOSX::Util::CFScopeGuard<CGContextRef> fContext;
 
-   unsigned       fScaleFactor;
+   CGFloat       fScaleFactor;
 }
 
 - (id) initWithW : (unsigned) width H : (unsigned) height scaleFactor : (CGFloat) scaleFactor;
@@ -63,6 +55,7 @@
 
 - (BOOL) fIsPixmap;
 - (BOOL) fIsOpenGLWidget;
+- (CGFloat) fScaleFactor;
 
 @property (nonatomic, readonly) CGContextRef fContext;
 
@@ -90,8 +83,6 @@
 // data)                                               //
 //                                                     //
 /////////////////////////////////////////////////////////
-
-//TODO: split image and mask image?
 
 @interface QuartzImage : NSObject<X11Drawable> {
 @private

@@ -47,14 +47,13 @@ public:
    virtual ~TEveGedEditor();
 
    virtual void CloseWindow();
-   virtual void DeleteWindow();
 
    TEveElement* GetEveElement() const;
 
    void DisplayElement(TEveElement* re);
    void DisplayObject(TObject* obj);
 
-   virtual void SetModel(TVirtualPad* pad, TObject* obj, Int_t event);
+   virtual void SetModel(TVirtualPad* pad, TObject* obj, Int_t event, Bool_t force=kFALSE);
    virtual void Update(TGedFrame* gframe=0);
 
    // --- Statics for extra editors. ---

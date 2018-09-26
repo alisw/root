@@ -22,9 +22,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifndef ROOT_TObject
 #include "TObject.h"
-#endif
 
 class TProcessID;
 class TFile;
@@ -40,8 +38,6 @@ protected:
    static TObject    *fgObject; //In: this, Out: pointer to object (used by Action on Demand)
 
 public:
-   //status bits
-   enum { kNotComputed = BIT(12)};
 
    TRef(): fPID(0) { }
    TRef(TObject *obj);

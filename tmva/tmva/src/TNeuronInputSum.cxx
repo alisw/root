@@ -21,8 +21,13 @@
  * (http://tmva.sourceforge.net/LICENSE)                                          *
  **********************************************************************************/
 
+/*! \class TMVA::TNeuronInputSum
+\ingroup TMVA
+TNeuron input calculator -- calculates the weighted sum of inputs.
+*/
+
 #include "TMVA/TNeuronInputSum.h"
 
 #include "Rtypes.h"
 
-ClassImp(TMVA::TNeuronInputSum)
+ClassImp(TMVA::TNeuronInputSum);

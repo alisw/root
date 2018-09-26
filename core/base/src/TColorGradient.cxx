@@ -10,6 +10,9 @@
  *************************************************************************/
 
 /** \class TColorGradient
+\ingroup Base
+\ingroup GraphicsAtt
+
 TColorGradient extends basic TColor.
 Actually, this is not a simple color, but linear gradient + shadow
 for filled area. By inheriting from TColor, gradients can be placed
@@ -29,7 +32,7 @@ without re-writing all the graphics code.
 #include "TError.h"
 #include "TROOT.h"
 
-ClassImp(TColorGradient)
+ClassImp(TColorGradient);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
@@ -181,7 +184,7 @@ void TColorGradient::RegisterColor(Color_t colorIndex)
    }
 }
 
-ClassImp(TLinearGradient)
+ClassImp(TLinearGradient);
 
 /** \class TLinearGradient
 Define a linear color gradient.
@@ -234,7 +237,7 @@ const TColorGradient::Point &TLinearGradient::GetEnd()const
    return fEnd;
 }
 
-ClassImp(TRadialGradient)
+ClassImp(TRadialGradient);
 
 /** \class TRadialGradient
 Define a radial color gradient

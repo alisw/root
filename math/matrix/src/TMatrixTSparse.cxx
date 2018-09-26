@@ -82,7 +82,7 @@
 #include "TMatrixT.h"
 #include "TMath.h"
 
-templateClassImp(TMatrixTSparse)
+templateClassImp(TMatrixTSparse);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -197,9 +197,9 @@ TMatrixTSparse<Element>::TMatrixTSparse(EMatrixCreatorsOp1 op,const TMatrixTSpar
          for (Int_t i = rowLwb; i <= rowLwb+nrows-1; i++)
             for (Int_t j = colLwb; j <= colLwb+ncols-1; j++)
                if (i==j) nr_nonzeros++;
-            Allocate(nrows,ncols,rowLwb,colLwb,1,nr_nonzeros);
-            UnitMatrix();
-            break;
+         Allocate(nrows,ncols,rowLwb,colLwb,1,nr_nonzeros);
+         UnitMatrix();
+         break;
       }
       case kTransposed:
       {
@@ -2790,12 +2790,8 @@ void TMatrixTSparse<Element>::Streamer(TBuffer &R__b)
 
 template class TMatrixTSparse<Float_t>;
 
-#ifndef ROOT_TMatrixFSparsefwd
 #include "TMatrixFSparsefwd.h"
-#endif
-#ifndef ROOT_TMatrixFfwd
 #include "TMatrixFfwd.h"
-#endif
 
 template TMatrixFSparse  operator+    <Float_t>(const TMatrixFSparse &source1,const TMatrixFSparse &source2);
 template TMatrixFSparse  operator+    <Float_t>(const TMatrixFSparse &source1,const TMatrixF       &source2);
@@ -2819,12 +2815,8 @@ template TMatrixFSparse &ElementDiv   <Float_t>(TMatrixFSparse &target,const TMa
 
 template Bool_t          AreCompatible<Float_t>(const TMatrixFSparse &m1,const TMatrixFSparse &m2,Int_t verbose);
 
-#ifndef ROOT_TMatrixDSparsefwd
 #include "TMatrixDSparsefwd.h"
-#endif
-#ifndef ROOT_TMatrixDfwd
 #include "TMatrixDfwd.h"
-#endif
 
 template class TMatrixTSparse<Double_t>;
 

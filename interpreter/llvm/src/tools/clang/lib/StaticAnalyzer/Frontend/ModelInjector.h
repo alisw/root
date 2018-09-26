@@ -25,11 +25,7 @@
 #define LLVM_CLANG_SA_FRONTEND_MODELINJECTOR_H
 
 #include "clang/Analysis/CodeInjector.h"
-#include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/StringMap.h"
-#include <map>
-#include <memory>
-#include <vector>
 
 namespace clang {
 
@@ -43,8 +39,8 @@ namespace ento {
 class ModelInjector : public CodeInjector {
 public:
   ModelInjector(CompilerInstance &CI);
-  Stmt *getBody(const FunctionDecl *D);
-  Stmt *getBody(const ObjCMethodDecl *D);
+  Stmt *getBody(const FunctionDecl *D) override;
+  Stmt *getBody(const ObjCMethodDecl *D) override;
 
 private:
   /// \brief Synthesize a body for a declaration

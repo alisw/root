@@ -22,12 +22,12 @@ void TMVA::rulevisCorr( TString fin , TMVAGlob::TypeOfPlot type , bool  )
    TFile *file = TMVAGlob::OpenFile( fin );
 
    // get top dir containing all hists of the variables
-//    TDirectory* vardir = (TDirectory*)file->Get( "InputVariables_Id" );
-//    TDirectory* vardir = TMVAGlob::GetInputVariablesDir( type );
-//    if (vardir==0) return;
+   //    TDirectory* vardir = (TDirectory*)file->Get( "InputVariables_Id" );
+   //    TDirectory* vardir = TMVAGlob::GetInputVariablesDir( type );
+   //    if (vardir==0) return;
    
-//    TDirectory* corrdir = TMVAGlob::GetCorrelationPlotsDir( type, vardir );
-//    if (corrdir==0) return;
+   //    TDirectory* corrdir = TMVAGlob::GetCorrelationPlotsDir( type, vardir );
+   //    if (corrdir==0) return;
 
    // get all titles of the method rulefit
    TList titles;
@@ -53,8 +53,8 @@ void TMVA::rulevisCorr( TString fin , TMVAGlob::TypeOfPlot type , bool  )
 
       //      while ((rfkey = TMVAGlob::NextKey(keyIter,"TDirectory"))) {
       //         rfdir = (TDirectory *)rfkey->ReadObj();
-         rulevisCorr( rfdir, vardir, corrdir, type );
-         //      }
+      rulevisCorr( rfdir, vardir, corrdir, type );
+      //      }
    }
 }
 
@@ -190,7 +190,7 @@ void TMVA::rulevisCorr( TDirectory *rfdir, TDirectory *vardir, TDirectory *corrd
          TKey* hkey = corrdir->GetKey(bgname);
          TH2F* bgd = (TH2F*)hkey->ReadObj();
          if (bgd == NULL) {
-            cout << "ERROR!!! couldn't find backgroung histo for" << hname << endl;
+            cout << "ERROR!!! couldn't find background histo for" << hname << endl;
             return;
          }
          const Int_t rebin=6;

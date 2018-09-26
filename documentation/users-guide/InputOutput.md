@@ -1314,8 +1314,8 @@ MyObject **objs; //[fDatas]
 Math operations very often require double precision, but on saving
 single usually precision is sufficient. For this purpose we support the
 typedef Double32\_t which is stored in memory as a double and on disk as
-a float or interger. The actual size of disk (before compression) is
-determined by the parameter next to the data member declartion. For
+a float or integer. The actual size of disk (before compression) is
+determined by the parameter next to the data member declaration. For
 example:
 
 ``` {.cpp}
@@ -1356,9 +1356,8 @@ execution of the read block, one can initialize some non persistent
 members. There are two reasons why you would need to write your own
 Streamer: 1) if you have a non-persistent data member that you want to
 initialize to a value depending on the read data members; 2) if you want
-or need to handle the schema evolution on your own. In addition, the
-automatic `Streamer `does not support C-structures. It is best to
-convert the structure to a class definition.
+or need to handle the schema evolution on your own.  Note that an alternative
+for those cases is to consider write a schema evolution rule.
 
 First, you need to tell `rootcling` not to build a `Streamer `for you.
 The input to the `rootcling` command (in the `makefile`) is a list of

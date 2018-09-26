@@ -1,4 +1,4 @@
-// @(#)root/tmva $Id$   
+// @(#)root/tmva $Id$
 // Author: Andreas Hoecker, Joerg Stelzer, Fredrik Tegenfeldt, Helge Voss
 
 /**********************************************************************************
@@ -26,13 +26,22 @@
  * (http://mva.sourceforge.net/license.txt)                                       *
  **********************************************************************************/
 
+/*! \class TMVA::Config
+\ingroup TMVA
+
+Singleton class for global configuration settings used by TMVA.
+
+*/
+
 #include "TMVA/Config.h"
 #include "TMVA/MsgLogger.h"
 
 #include "Rtypes.h"
 #include "TString.h"
+#include "TSystem.h"
+#include "TROOT.h"
 
-ClassImp(TMVA::Config)
+ClassImp(TMVA::Config);
 
 #if __cplusplus > 199711L
 std::atomic<TMVA::Config*> TMVA::Config::fgConfigPtr{ 0 };
@@ -46,25 +55,31 @@ TMVA::Config& TMVA::gConfig() { return TMVA::Config::Instance(); }
 /// constructor - set defaults
 
 TMVA::Config::Config() :
+   fDrawProgressBar      ( kFALSE ),
+   fNWorkers             (1),
    fUseColoredConsole    ( kTRUE  ),
    fSilent               ( kFALSE ),
    fWriteOptionsReference( kFALSE ),
-   fDrawProgressBar      ( kTRUE ),
-   fLogger               ( new MsgLogger("Config") )
+   fLogger               (new MsgLogger("Config"))
 {
    // plotting
    fVariablePlotting.fTimesRMS = 8.0;
    fVariablePlotting.fNbins1D  = 40;
    fVariablePlotting.fNbins2D  = 300;
    fVariablePlotting.fMaxNumOfAllowedVariablesForScatterPlots = 20;
-   
+
    fVariablePlotting.fNbinsMVAoutput   = 40;
    fVariablePlotting.fNbinsXOfROCCurve = 100;
+   fVariablePlotting.fUsePaperStyle = 0;
 
    // IO names
    fIONames.fWeightFileDir           = "weights";
    fIONames.fWeightFileExtension     = "weights";
    fIONames.fOptionsReferenceFileDir = "optionInfo";
+
+   // get number of CPU allocated (i.e. pool size)
+   // need to have created an instance of TThreadExecutor before
+   fNCpu = ROOT::GetImplicitMTPoolSize();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,7 +96,7 @@ TMVA::Config::~Config()
 void TMVA::Config::DestroyInstance()
 {
 #if __cplusplus > 199711L
-  delete fgConfigPtr.exchange(0);
+   delete fgConfigPtr.exchange(0);
 #else
    if (fgConfigPtr != 0) { delete fgConfigPtr; fgConfigPtr = 0;}
 #endif
@@ -93,15 +108,15 @@ void TMVA::Config::DestroyInstance()
 TMVA::Config& TMVA::Config::Instance()
 {
 #if __cplusplus > 199711L
-  if(!fgConfigPtr) {
-    TMVA::Config* tmp = new Config();
-    TMVA::Config* expected = 0;
-    if(! fgConfigPtr.compare_exchange_strong(expected,tmp) ) {
-      //another thread beat us to the switch
-      delete tmp;
-    }
-  }
-  return *fgConfigPtr;
+   if(!fgConfigPtr) {
+      TMVA::Config* tmp = new Config();
+      TMVA::Config* expected = 0;
+      if(! fgConfigPtr.compare_exchange_strong(expected,tmp) ) {
+         //another thread beat us to the switch
+         delete tmp;
+      }
+   }
+   return *fgConfigPtr;
 #else
    return fgConfigPtr ? *fgConfigPtr :*(fgConfigPtr = new Config());
 #endif

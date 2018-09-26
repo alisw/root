@@ -1,22 +1,39 @@
 ############################################################################
 # CMakeLists.txt file for building ROOT tree/treeplayer package
-# @author Pere Mato, CERN
+# @author Pere Mato CERN, Danilo Piparo CERN
 ############################################################################
-
-set(libname TreePlayer)
 
 # TBranchProxyTemplate.h is only used by selectors, to verify that the selector
 # source matches the ROOT interface. It should not end up in the dictionary nor
 # in the PCH.
-ROOT_GLOB_HEADERS(dictHeaders inc/*.h)
+ROOT_GLOB_HEADERS(dictHeaders inc/*.h inc/ROOT/*.hxx)
 list(REMOVE_ITEM dictHeaders ${CMAKE_SOURCE_DIR}/tree/treeplayer/inc/TBranchProxyTemplate.h)
 
-ROOT_GENERATE_DICTIONARY(G__${libname} ${dictHeaders} MODULE ${libname} LINKDEF LinkDef.h OPTIONS "-writeEmptyRootPCM")
+ROOT_GLOB_SOURCES(sources src/*.cxx)
 
+if(MSVC)
+  list(REMOVE_ITEM dictHeaders ${CMAKE_SOURCE_DIR}/tree/treeplayer/inc/TMPWorkerTree.h)
+  list(REMOVE_ITEM dictHeaders ${CMAKE_CURRENT_SOURCE_DIR}/inc/ROOT/TTreeProcessorMT.h)
+  list(REMOVE_ITEM dictHeaders ${CMAKE_CURRENT_SOURCE_DIR}/inc/ROOT/TProcessExecutor.hxx)
+  list(REMOVE_ITEM dictHeaders ${CMAKE_CURRENT_SOURCE_DIR}/inc/ROOT/TTreeProcessorMP.hxx)
+  list(REMOVE_ITEM sources ${CMAKE_SOURCE_DIR}/tree/treeplayer/src/TMPWorkerTree.cxx)
+  list(REMOVE_ITEM sources ${CMAKE_SOURCE_DIR}/tree/treeplayer/src/TTreeProcessorMP.cxx)
+else()
+  set(TREEPLAYER_DEPENDENCIES MultiProc Imt)
+endif()
 
-ROOT_LINKER_LIBRARY(${libname} *.cxx G__${libname}.cxx DEPENDENCIES Tree Graf3d Graf Hist Gpad RIO MathCore)
-ROOT_INSTALL_HEADERS()
+if(NOT imt)
+  list(REMOVE_ITEM dictHeaders ${CMAKE_CURRENT_SOURCE_DIR}/inc/ROOT/TTreeProcessorMT.h)
+  list(REMOVE_ITEM sources ${CMAKE_CURRENT_SOURCE_DIR}/src/TTreeProcessorMT.cxx)
+endif()
 
+ROOT_STANDARD_LIBRARY_PACKAGE(TreePlayer
+                              HEADERS ${dictHeaders}
+                              SOURCES ${sources}
+                              DICTIONARY_OPTIONS "-writeEmptyRootPCM"
+                              LIBRARIES ${TBB_LIBRARIES} ${ARROW_SHARED_LIB}
+                              DEPENDENCIES Tree Graf3d Graf Hist Gpad RIO MathCore
+                              ${TREEPLAYER_DEPENDENCIES})
 
 #---Extra rules-------------------------------------------------------
 if(APPLE)
@@ -28,3 +45,4 @@ if(APPLE)
   endif()
 endif()
 
+ROOT_ADD_TEST_SUBDIRECTORY(test)

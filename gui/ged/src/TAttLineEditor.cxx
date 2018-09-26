@@ -13,7 +13,7 @@
 //                                                                      //
 //  TAttLineEditor                                                      //
 //                                                                      //
-//  Implements GUI for editing line attributes.                         //                                             //
+//  Implements GUI for editing line attributes.                         //
 //           color, line width, line style                              //
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
@@ -35,7 +35,7 @@
 #include "TCanvas.h"
 #include "TROOT.h"
 
-ClassImp(TAttLineEditor)
+ClassImp(TAttLineEditor);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor of line attributes GUI.
