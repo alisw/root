@@ -2856,6 +2856,12 @@ void CreateDictHeader(std::ostream &dictStream, const std::string &main_dictname
                << "#include \"TCollectionProxyInfo.h\"\n"
                << "/*******************************************************************/\n\n"
                << "#include \"TDataMember.h\"\n\n"; // To set their transiency
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void AddNamespaceSTDdeclaration(std::ostream &dictStream)
+{
 #ifndef R__SOLARIS
    dictStream  << "// The generated code does not explicitly qualifies STL entities\n"
                << "namespace std {} using namespace std;\n\n";
@@ -4812,7 +4818,13 @@ int RootClingMain(int argc,
          constructorTypes.emplace_back("", interp);
       }
    }
-
+   
+   if (!gOptIgnoreExistingDict) {
+     AddNamespaceSTDdeclaration(*dictStream);
+     if (gOptSplit)
+       AddNamespaceSTDdeclaration(*splitDictStream);
+   }
+   
    if (gOptGeneratePCH) {
       AnnotateAllDeclsForPCH(interp, scan);
    } else if (gOptInterpreterOnly) {
