@@ -3722,8 +3722,8 @@ gOptMultiDict("multiDict",
              llvm::cl::desc("If this library has multiple separate LinkDef files."),
              llvm::cl::cat(gRootclingOptions));
 static llvm::cl::opt<bool>
-gOptNoGlobalUsingStd("noGlobalUsingStd",
-             llvm::cl::desc("Do not declare {using namespace std} in dictionary global scope."),
+gOptGlobalUsingStd("globalUsingStd",
+             llvm::cl::desc("Declare {using namespace std} in dictionary global scope."),
              llvm::cl::cat(gRootclingOptions));
 static llvm::cl::opt<bool>
 gOptInterpreterOnly("interpreteronly",
@@ -4595,7 +4595,7 @@ int RootClingMain(int argc,
    if (gOptSplit)
       CreateDictHeader(splitDictStream, main_dictname);
 
-   if (!gOptNoGlobalUsingStd) {
+   if (gOptGlobalUsingStd) {
      AddNamespaceSTDdeclaration(dictStream);
      if (gOptSplit) {
        AddNamespaceSTDdeclaration(splitDictStream);
@@ -4844,7 +4844,7 @@ int RootClingMain(int argc,
          constructorTypes.push_back(ROOT::TMetaUtils::RConstructorType("", interp));
       }
    }
-   if (!gOptIgnoreExistingDict && gOptNoGlobalUsingStd) {
+   if (!gOptIgnoreExistingDict && !gOptGlobalUsingStd) {
      AddNamespaceSTDdeclaration(dictStream);
      if (gOptSplit) {
        AddNamespaceSTDdeclaration(splitDictStream);
@@ -5205,7 +5205,7 @@ namespace genreflex {
                        bool writeEmptyRootPCM,
                        bool selSyntaxOnly,
                        bool noIncludePaths,
-                       bool noGlobalUsingStd,
+                       bool globalUsingStd,
                        const std::vector<std::string> &headersNames,
                        bool failOnWarnings,
                        const std::string &ofilename)
@@ -5280,8 +5280,8 @@ namespace genreflex {
          argvVector.push_back(string2charptr("-multiDict"));
 
       // Don't declare "using namespace std"
-      if (noGlobalUsingStd)
-         argvVector.push_back(string2charptr("-noGlobalUsingStd"));
+      if (globalUsingStd)
+         argvVector.push_back(string2charptr("-globalUsingStd"));
 
 
       AddToArgVectorSplit(argvVector, pcmsNames, "-m");
@@ -5359,7 +5359,7 @@ namespace genreflex {
                            bool writeEmptyRootPCM,
                            bool selSyntaxOnly,
                            bool noIncludePaths,
-                           bool noGlobalUsingStd,
+                           bool globalUsingStd,
                            const std::vector<std::string> &headersNames,
                            bool failOnWarnings,
                            const std::string &outputDirName_const = "")
@@ -5396,7 +5396,7 @@ namespace genreflex {
                                           writeEmptyRootPCM,
                                           selSyntaxOnly,
                                           noIncludePaths,
-                                          noGlobalUsingStd,
+                                          globalUsingStd,
                                           namesSingleton,
                                           failOnWarnings,
                                           ofilenameFullPath);
@@ -5503,7 +5503,7 @@ int GenReflexMain(int argc, char **argv)
                        OFILENAME,
                        TARGETLIB,
                        MULTIDICT,
-                       NOGLOBALUSINGSTD,
+                       GLOBALUSINGSTD,
                        SELECTIONFILENAME,
                        ROOTMAP,
                        ROOTMAPLIB,
@@ -5666,12 +5666,11 @@ int GenReflexMain(int argc, char **argv)
 
       
       {
-         NOGLOBALUSINGSTD,
+         GLOBALUSINGSTD,
          NOTYPE ,
-         "" , "noGlobalUsingStd" ,
+         "" , "globalUsingStd" ,
          ROOT::option::FullArg::None,
-         "--no-using-std\tDo not declare {using namespace std} in the dictionary global scope\n"
-         "      All header files must have sumbols from std:: namespace fully qualified\n"
+         "--globalUsingStd\tDeclare {using namespace std} in the dictionary global scope\n"
       },
 
       {
@@ -5961,8 +5960,8 @@ int GenReflexMain(int argc, char **argv)
    bool multidict = false;
    if (options[MULTIDICT]) multidict = true;
 
-   bool noGlobalUsingStd = false;
-   if (options[NOGLOBALUSINGSTD]) noGlobalUsingStd = true;
+   bool globalUsingStd = false;
+   if (options[GLOBALUSINGSTD]) globalUsingStd = true;
 
    if (multidict && targetLibName.empty()) {
       ROOT::TMetaUtils::Error("",
@@ -6053,7 +6052,7 @@ int GenReflexMain(int argc, char **argv)
                                     writeEmptyRootPCM,
                                     selSyntaxOnly,
                                     noIncludePaths,
-                                    noGlobalUsingStd,
+                                    globalUsingStd,
                                     headersNames,
                                     failOnWarnings,
                                     ofileName);
@@ -6076,7 +6075,7 @@ int GenReflexMain(int argc, char **argv)
                                         writeEmptyRootPCM,
                                         selSyntaxOnly,
                                         noIncludePaths,
-                                        noGlobalUsingStd,
+                                        globalUsingStd,
                                         headersNames,
                                         failOnWarnings,
                                         ofileName);
