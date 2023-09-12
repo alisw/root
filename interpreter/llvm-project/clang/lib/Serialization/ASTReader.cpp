@@ -7824,9 +7824,10 @@ void ASTReader::PrintStats() {
                  NumDeclsLoaded, (unsigned)DeclsLoaded.size(),
                  ((float)NumDeclsLoaded/DeclsLoaded.size() * 100));
   if (!IdentifiersLoaded.empty())
-    std::fprintf(stderr, "  %u/%u identifiers read (%f%%)\n",
-                 NumIdentifiersLoaded, (unsigned)IdentifiersLoaded.size(),
-                 ((float)NumIdentifiersLoaded/IdentifiersLoaded.size() * 100));
+    std::fprintf(
+        stderr, "  %u/%u identifiers read (%f%%)\n", NumIdentifiersLoaded,
+        (unsigned)IdentifiersLoaded.size(),
+        ((float)NumIdentifiersLoaded / IdentifiersLoaded.size() * 100));
   if (!MacrosLoaded.empty())
     std::fprintf(stderr, "  %u/%u macros read (%f%%)\n",
                  NumMacrosLoaded, (unsigned)MacrosLoaded.size(),
