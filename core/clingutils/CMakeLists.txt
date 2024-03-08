@@ -117,6 +117,13 @@ if (runtime_cxxmodules)
   # some systems install it under /usr/include/Vc/Vc which allows rootcling to
   # discover it and assert that the modulemap is not found.
   set(custom_modulemaps ${custom_modulemaps} vc.modulemap)
+
+  # We need to override the default modulemap because instead of producing a
+  # single std.pcm, produces millions of pcms.
+  if (CMAKE_SYSTEM_NAME MATCHES Darwin AND MACOSX_VERSION VERSION_GREATER 14.3)
+    set(custom_modulemaps ${custom_modulemaps} std_darwin.modulemap)
+  endif()
+
   if (NOT libcxx)
     if (MSVC)
       set(custom_modulemaps ${custom_modulemaps} vcruntime.modulemap)
