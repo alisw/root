@@ -630,7 +630,7 @@ namespace {
         cling::log() << "'" << systemLoc << "' does not exist. Mounting '"
                      << originalLoc.str() << "' as '" << systemLoc << "'\n";
 
-      if (!HSOpts.ImplicitModuleMaps) {
+      if (!HSOpts.ImplicitModuleMaps && !llvm::sys::fs::exists(systemLoc.str())) {
          modulemapFilename = Filename;
          llvm::sys::path::remove_filename(systemLoc);
          llvm::sys::path::append(systemLoc, modulemapFilename);
@@ -707,6 +707,11 @@ namespace {
                             clingIncLoc.str().str(), MOverlay,
                             /*RegisterModuleMap=*/ true,
                             /*AllowModulemapOverride=*/true);
+    if (Triple.isMacOSX() && CI.getTarget().getSDKVersion() >= VersionTuple(14, 4))
+      maybeAppendOverlayEntry(stdIncLoc.str(), "std_darwin.modulemap",
+                              clingIncLoc.str().str(), MOverlay,
+                              /*RegisterModuleMap=*/ true,
+                              /*AllowModulemapOverride=*/ false);
 #endif // _WIN32
 
     if (!tinyxml2IncLoc.empty())
