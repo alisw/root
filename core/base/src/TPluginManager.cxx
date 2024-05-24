@@ -98,7 +98,6 @@ TFile, TSQLServer, TGrid, etc. functionality.
 #include "ThreadLocalStorage.h"
 
 #include <memory>
-#include <sstream>
 
 TPluginManager *gPluginMgr;   // main plugin manager created in TROOT
 
@@ -112,20 +111,20 @@ ClassImp(TPluginHandler);
 ////////////////////////////////////////////////////////////////////////////////
 /// Create a plugin handler. Called by TPluginManager.
 
-TPluginHandler::TPluginHandler(const char *base, const char *regexp, const char *className, const char *pluginName,
-                               const char *ctor, const char *origin)
-   : fBase(base),
-     fRegexp(regexp),
-     fClass(className),
-     fPlugin(pluginName),
-     fCtor(ctor),
-     fOrigin(origin),
-     fCallEnv(nullptr),
-     fMethod(nullptr),
-     fCanCall(0),
-     fIsMacro(kFALSE),
-     fIsGlobal(kFALSE),
-     fLoadStatus(-1)
+TPluginHandler::TPluginHandler(const char *base, const char *regexp,
+                               const char *className, const char *pluginName,
+                               const char *ctor, const char *origin):
+   fBase(base),
+   fRegexp(regexp),
+   fClass(className),
+   fPlugin(pluginName),
+   fCtor(ctor),
+   fOrigin(origin),
+   fCallEnv(nullptr),
+   fMethod(nullptr),
+   fCanCall(0),
+   fIsMacro(kFALSE),
+   fIsGlobal(kFALSE)
 {
    TString aclicMode, arguments, io;
    TString fname = gSystem->SplitAclicMode(fPlugin, aclicMode, arguments, io);
@@ -228,26 +227,6 @@ void TPluginHandler::SetupCallEnv()
    fCallEnv = new TMethodCall;
    fCallEnv->Init(fMethod);
 
-   // cache argument types for fast comparison
-   fArgTupleClasses.clear();
-
-   std::stringstream typelist;
-   for (int iarg = 0; iarg < fMethod->GetNargs(); ++iarg) {
-      if (iarg > 0) {
-         typelist << ", ";
-      }
-      const TMethodArg *arg = static_cast<const TMethodArg *>(fMethod->GetListOfMethodArgs()->At(iarg));
-      typelist << arg->GetTypeNormalizedName();
-
-      std::stringstream tupletype;
-      tupletype << "std::tuple<" << typelist.str() << ">";
-      const TClass *tupleclass = TClass::GetClass(tupletype.str().c_str());
-      if (!tupleclass) {
-         Error("SetupCallEnv", "couldn't get TClass for tuple of argument types %s", tupletype.str().c_str());
-      }
-      fArgTupleClasses.push_back(tupleclass);
-   }
-
    setCanCall = 1;
 
    return;
@@ -267,32 +246,19 @@ Int_t TPluginHandler::CheckPlugin() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Load the plugin library for this handler. Sets status to 0 on successful loading
-/// and -1 in case the library does not exist or in case of error.
-void TPluginHandler::LoadPluginImpl()
-{
-   if (fIsMacro) {
-      if (TClass::GetClass(fClass))
-         fLoadStatus = 0;
-      else
-         fLoadStatus = gROOT->LoadMacro(fPlugin);
-   } else {
-      // first call also loads dependent libraries declared via the rootmap file
-      if (TClass::LoadClass(fClass, /* silent = */ kFALSE))
-         fLoadStatus = 0;
-      else
-         fLoadStatus = gROOT->LoadClass(fClass, fPlugin);
-   }
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// Load the plugin library for this handler. Returns 0 on successful loading
 /// and -1 in case the library does not exist or in case of error.
+
 Int_t TPluginHandler::LoadPlugin()
 {
-   // call once and cache the result to reduce lock contention
-   std::call_once(fLoadStatusFlag, &TPluginHandler::LoadPluginImpl, this);
-   return fLoadStatus;
+   if (fIsMacro) {
+      if (TClass::GetClass(fClass)) return 0;
+      return gROOT->LoadMacro(fPlugin);
+   } else {
+      // first call also loads dependent libraries declared via the rootmap file
+      if (TClass::LoadClass(fClass, /* silent = */ kFALSE)) return 0;
+      return gROOT->LoadClass(fClass, fPlugin);
+   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
