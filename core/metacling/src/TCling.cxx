@@ -2171,10 +2171,8 @@ void TCling::RegisterModule(const char* modulename,
                   }
                }
                if (scopes.empty() || DC) {
-                  // We know the scope; let's look for the enum. For that, look
-                  // for the *last* closing parentheses of an attribute because
-                  // there can be multiple.
-                  size_t posEnumName = fwdDeclsLine.rfind("\"))) ");
+                  // We know the scope; let's look for the enum.
+                  size_t posEnumName = fwdDeclsLine.find("\"))) ", 32);
                   R__ASSERT(posEnumName != std::string::npos && "Inconsistent enum fwd decl!");
                   posEnumName += 5; // skip "\"))) "
                   while (isspace(fwdDeclsLine[posEnumName]))
