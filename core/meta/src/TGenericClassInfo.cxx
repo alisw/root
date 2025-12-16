@@ -442,7 +442,7 @@ namespace Internal {
    {
       if (fClass) {
           assert(fAdoptedMemberStreamers.empty());
-          fClass->AdoptMemberStreamer(name.c_str(), strm);
+          fClass->AdoptMemberStreamer(name, strm);
           return;
       }
 
