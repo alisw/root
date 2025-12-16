@@ -440,6 +440,12 @@ namespace Internal {
 
    void TGenericClassInfo::AdoptMemberStreamer(const char *name, TMemberStreamer *strm)
    {
+      if (fClass) {
+          assert(fAdoptedMemberStreamers.empty());
+          fClass->AdoptMemberStreamer(name.c_str(), strm);
+          return;
+      }
+
       auto [it, inserted] = fAdoptedMemberStreamers.emplace(name, strm);
       if (!inserted) {
          delete it->second;
