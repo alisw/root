@@ -148,6 +148,7 @@ private:
    TGeoParallelWorld *fParallelWorld; // Parallel world
    ConstPropMap_t fProperties;        // Map of user-defined constant properties
                                       //--- private methods
+   TGeoNavigatorArray *FindNavigatorArray() const;
    Bool_t IsLoopingVolumes() const { return fLoopVolumes; }
    void Init();
    Bool_t InitArrayPNE() const;
