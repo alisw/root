@@ -8,4 +8,5 @@ configure_file(no_extrusion.gdml no_extrusion.gdml COPYONLY)
 ROOT_ADD_GTEST(geomTests
   test_material_units.cxx
   test_boolean_extrusion.cxx
+  test_thread_navigation.cxx
   LIBRARIES Geom)
