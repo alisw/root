@@ -810,6 +810,25 @@ TGeoNavigator *TGeoManager::AddNavigator()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Look up the navigator array booked for the calling thread, or nullptr if the
+/// thread has none.
+///
+/// AddNavigator() inserts into fNavigators under fgMutex, so in MT mode every
+/// reader has to take the same lock: an unsynchronized find() racing an insert
+/// walks a tree that is being rebalanced and returns garbage or crashes. In
+/// single-threaded mode the map is never mutated concurrently and the lock is
+/// skipped, as elsewhere in this class.
+
+TGeoNavigatorArray *TGeoManager::FindNavigatorArray() const
+{
+   std::unique_lock<std::mutex> guard(fgMutex, std::defer_lock);
+   if (fMultiThread)
+      guard.lock();
+   NavigatorsMap_t::const_iterator it = fNavigators.find(std::this_thread::get_id());
+   return (it == fNavigators.end()) ? nullptr : it->second;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// Returns current navigator for the calling thread.
 
 TGeoNavigator *TGeoManager::GetCurrentNavigator() const
@@ -820,11 +839,10 @@ TGeoNavigator *TGeoManager::GetCurrentNavigator() const
    TGeoNavigator *nav = tnav; // TTHREAD_TLS_GET(TGeoNavigator*,tnav);
    if (nav)
       return nav;
-   std::thread::id threadId = std::this_thread::get_id();
-   NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
-   if (it == fNavigators.end())
+   // The TLS cache above means the lookup below happens at most once per thread.
+   TGeoNavigatorArray *array = FindNavigatorArray();
+   if (!array)
       return nullptr;
-   TGeoNavigatorArray *array = it->second;
    nav = array->GetCurrentNavigator();
    tnav = nav; // TTHREAD_TLS_SET(TGeoNavigator*,tnav,nav);
    return nav;
@@ -835,12 +853,7 @@ TGeoNavigator *TGeoManager::GetCurrentNavigator() const
 
 TGeoNavigatorArray *TGeoManager::GetListOfNavigators() const
 {
-   std::thread::id threadId = std::this_thread::get_id();
-   NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
-   if (it == fNavigators.end())
-      return nullptr;
-   TGeoNavigatorArray *array = it->second;
-   return array;
+   return FindNavigatorArray();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -848,18 +861,16 @@ TGeoNavigatorArray *TGeoManager::GetListOfNavigators() const
 
 Bool_t TGeoManager::SetCurrentNavigator(Int_t index)
 {
-   std::thread::id threadId = std::this_thread::get_id();
-   NavigatorsMap_t::const_iterator it = fNavigators.find(threadId);
-   if (it == fNavigators.end()) {
+   TGeoNavigatorArray *array = FindNavigatorArray();
+   if (!array) {
       Error("SetCurrentNavigator", "No navigator defined for this thread\n");
-      std::cout << "  thread id: " << threadId << std::endl;
+      std::cout << "  thread id: " << std::this_thread::get_id() << std::endl;
       return kFALSE;
    }
-   TGeoNavigatorArray *array = it->second;
    TGeoNavigator *nav = array->SetCurrentNavigator(index);
    if (!nav) {
       Error("SetCurrentNavigator", "Navigator %d not existing for this thread\n", index);
-      std::cout << "  thread id: " << threadId << std::endl;
+      std::cout << "  thread id: " << std::this_thread::get_id() << std::endl;
       return kFALSE;
    }
    if (!fMultiThread)
