@@ -36,6 +36,8 @@ on different axis. Implemented patterns are:
 #include "TGeoManager.h"
 #include "TMath.h"
 
+#include <mutex>
+
 ClassImp(TGeoPatternFinder);
 ClassImp(TGeoPatternX);
 ClassImp(TGeoPatternY);
@@ -51,55 +53,29 @@ ClassImp(TGeoPatternSphTheta);
 ClassImp(TGeoPatternSphPhi);
 ClassImp(TGeoPatternHoneycomb);
 
-////////////////////////////////////////////////////////////////////////////////
-/// Constructor.
-
-TGeoPatternFinder::ThreadData_t::ThreadData_t() : fMatrix(nullptr), fCurrent(-1), fNextIndex(-1) {}
+std::atomic<UInt_t> TGeoPatternFinder::fgInstanceCount{0};
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Destructor.
+/// (Re)build the per-thread scratch state for this finder into the given slot.
+/// Cold path: runs once per (thread, finder, generation).
 
-TGeoPatternFinder::ThreadData_t::~ThreadData_t()
+void TGeoPatternFinder::InitThreadSlot(ThreadData_t &td) const
 {
-   //   if (fMatrix != gGeoIdentity) delete fMatrix;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TGeoPatternFinder::ThreadData_t &TGeoPatternFinder::GetThreadData() const
-{
-   Int_t tid = TGeoManager::ThreadId();
-   return *fThreadData[tid];
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TGeoPatternFinder::ClearThreadData() const
-{
-   std::lock_guard<std::mutex> guard(fMutex);
-   std::vector<ThreadData_t *>::iterator i = fThreadData.begin();
-   while (i != fThreadData.end()) {
-      delete *i;
-      ++i;
+   if (!td.fMatrix) {
+      // CreateMatrix() registers the new matrix with the geometry manager, which mutates a
+      // shared, unlocked TObjArray. Lazy initialization means several threads can reach this
+      // on first touch concurrently, so serialize the registration. Taken once per
+      // (thread, finder); steady-state navigation is lock-free.
+      static std::mutex sInitMutex;
+      std::lock_guard<std::mutex> guard(sInitMutex);
+      td.fMatrix = CreateMatrix();
    }
-   fThreadData.clear();
-   fThreadSize = 0;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// Create thread data for n threads max.
-
-void TGeoPatternFinder::CreateThreadData(Int_t nthreads)
-{
-   std::lock_guard<std::mutex> guard(fMutex);
-   fThreadData.resize(nthreads);
-   fThreadSize = nthreads;
-   for (Int_t tid = 0; tid < nthreads; tid++) {
-      if (fThreadData[tid] == nullptr) {
-         fThreadData[tid] = new ThreadData_t;
-         fThreadData[tid]->fMatrix = CreateMatrix();
-      }
-   }
+   // A generation bump only invalidates the cached division indices. The matrix stays valid and
+   // is deliberately reused: it is owned by the geometry manager and never released, so creating
+   // a fresh one here would leak one matrix per (thread, finder) on every ClearThreadData().
+   td.fCurrent = -1;
+   td.fNextIndex = -1;
+   td.fInitGen = fGeneration.load(std::memory_order_acquire);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,7 +89,6 @@ TGeoPatternFinder::TGeoPatternFinder()
    fStart = 0;
    fEnd = 0;
    fVolume = nullptr;
-   fThreadSize = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -127,7 +102,6 @@ TGeoPatternFinder::TGeoPatternFinder(TGeoVolume *vol, Int_t ndiv)
    fStep = 0;
    fStart = 0;
    fEnd = 0;
-   fThreadSize = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
