@@ -36,6 +36,7 @@ The following people have contributed to this new version:
  Devajith Valaparambil Sreeramaswamy, CERN/EP-SFT,\
  Vassil Vassilev, Princeton,\
  Sandro Wenzel, CERN/EP-ALICE,\
+ Tristan Wenzel, ETHZ,\
 
 ## Deprecation and Removal
 
